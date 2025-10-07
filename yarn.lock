@@ -4283,7 +4283,7 @@ object.assign@^4.1.4:
     has-symbols "^1.1.0"
     object-keys "^1.1.1"
 
-oidc-client-ts@^3.0.1:
+oidc-client-ts@^3.0.1, oidc-client-ts@^3.1.0:
   version "3.3.0"
   resolved "https://registry.yarnpkg.com/oidc-client-ts/-/oidc-client-ts-3.3.0.tgz#98a12e643b930825fb141634974e139d804ef972"
   integrity sha512-t13S540ZwFOEZKLYHJwSfITugupW4uYLwuQSSXyKH/wHwZ+7FvgHE7gnNJh1YQIZ1Yd1hKSRjqeXGSUtS0r9JA==

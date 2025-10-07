@@ -9,7 +9,8 @@
     "test": "jest"
   },
   "dependencies": {
-    "matrix-js-sdk": "^34.13.0"
+    "matrix-js-sdk": "^34.13.0",
+    "oidc-client-ts": "^3.1.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.11",
