@@ -1,32 +1,87 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { MatrixChatClient } from '@adhd-chat/core';
 
 function App() {
-  const [matrixStatus, setMatrixStatus] = useState('Not initialized');
+  const [homeserver, setHomeserver] = useState('https://matrix.org');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [status, setStatus] = useState('');
 
-  const initializeMatrix = useCallback(async () => {
-    setMatrixStatus('Initializing...');
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus('Logging in...');
+
     try {
-      const client = new MatrixChatClient({
-        baseUrl: 'https://matrix.org',
+      const matrixClient = new MatrixChatClient({
+        baseUrl: homeserver,
       });
-      await client.initialize();
-      setMatrixStatus('Initialized successfully');
+      await matrixClient.initialize();
+      await matrixClient.login(username, password);
+      
+      setIsLoggedIn(true);
+      setStatus('Logged in successfully!');
     } catch (error) {
-      setMatrixStatus(`Error: ${error}`);
+      setStatus(`Login failed: ${error}`);
+      setIsLoggedIn(false);
     }
-  }, []);
-
-  useEffect(() => {
-    initializeMatrix();
-  }, [initializeMatrix]);
+  };
 
   return (
     <>
       <h1>ADHD Chat</h1>
       <div>
-        <h2>Matrix Integration Demo</h2>
-        <p>Status: {matrixStatus}</p>
+        <h2>Matrix Login</h2>
+        {!isLoggedIn ? (
+          <form onSubmit={handleLogin}>
+            <div style={{ marginBottom: '10px' }}>
+              <label htmlFor="homeserver">
+                Homeserver URL:
+                <input
+                  id="homeserver"
+                  type="text"
+                  value={homeserver}
+                  onChange={(e) => setHomeserver(e.target.value)}
+                  style={{ marginLeft: '10px', width: '300px' }}
+                  required
+                />
+              </label>
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label htmlFor="username">
+                Username:
+                <input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  style={{ marginLeft: '10px', width: '300px' }}
+                  required
+                />
+              </label>
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label htmlFor="password">
+                Password:
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{ marginLeft: '10px', width: '300px' }}
+                  required
+                />
+              </label>
+            </div>
+            <button type="submit">Login</button>
+          </form>
+        ) : (
+          <div>
+            <p>✓ Successfully logged in to {homeserver}</p>
+            <p>User: {username}</p>
+          </div>
+        )}
+        {status && <p>Status: {status}</p>}
       </div>
     </>
   );

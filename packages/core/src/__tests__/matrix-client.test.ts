@@ -34,4 +34,13 @@ describe('MatrixChatClient', () => {
     await client.initialize();
     expect(client.getClient()).not.toBeNull();
   });
+
+  it('should login with username and password', async () => {
+    const client = new MatrixChatClient({
+      baseUrl: 'https://matrix.org',
+    });
+    await client.initialize();
+    await client.login('testuser', 'testpassword');
+    expect(client.getClient()).not.toBeNull();
+  });
 });
