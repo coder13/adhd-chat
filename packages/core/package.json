@@ -2,11 +2,9 @@
   "name": "@adhd-chat/core",
   "version": "0.0.0",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "check:type": "tsc --noEmit",
     "lint": "eslint src",
     "test": "jest"
   },
