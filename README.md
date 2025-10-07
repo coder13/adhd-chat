@@ -72,6 +72,7 @@ yarn format
 Core package providing Matrix protocol integration for the ADHD Chat application.
 
 **Features:**
+
 - Matrix client wrapper
 - Authentication and session management
 - Message synchronization

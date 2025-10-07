@@ -5,9 +5,7 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
   collectCoverageFrom: ['src/**/*.ts', '!**/*.d.ts', '!**/node_modules/**'],
   moduleFileExtensions: ['ts', 'js', 'json'],
-  transformIgnorePatterns: [
-    'node_modules/(?!(matrix-js-sdk)/)',
-  ],
+  transformIgnorePatterns: ['node_modules/(?!(matrix-js-sdk)/)'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
