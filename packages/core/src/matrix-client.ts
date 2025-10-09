@@ -1,6 +1,6 @@
 import * as sdk from 'matrix-js-sdk';
-import { OIDCClient } from './oidc-client';
-import type { OIDCConfig } from './oidc-client';
+import { OIDCClient } from '../../../apps/web/src/auth/oidc-client';
+import type { OIDCConfig } from '../../../apps/web/src/auth/oidc-client';
 
 export interface MatrixChatClientConfig {
   baseUrl: string;
@@ -35,11 +35,11 @@ export class MatrixChatClient {
     }
   }
 
-  async login(username: string, password: string): Promise<void> {
-    if (!this.client) {
-      await this.initialize();
-    }
+  async discovery() {
+    return this.client?.getClientWellKnown();
+  }
 
+  async login(username: string, password: string): Promise<void> {
     const response = await this.client!.login('m.login.password', {
       user: username,
       password: password,
@@ -64,7 +64,7 @@ export class MatrixChatClient {
     }
 
     const result = await this.oidcClient.completeLogin();
-    
+
     this.config.userId = result.userId;
     this.config.accessToken = result.accessToken;
 
