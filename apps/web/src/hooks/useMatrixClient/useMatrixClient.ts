@@ -13,7 +13,6 @@ import {
 const REDIRECT_KEY = 'matrix.redirect.baseUrl';
 
 let loggingIn = false;
-let _client: MatrixClient | null = null;
 
 export function useMatrixClient() {
   const [state, setState] = useState<AuthState>('idle');
@@ -42,7 +41,6 @@ export function useMatrixClient() {
     buildAuthedClient(s, persist)
       .then((c) => {
         setClient(c);
-        _client = c;
         setState('ready');
       })
       .catch((e) => {
@@ -108,7 +106,6 @@ export function useMatrixClient() {
       setState('syncing');
       const c = await buildAuthedClient(session, persist);
       setClient(c);
-      _client = c;
       setState('ready');
       loggingIn = false;
     } catch (e) {
@@ -141,7 +138,6 @@ export function useMatrixClient() {
       client.stopClient();
     } finally {
       setClient(null);
-      _client = null;
       clearSession();
       setUser(null);
       setState('logged_out');

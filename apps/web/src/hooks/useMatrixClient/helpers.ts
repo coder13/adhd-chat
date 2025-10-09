@@ -100,7 +100,7 @@ export async function buildAuthedClient(
         };
         onPersist(updated);
         // Update the live client
-        _client.setAccessToken(r.access_token);
+        _client?.setAccessToken(r.access_token);
         return { accessToken: r.access_token, refreshToken: r.refresh_token };
       }
     : undefined;
