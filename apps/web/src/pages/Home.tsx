@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
+import { Button, EncryptionSetupModal } from '../components';
 
 function Home() {
-  const { client, isReady, user, state, error } = useMatrixClient();
+  const { client, isReady, user, state, error, handleSetupEncryption } = useMatrixClient();
   const [rooms, setRooms] = useState<Array<{ id: string; name: string }>>([]);
+  const [showEncryptionModal, setShowEncryptionModal] = useState(false);
 
   useEffect(() => {
     if (!client || !user) {
@@ -85,6 +87,16 @@ function Home() {
           )}
         </div>
 
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Encryption</h2>
+          <p className="text-gray-600 mb-4">
+            Set up end-to-end encryption to secure your messages and enable encrypted rooms.
+          </p>
+          <Button onClick={() => setShowEncryptionModal(true)}>
+            Generate Encryption Key
+          </Button>
+        </div>
+
         <div className="bg-white rounded-xl shadow-lg p-6">
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">Rooms</h2>
           {rooms.length === 0 ? (
@@ -104,6 +116,15 @@ function Home() {
           )}
         </div>
       </div>
+
+      <EncryptionSetupModal
+        isOpen={showEncryptionModal}
+        onClose={() => setShowEncryptionModal(false)}
+        onSetupComplete={() => {
+          console.log('Encryption setup completed');
+        }}
+        onGenerateKey={handleSetupEncryption}
+      />
     </div>
   );
 }
