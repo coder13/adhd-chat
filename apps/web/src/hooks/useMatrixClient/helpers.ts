@@ -2,8 +2,17 @@ import * as sdk from 'matrix-js-sdk';
 import type { MatrixClient, TokenRefreshFunction } from 'matrix-js-sdk';
 import { initAsync as initCryptoWasm } from '@matrix-org/matrix-sdk-crypto-wasm';
 import type { MatrixSession } from './types';
+import { decodeRecoveryKey } from 'matrix-js-sdk/lib/crypto-api';
 
 const KEY = 'matrix.session.v1';
+
+export const keyCache = new Map<
+  string,
+  {
+    keyInfo: sdk.SecretStorage.SecretStorageKeyDescription;
+    key: Uint8Array;
+  }
+>();
 
 export function loadSession(): MatrixSession | null {
   try {
@@ -69,17 +78,6 @@ export async function buildAuthedClient(
 
   await initCryptoWasm();
 
-  const indexedDBStore = new sdk.IndexedDBStore({
-    indexedDB: indexedDB,
-    localStorage: localStorage,
-    dbName: 'web-sync-store',
-  });
-
-  const legacyCryptoStore = new sdk.IndexedDBCryptoStore(
-    indexedDB,
-    'crypto-store'
-  );
-
   const tokenRefresh: TokenRefreshFunction | undefined = session.refreshToken
     ? async (refreshToken: string) => {
         const tmp = sdk.createClient({
@@ -105,15 +103,6 @@ export async function buildAuthedClient(
       }
     : undefined;
 
-  console.log(107, {
-    baseUrl: session.baseUrl,
-    accessToken: session.accessToken,
-    userId: session.userId,
-    deviceId: session.deviceId,
-    useAuthorizationHeader: true,
-    tokenRefreshFunction: tokenRefresh,
-  });
-
   _client = sdk.createClient({
     baseUrl: session.baseUrl,
     accessToken: session.accessToken,
@@ -122,11 +111,29 @@ export async function buildAuthedClient(
     useAuthorizationHeader: true,
     tokenRefreshFunction: tokenRefresh,
 
-    store: indexedDBStore,
-    cryptoStore: legacyCryptoStore,
+    cryptoCallbacks: {
+      getSecretStorageKey: async ({ keys }) => {
+        // This function should prompt the user to enter their secret storage key.
+        console.log(108, keys);
+        const keyId = Object.keys(keys)[0];
+        const input = prompt(`Enter your secret storage key for ${keyId}:`);
+
+        const rtrn = {
+          keyInfo: keys[keyId],
+          key: decodeRecoveryKey(input || ''),
+        };
+        console.log(113, rtrn);
+
+        keyCache.set(Object.keys(keys)[0], rtrn);
+
+        return [keyId, rtrn.key];
+      },
+      cacheSecretStorageKey: (keyId, keyInfo, key) => {
+        keyCache.set(keyId, { keyInfo, key });
+      },
+    },
   });
 
-  await indexedDBStore.startup();
   await _client.initRustCrypto();
 
   await _client.startClient({ initialSyncLimit: 20 });

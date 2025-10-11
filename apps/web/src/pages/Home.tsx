@@ -12,14 +12,14 @@ function Home() {
       return;
     }
 
-    client.publicRooms().then((data) => {
-      setRooms(
-        data.chunk.map((r) => ({
-          id: r.room_id,
-          name: r.name || r.canonical_alias || r.room_id,
-        }))
-      );
-    });
+    const _rooms = client.getVisibleRooms();
+    console.log('Fetched rooms:', _rooms);
+    setRooms(
+      _rooms.map((i) => ({
+        id: i.roomId,
+        name: i.name || i.roomId,
+      }))
+    );
   }, [client, user]);
 
   if (!isReady || !user) {
@@ -29,7 +29,10 @@ function Home() {
           <h1 className="text-4xl font-bold text-gray-900 mb-4">ADHD Chat</h1>
           <p className="text-gray-600">
             Please{' '}
-            <Link to="/login" className="text-primary-600 hover:text-primary-700 underline">
+            <Link
+              to="/login"
+              className="text-primary-600 hover:text-primary-700 underline"
+            >
               log in
             </Link>{' '}
             to continue.
@@ -48,7 +51,9 @@ function Home() {
         </header>
 
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Connection Status</h2>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+            Connection Status
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 bg-gray-50 rounded-lg">
               <p className="text-sm text-gray-500">State</p>
@@ -68,7 +73,9 @@ function Home() {
             </div>
             <div className="p-4 bg-gray-50 rounded-lg">
               <p className="text-sm text-gray-500">User ID</p>
-              <p className="text-lg font-medium text-gray-900 truncate">{user.userId}</p>
+              <p className="text-lg font-medium text-gray-900 truncate">
+                {user.userId}
+              </p>
             </div>
           </div>
           {error && (
@@ -79,9 +86,9 @@ function Home() {
         </div>
 
         <div className="bg-white rounded-xl shadow-lg p-6">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Public Rooms</h2>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Rooms</h2>
           {rooms.length === 0 ? (
-            <p className="text-gray-500">No public rooms found</p>
+            <p className="text-gray-500">No rooms found</p>
           ) : (
             <div className="space-y-2">
               {rooms.map((r) => (

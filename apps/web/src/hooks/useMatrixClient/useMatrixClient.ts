@@ -41,6 +41,7 @@ export function useMatrixClient() {
     buildAuthedClient(s, persist)
       .then((c) => {
         setClient(c);
+        setUser({ userId: s.userId, deviceId: s.deviceId });
         setState('ready');
       })
       .catch((e) => {
@@ -144,6 +145,55 @@ export function useMatrixClient() {
     }
   }, [client]);
 
+  // Doesn't super work / yet
+  const handleSetupEncryption = useCallback(async () => {
+    if (!client) {
+      return;
+    }
+    const crypto = client.getCrypto?.();
+    if (!crypto) {
+      console.error(
+        'Crypto not initialised. Call initRustCrypto() before startClient().'
+      );
+      return;
+    }
+
+    try {
+      const gen = await crypto.createRecoveryKeyFromPassphrase();
+
+      await crypto.bootstrapSecretStorage({
+        setupNewSecretStorage: true,
+        createSecretStorageKey: async () => {
+          // Called if SSSS is not present; provide the default key id + raw key bytes
+          return gen;
+        },
+      });
+
+      console.log(gen.encodedPrivateKey);
+
+      // crypto
+      //   .getCryptoCallbacks()
+      //   .cacheSecretStorageKey?.(gen.keyId, gen.keyInfo, gen.key);
+
+      await crypto.bootstrapCrossSigning({
+        authUploadDeviceSigningKeys: async (makeRequest) => {
+          makeRequest({
+            deviceId: user!.deviceId,
+            userId: user!.userId,
+          });
+        },
+      });
+
+      const hasKeyBackup = (await crypto.checkKeyBackupAndEnable()) !== null;
+
+      if (!hasKeyBackup) {
+        await crypto.resetKeyBackup();
+      }
+    } catch (error) {
+      console.error('Error setting up encryption:', error);
+    }
+  }, [client, user]);
+
   return useMemo(
     () => ({
       state,
@@ -151,6 +201,7 @@ export function useMatrixClient() {
       error,
       loginWithSso,
       completeSsoLogin,
+      handleSetupEncryption,
       logout,
       isReady,
       user,
@@ -161,6 +212,7 @@ export function useMatrixClient() {
       error,
       loginWithSso,
       completeSsoLogin,
+      handleSetupEncryption,
       logout,
       isReady,
       user,
