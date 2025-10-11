@@ -145,17 +145,15 @@ export function useMatrixClient() {
     }
   }, [client]);
 
-  // Doesn't super work / yet
-  const handleSetupEncryption = useCallback(async () => {
+  const handleSetupEncryption = useCallback(async (): Promise<string> => {
     if (!client) {
-      return;
+      throw new Error('Client not initialized');
     }
     const crypto = client.getCrypto?.();
     if (!crypto) {
-      console.error(
+      throw new Error(
         'Crypto not initialised. Call initRustCrypto() before startClient().'
       );
-      return;
     }
 
     try {
@@ -168,12 +166,6 @@ export function useMatrixClient() {
           return gen;
         },
       });
-
-      console.log(gen.encodedPrivateKey);
-
-      // crypto
-      //   .getCryptoCallbacks()
-      //   .cacheSecretStorageKey?.(gen.keyId, gen.keyInfo, gen.key);
 
       await crypto.bootstrapCrossSigning({
         authUploadDeviceSigningKeys: async (makeRequest) => {
@@ -189,8 +181,11 @@ export function useMatrixClient() {
       if (!hasKeyBackup) {
         await crypto.resetKeyBackup();
       }
+
+      return gen.encodedPrivateKey!;
     } catch (error) {
       console.error('Error setting up encryption:', error);
+      throw error;
     }
   }, [client, user]);
 
