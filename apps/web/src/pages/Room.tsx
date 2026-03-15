@@ -17,7 +17,7 @@ function Room() {
   const [enablingEncryption, setEnablingEncryption] = useState(false);
 
   useEffect(() => {
-    if (!client || !isReady || !roomId) {
+    if (!client || !roomId) {
       setLoading(false);
       return;
     }
@@ -29,10 +29,15 @@ function Room() {
     try {
       const room = client.getRoom(roomId);
       if (room) {
-        const encryptionEvent = room.currentState.getStateEvents('m.room.encryption', '');
+        const encryptionEvent = room.currentState.getStateEvents(
+          'm.room.encryption',
+          ''
+        );
         setRoomInfo({
           name: room.name,
-          topic: room.currentState.getStateEvents('m.room.topic', '')?.getContent()?.topic,
+          topic: room.currentState
+            .getStateEvents('m.room.topic', '')
+            ?.getContent()?.topic,
           memberCount: room.getJoinedMemberCount(),
           isEncrypted: !!encryptionEvent,
         });
@@ -45,7 +50,7 @@ function Room() {
     } finally {
       setLoading(false);
     }
-  }, [client, isReady, roomId]);
+  }, [client, roomId]);
 
   if (!roomId) {
     return <div>No room ID provided</div>;
@@ -65,19 +70,21 @@ function Room() {
 
   const handleEnableEncryption = async () => {
     if (!client || !roomId) return;
-    
+
     setEnablingEncryption(true);
     setError(null);
-    
+
     try {
       // Send state event to enable encryption in the room
       // Using type assertion as m.room.encryption is not in the StateEvents type union
-      await (client.sendStateEvent as (
-        roomId: string, 
-        eventType: string, 
-        content: Record<string, unknown>, 
-        stateKey: string
-      ) => Promise<unknown>)(
+      await (
+        client.sendStateEvent as (
+          roomId: string,
+          eventType: string,
+          content: Record<string, unknown>,
+          stateKey: string
+        ) => Promise<unknown>
+      )(
         roomId,
         'm.room.encryption',
         {
@@ -85,14 +92,19 @@ function Room() {
         },
         ''
       );
-      
+
       // Refresh room info
       const room = client.getRoom(roomId);
       if (room) {
-        const encryptionEvent = room.currentState.getStateEvents('m.room.encryption', '');
+        const encryptionEvent = room.currentState.getStateEvents(
+          'm.room.encryption',
+          ''
+        );
         setRoomInfo({
           name: room.name,
-          topic: room.currentState.getStateEvents('m.room.topic', '')?.getContent()?.topic,
+          topic: room.currentState
+            .getStateEvents('m.room.topic', '')
+            ?.getContent()?.topic,
           memberCount: room.getJoinedMemberCount(),
           isEncrypted: !!encryptionEvent,
         });
@@ -108,7 +120,9 @@ function Room() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto p-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">Room: {roomId}</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">
+          Room: {roomId}
+        </h1>
         {roomInfo ? (
           <div className="space-y-6">
             <div className="bg-white rounded-xl shadow-lg p-6">
@@ -126,7 +140,9 @@ function Room() {
             </div>
 
             <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">Encryption</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                Encryption
+              </h3>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-600">
@@ -139,8 +155,8 @@ function Room() {
                   </p>
                   {!roomInfo.isEncrypted && (
                     <p className="text-sm text-gray-500 mt-2">
-                      Enable end-to-end encryption to secure messages in this room.
-                      Once enabled, encryption cannot be disabled.
+                      Enable end-to-end encryption to secure messages in this
+                      room. Once enabled, encryption cannot be disabled.
                     </p>
                   )}
                 </div>

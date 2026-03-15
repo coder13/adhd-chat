@@ -1,28 +1,72 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Modal from './Modal';
 import Button from './Button';
 import Input from './Input';
+import type { EncryptionSetupInfo, EncryptionSetupMode } from '../hooks/useMatrixClient';
 
 interface EncryptionSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSetupComplete: () => void;
+  onLoadSetupInfo: () => Promise<EncryptionSetupInfo>;
   onGenerateKey: () => Promise<string>;
+  onFinishSetup: (recoveryKey: string) => Promise<void>;
 }
 
-type SetupStep = 'generate' | 'display' | 'verify' | 'complete';
+type SetupStep =
+  | 'loading'
+  | 'status'
+  | 'generate'
+  | 'display'
+  | 'verify'
+  | 'complete';
 
 function EncryptionSetupModal({
   isOpen,
   onClose,
   onSetupComplete,
+  onLoadSetupInfo,
   onGenerateKey,
+  onFinishSetup,
 }: EncryptionSetupModalProps) {
-  const [step, setStep] = useState<SetupStep>('generate');
+  const [step, setStep] = useState<SetupStep>('loading');
+  const [mode, setMode] = useState<EncryptionSetupMode>('create');
+  const [message, setMessage] = useState('');
   const [generatedKey, setGeneratedKey] = useState<string>('');
   const [verificationKey, setVerificationKey] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
+
+  const loadSetupInfo = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const setupInfo = await onLoadSetupInfo();
+      setMode(setupInfo.mode);
+      setMessage(setupInfo.message);
+      setStep(
+        setupInfo.mode === 'create'
+          ? 'generate'
+          : setupInfo.mode === 'unlock'
+            ? 'verify'
+            : 'status'
+      );
+    } catch (e) {
+      setError(String(e));
+      setStep('status');
+    } finally {
+      setLoading(false);
+    }
+  }, [onLoadSetupInfo]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    void loadSetupInfo();
+  }, [isOpen, loadSetupInfo]);
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -42,20 +86,35 @@ function EncryptionSetupModal({
     setStep('verify');
   };
 
-  const handleVerify = () => {
-    if (verificationKey.trim() !== generatedKey) {
+  const handleVerify = async () => {
+    if (mode === 'create' && verificationKey.trim() !== generatedKey) {
       setError('Keys do not match. Please try again.');
       return;
     }
-    setStep('complete');
-    setTimeout(() => {
-      onSetupComplete();
-      handleClose();
-    }, 1500);
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await onFinishSetup(
+        mode === 'create' ? generatedKey : verificationKey.trim()
+      );
+      setStep('complete');
+      setTimeout(() => {
+        onSetupComplete();
+        handleClose();
+      }, 1500);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleClose = () => {
-    setStep('generate');
+    setStep('loading');
+    setMode('create');
+    setMessage('');
     setGeneratedKey('');
     setVerificationKey('');
     setError('');
@@ -67,16 +126,41 @@ function EncryptionSetupModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Setup End-to-End Encryption">
-      {step === 'generate' && (
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Setup End-to-End Encryption"
+    >
+      {isOpen && step === 'loading' && (
         <div className="space-y-4">
           <p className="text-gray-600">
-            Generate a recovery key to enable end-to-end encryption. This key will allow you to
-            decrypt your messages on new devices.
+            Inspecting this account&apos;s encryption state...
           </p>
+        </div>
+      )}
+
+      {step === 'status' && (
+        <div className="space-y-4">
+          <p className="text-gray-600">{error || message}</p>
+          <div className="flex justify-end">
+            <Button onClick={handleClose}>
+              {mode === 'ready' ? 'Done' : 'Close'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step === 'generate' && (
+        <div className="space-y-4">
+          <p className="text-gray-600">{message}</p>
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+          {generatedKey && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              {generatedKey}
             </div>
           )}
           <div className="flex justify-end space-x-3">
@@ -97,8 +181,8 @@ function EncryptionSetupModal({
               ⚠️ Important: Save this key securely
             </p>
             <p className="text-sm text-yellow-700">
-              You will need this key to decrypt your messages if you lose access to your device.
-              Store it in a safe place like a password manager.
+              You will need this key to decrypt your messages if you lose access
+              to your device. Store it in a safe place like a password manager.
             </p>
           </div>
 
@@ -130,15 +214,23 @@ function EncryptionSetupModal({
       {step === 'verify' && (
         <div className="space-y-4">
           <p className="text-gray-600">
-            Please re-enter your recovery key to confirm you've saved it correctly.
+            {mode === 'create'
+              ? "Please re-enter your recovery key to confirm you've saved it correctly."
+              : message}
           </p>
 
           <Input
-            label="Enter Recovery Key"
+            label={
+              mode === 'create' ? 'Enter Recovery Key' : 'Existing Recovery Key'
+            }
             type="text"
             value={verificationKey}
             onChange={(e) => setVerificationKey(e.target.value)}
-            placeholder="Paste or type your recovery key"
+            placeholder={
+              mode === 'create'
+                ? 'Paste or type your recovery key'
+                : 'Enter your existing recovery key'
+            }
             error={error}
           />
 
@@ -148,9 +240,13 @@ function EncryptionSetupModal({
             </Button>
             <Button
               onClick={handleVerify}
-              disabled={!verificationKey.trim()}
+              disabled={!verificationKey.trim() || loading}
             >
-              Verify Key
+              {loading
+                ? 'Finishing Setup...'
+                : mode === 'create'
+                  ? 'Verify Key'
+                  : 'Unlock Encryption'}
             </Button>
           </div>
         </div>
