@@ -35,6 +35,11 @@ function Home() {
     getEncryptionSetupInfo,
     getEncryptionDiagnostics,
     handleFinishEncryptionSetup,
+    deviceVerification,
+    startDeviceVerificationUnlock,
+    startSasDeviceVerification,
+    confirmSasDeviceVerification,
+    cancelDeviceVerification,
     logout,
   } = useMatrixClient();
   const [rooms, setRooms] = useState<Array<{ id: string; name: string }>>([]);
@@ -198,7 +203,9 @@ function Home() {
             Encryption
           </h2>
           <p className="text-gray-600 mb-4">
-            POC diagnostics for this account and this browser session.
+            POC diagnostics for this account and this browser session. If encrypted
+            rooms are already readable here, treat this as status info rather than a
+            setup checklist.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="p-4 bg-gray-50 rounded-lg">
@@ -295,7 +302,7 @@ function Home() {
             </div>
           )}
           <Button onClick={() => setShowEncryptionModal(true)}>
-            Manage Encryption
+            Encryption Status
           </Button>
         </div>
 
@@ -326,6 +333,11 @@ function Home() {
         onLoadSetupInfo={getEncryptionSetupInfo}
         onGenerateKey={handleGenerateRecoveryKey}
         onFinishSetup={handleFinishEncryptionSetup}
+        verification={deviceVerification}
+        onStartDeviceVerification={startDeviceVerificationUnlock}
+        onStartSasVerification={startSasDeviceVerification}
+        onConfirmSasVerification={confirmSasDeviceVerification}
+        onCancelDeviceVerification={cancelDeviceVerification}
       />
     </div>
   );

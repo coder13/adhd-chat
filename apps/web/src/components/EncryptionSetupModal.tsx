@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import Modal from './Modal';
 import Button from './Button';
 import Input from './Input';
-import type { EncryptionSetupInfo, EncryptionSetupMode } from '../hooks/useMatrixClient';
+import DeviceVerificationPanel from './DeviceVerificationPanel';
+import type {
+  DeviceVerificationState,
+  EncryptionSetupInfo,
+  EncryptionSetupMode,
+} from '../hooks/useMatrixClient';
 
 interface EncryptionSetupModalProps {
   isOpen: boolean;
@@ -11,6 +16,11 @@ interface EncryptionSetupModalProps {
   onLoadSetupInfo: () => Promise<EncryptionSetupInfo>;
   onGenerateKey: () => Promise<string>;
   onFinishSetup: (recoveryKey: string) => Promise<void>;
+  verification: DeviceVerificationState;
+  onStartDeviceVerification: () => Promise<void>;
+  onStartSasVerification: () => Promise<void>;
+  onConfirmSasVerification: () => Promise<void>;
+  onCancelDeviceVerification: () => Promise<void>;
 }
 
 type SetupStep =
@@ -28,6 +38,11 @@ function EncryptionSetupModal({
   onLoadSetupInfo,
   onGenerateKey,
   onFinishSetup,
+  verification,
+  onStartDeviceVerification,
+  onStartSasVerification,
+  onConfirmSasVerification,
+  onCancelDeviceVerification,
 }: EncryptionSetupModalProps) {
   const [step, setStep] = useState<SetupStep>('loading');
   const [mode, setMode] = useState<EncryptionSetupMode>('create');
@@ -111,7 +126,10 @@ function EncryptionSetupModal({
     }
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
+    if (verification.status !== 'idle') {
+      void onCancelDeviceVerification();
+    }
     setStep('loading');
     setMode('create');
     setMessage('');
@@ -119,7 +137,25 @@ function EncryptionSetupModal({
     setVerificationKey('');
     setError('');
     onClose();
-  };
+  }, [onCancelDeviceVerification, onClose, verification.status]);
+
+  useEffect(() => {
+    if (!isOpen || verification.status !== 'done') {
+      return;
+    }
+
+    setError('');
+    setStep('complete');
+
+    const timeoutId = window.setTimeout(() => {
+      onSetupComplete();
+      handleClose();
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [handleClose, isOpen, onSetupComplete, verification.status]);
 
   const handleCopyKey = () => {
     navigator.clipboard.writeText(generatedKey);
@@ -233,6 +269,16 @@ function EncryptionSetupModal({
             }
             error={error}
           />
+
+          {mode === 'unlock' && (
+            <DeviceVerificationPanel
+              verification={verification}
+              onStart={onStartDeviceVerification}
+              onStartSas={onStartSasVerification}
+              onConfirmSas={onConfirmSasVerification}
+              onCancel={onCancelDeviceVerification}
+            />
+          )}
 
           <div className="flex justify-end space-x-3">
             <Button variant="outline" onClick={handleClose}>

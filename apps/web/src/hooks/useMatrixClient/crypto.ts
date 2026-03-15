@@ -46,6 +46,55 @@ function requireCrypto(client: MatrixClient) {
   return cryptoApi;
 }
 
+async function ensureBackupKeysRestored(client: MatrixClient) {
+  return ensureBackupKeysRestoredWithOptions(client, {
+    allowSecretStorageFallback: true,
+  });
+}
+
+async function ensureBackupKeysRestoredWithOptions(
+  client: MatrixClient,
+  options: {
+    allowSecretStorageFallback: boolean;
+  }
+) {
+  const cryptoApi = requireCrypto(client);
+
+  await cryptoApi.checkKeyBackupAndEnable();
+
+  let backupKey = await cryptoApi.getSessionBackupPrivateKey();
+
+  if (!backupKey && options.allowSecretStorageFallback) {
+    try {
+      await cryptoApi.loadSessionBackupPrivateKeyFromSecretStorage();
+      backupKey = await cryptoApi.getSessionBackupPrivateKey();
+    } catch (error) {
+      console.warn('Could not load key backup from secret storage:', error);
+    }
+  }
+
+  if (!backupKey) {
+    const deadline = Date.now() + 10000;
+
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      backupKey = await cryptoApi.getSessionBackupPrivateKey();
+
+      if (backupKey) {
+        break;
+      }
+    }
+  }
+
+  if (!backupKey) {
+    throw new Error(
+      'This device still does not have the message backup key. Complete recovery on another verified device or use your recovery key here.'
+    );
+  }
+
+  await cryptoApi.restoreKeyBackup();
+}
+
 export async function generateRecoveryKey(client: MatrixClient) {
   const cryptoApi = requireCrypto(client);
   const recoveryKey = await cryptoApi.createRecoveryKeyFromPassphrase();
@@ -58,17 +107,31 @@ export async function generateRecoveryKey(client: MatrixClient) {
 
 export async function getEncryptionSetupInfo(client: MatrixClient) {
   const cryptoApi = requireCrypto(client);
-  const [crossSigningReady, secretStorageReady, crossSigningStatus] =
+  const [
+    crossSigningReady,
+    secretStorageReady,
+    crossSigningStatus,
+    backupVersion,
+    backupKey,
+  ] =
     await Promise.all([
       cryptoApi.isCrossSigningReady(),
       cryptoApi.isSecretStorageReady(),
       cryptoApi.getCrossSigningStatus(),
+      cryptoApi.getActiveSessionBackupVersion(),
+      cryptoApi.getSessionBackupPrivateKey(),
     ]);
+
+  const keyBackupEnabled = backupVersion !== null;
 
   if (crossSigningReady && secretStorageReady) {
     return {
       mode: 'ready',
-      message: 'Encryption is already configured for this account.',
+      message: keyBackupEnabled
+        ? backupKey !== null
+          ? 'Encryption is already configured for this account and this browser can access message backup.'
+          : 'Encryption is already configured for this account. This browser can use end-to-end encryption, but old encrypted history may still depend on whether backup keys are available locally.'
+        : 'Encryption is configured for this account, but message key backup is not enabled on the homeserver. This device can encrypt new messages, but older encrypted history from other devices may not be recoverable here.',
     } satisfies EncryptionSetupInfo;
   }
 
@@ -154,7 +217,7 @@ export async function finishEncryptionSetup(
         await performInteractiveAuth(client, user.userId, makeRequest);
       },
     });
-    await cryptoApi.checkKeyBackupAndEnable();
+    await ensureBackupKeysRestored(client);
     return;
   }
 
@@ -185,4 +248,26 @@ export async function finishEncryptionSetup(
     setupNewSecretStorage: true,
     setupNewKeyBackup: true,
   });
+}
+
+export async function finishDeviceVerificationUnlock(client: MatrixClient) {
+  const cryptoApi = requireCrypto(client);
+  const [crossSigningStatus, backupVersion] = await Promise.all([
+    cryptoApi.getCrossSigningStatus(),
+    cryptoApi.getActiveSessionBackupVersion(),
+  ]);
+  const privateKeysCachedLocally =
+    crossSigningStatus.privateKeysCachedLocally.masterKey &&
+    crossSigningStatus.privateKeysCachedLocally.selfSigningKey &&
+    crossSigningStatus.privateKeysCachedLocally.userSigningKey;
+
+  if (!privateKeysCachedLocally) {
+    await cryptoApi.bootstrapCrossSigning({});
+  }
+
+  if (backupVersion !== null) {
+    await ensureBackupKeysRestoredWithOptions(client, {
+      allowSecretStorageFallback: false,
+    });
+  }
 }

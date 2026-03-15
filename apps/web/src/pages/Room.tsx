@@ -1,20 +1,77 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
 import { Button } from '../components';
+import {
+  ClientEvent,
+  MsgType,
+  RoomEvent,
+  type MatrixEvent,
+  type Room as MatrixRoom,
+  type SyncState,
+} from 'matrix-js-sdk';
 
-function Room() {
+type RoomInfo = {
+  name?: string;
+  topic?: string;
+  memberCount?: number;
+  isEncrypted?: boolean;
+};
+
+type TimelineMessage = {
+  id: string;
+  sender: string;
+  body: string;
+  timestamp: number;
+};
+
+const ROOM_LOAD_TIMEOUT_MS = 15000;
+
+function getRoomInfo(room: MatrixRoom): RoomInfo {
+  const encryptionEvent = room.currentState.getStateEvents(
+    'm.room.encryption',
+    ''
+  );
+
+  return {
+    name: room.name,
+    topic: room.currentState.getStateEvents('m.room.topic', '')?.getContent()?.topic,
+    memberCount: room.getJoinedMemberCount(),
+    isEncrypted: !!encryptionEvent,
+  };
+}
+
+function getTimelineMessages(room: MatrixRoom): TimelineMessage[] {
+  return room
+    .getLiveTimeline()
+    .getEvents()
+    .filter((event) => event.getType() === 'm.room.message')
+    .map((event) => {
+      const content = event.getContent<{ body?: string; msgtype?: string }>();
+
+      return {
+        id: event.getId() ?? event.getTs().toString(),
+        sender: event.getSender() ?? 'Unknown sender',
+        body:
+          content.msgtype === MsgType.Text || !content.msgtype
+            ? content.body ?? ''
+            : `[${content.msgtype}] ${content.body ?? ''}`,
+        timestamp: event.getTs(),
+      };
+    })
+    .filter((message) => message.body.trim().length > 0)
+    .sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
-  const { client, isReady } = useMatrixClient();
-  const [roomInfo, setRoomInfo] = useState<{
-    name?: string;
-    topic?: string;
-    memberCount?: number;
-    isEncrypted?: boolean;
-  } | null>(null);
+  const { client, isReady, syncState } = useMatrixClient();
+  const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
+  const [messages, setMessages] = useState<TimelineMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [enablingEncryption, setEnablingEncryption] = useState(false);
+  const isInitialSyncComplete = useMemo(() => syncState === 'PREPARED', [syncState]);
 
   useEffect(() => {
     if (!client || !roomId) {
@@ -22,35 +79,105 @@ function Room() {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
 
-    // Get room information
-    try {
-      const room = client.getRoom(roomId);
-      if (room) {
-        const encryptionEvent = room.currentState.getStateEvents(
-          'm.room.encryption',
-          ''
-        );
-        setRoomInfo({
-          name: room.name,
-          topic: room.currentState
-            .getStateEvents('m.room.topic', '')
-            ?.getContent()?.topic,
-          memberCount: room.getJoinedMemberCount(),
-          isEncrypted: !!encryptionEvent,
-        });
-      } else {
-        setError('Room not found');
+    let roomLoadTimeoutId: number | null = null;
+
+    const resolveMissingRoom = () => {
+      if (cancelled) {
+        return;
       }
-    } catch (e) {
-      console.error(e);
-      setError(String(e));
-    } finally {
+
       setLoading(false);
-    }
-  }, [client, roomId]);
+      setError('Room not found');
+    };
+
+    const queueMissingRoomTimeout = () => {
+      if (roomLoadTimeoutId !== null) {
+        window.clearTimeout(roomLoadTimeoutId);
+      }
+
+      roomLoadTimeoutId = window.setTimeout(resolveMissingRoom, ROOM_LOAD_TIMEOUT_MS);
+    };
+
+    const updateRoomState = async () => {
+      setLoading(true);
+      setError(null);
+
+      const room = client.getRoom(roomId);
+      if (!room) {
+        if (isInitialSyncComplete) {
+          queueMissingRoomTimeout();
+        }
+        return;
+      }
+
+      try {
+        if (roomLoadTimeoutId !== null) {
+          window.clearTimeout(roomLoadTimeoutId);
+          roomLoadTimeoutId = null;
+        }
+
+        await room.loadMembersIfNeeded();
+
+        if (cancelled) {
+          return;
+        }
+
+        setRoomInfo(getRoomInfo(room));
+        setMessages(getTimelineMessages(room));
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          setError(String(e));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void updateRoomState();
+
+    const handleSync = (state: SyncState | null) => {
+      if (!state) {
+        return;
+      }
+
+      void updateRoomState();
+    };
+
+    const handleTimeline = (
+      _event: MatrixEvent,
+      eventRoom: MatrixRoom | undefined,
+      _toStartOfTimeline: boolean | undefined,
+      _removed: boolean,
+      data: { liveEvent?: boolean }
+    ) => {
+      if (!data.liveEvent || eventRoom?.roomId !== roomId) {
+        return;
+      }
+
+      void updateRoomState();
+    };
+
+    client.on(ClientEvent.Sync, handleSync);
+    client.on(RoomEvent.Timeline, handleTimeline);
+    client.on(RoomEvent.Name, updateRoomState);
+    client.on(RoomEvent.MyMembership, updateRoomState);
+
+    return () => {
+      cancelled = true;
+      if (roomLoadTimeoutId !== null) {
+        window.clearTimeout(roomLoadTimeoutId);
+      }
+      client.off(ClientEvent.Sync, handleSync);
+      client.off(RoomEvent.Timeline, handleTimeline);
+      client.off(RoomEvent.Name, updateRoomState);
+      client.off(RoomEvent.MyMembership, updateRoomState);
+    };
+  }, [client, isInitialSyncComplete, roomId]);
 
   if (!roomId) {
     return <div>No room ID provided</div>;
@@ -93,21 +220,9 @@ function Room() {
         ''
       );
 
-      // Refresh room info
       const room = client.getRoom(roomId);
       if (room) {
-        const encryptionEvent = room.currentState.getStateEvents(
-          'm.room.encryption',
-          ''
-        );
-        setRoomInfo({
-          name: room.name,
-          topic: room.currentState
-            .getStateEvents('m.room.topic', '')
-            ?.getContent()?.topic,
-          memberCount: room.getJoinedMemberCount(),
-          isEncrypted: !!encryptionEvent,
-        });
+        setRoomInfo(getRoomInfo(room));
       }
     } catch (e) {
       console.error(e);
@@ -170,6 +285,38 @@ function Room() {
                 )}
               </div>
             </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                Messages
+              </h3>
+              {messages.length === 0 ? (
+                <p className="text-gray-500">
+                  No timeline messages loaded yet for this room.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className="border border-gray-200 rounded-lg p-3"
+                    >
+                      <div className="flex items-center justify-between gap-4 mb-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {message.sender}
+                        </p>
+                        <p className="text-xs text-gray-500 whitespace-nowrap">
+                          {new Date(message.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                        {message.body}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <p className="text-gray-600">No room information available</p>
@@ -184,4 +331,4 @@ function Room() {
   );
 }
 
-export default Room;
+export default RoomPage;

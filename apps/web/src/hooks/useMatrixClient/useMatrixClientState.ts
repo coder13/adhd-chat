@@ -1,7 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ClientEvent, SyncState, type MatrixClient } from 'matrix-js-sdk';
+import {
+  ClientEvent,
+  SyncState,
+  type MatrixClient,
+} from 'matrix-js-sdk';
 import type { GeneratedSecretStorageKey } from 'matrix-js-sdk/lib/crypto-api';
-import type { AuthState, MatrixSession } from './types';
+import {
+  VerificationPhase,
+  VerificationRequestEvent,
+  VerifierEvent,
+  type ShowSasCallbacks,
+  type VerificationRequest,
+  type Verifier,
+} from 'matrix-js-sdk/lib/crypto-api/verification';
+import { VerificationMethod } from 'matrix-js-sdk/lib/types';
+import type {
+  AuthState,
+  DeviceVerificationState,
+  MatrixSession,
+  VerificationEmoji,
+} from './types';
 import {
   buildAuthedClient,
   clearSession,
@@ -12,6 +30,7 @@ import {
 import { clearSsoCallbackUrl, completeSsoCallback, startSsoRedirect } from './auth';
 import {
   finishEncryptionSetup,
+  finishDeviceVerificationUnlock,
   generateRecoveryKey,
   getEncryptionDiagnostics,
   getEncryptionSetupInfo,
@@ -31,8 +50,169 @@ export function useMatrixClientState() {
   );
   const sessionRef = useRef<MatrixSession | null>(null);
   const pendingRecoveryKeyRef = useRef<GeneratedSecretStorageKey | null>(null);
+  const verificationRequestRef = useRef<VerificationRequest | null>(null);
+  const verifierRef = useRef<Verifier | null>(null);
+  const sasCallbacksRef = useRef<ShowSasCallbacks | null>(null);
+  const verifyPromiseRef = useRef<Promise<void> | null>(null);
+  const verificationRequestListenerCleanupRef = useRef<(() => void) | null>(null);
+  const verifierListenerCleanupRef = useRef<(() => void) | null>(null);
+  const [deviceVerification, setDeviceVerification] =
+    useState<DeviceVerificationState>({ status: 'idle' });
 
   const isReady = authState === 'ready';
+
+  const clearVerifierListeners = useCallback(() => {
+    if (verifierRef.current && verifierListenerCleanupRef.current) {
+      verifierListenerCleanupRef.current();
+    }
+
+    verifierRef.current = null;
+    verifierListenerCleanupRef.current = null;
+    sasCallbacksRef.current = null;
+    verifyPromiseRef.current = null;
+  }, []);
+
+  const clearVerificationRequestListeners = useCallback(() => {
+    if (verificationRequestRef.current && verificationRequestListenerCleanupRef.current) {
+      verificationRequestListenerCleanupRef.current();
+    }
+
+    verificationRequestRef.current = null;
+    verificationRequestListenerCleanupRef.current = null;
+  }, []);
+
+  const resetDeviceVerification = useCallback(() => {
+    clearVerifierListeners();
+    clearVerificationRequestListeners();
+    setDeviceVerification({ status: 'idle' });
+  }, [clearVerificationRequestListeners, clearVerifierListeners]);
+
+  const toVerificationEmojis = useCallback(
+    (emojis: [string, string][] | undefined): VerificationEmoji[] | undefined =>
+      emojis?.map(([symbol, name]) => ({ symbol, name })),
+    []
+  );
+
+  const updateDeviceVerificationState = useCallback(() => {
+    const request = verificationRequestRef.current;
+    const sasCallbacks = sasCallbacksRef.current;
+
+    if (!request) {
+      setDeviceVerification({ status: 'idle' });
+      return;
+    }
+
+    const baseState = {
+      transactionId: request.transactionId,
+      otherDeviceId: request.otherDeviceId,
+    };
+
+    if (sasCallbacks) {
+      setDeviceVerification({
+        status: 'showing_sas',
+        ...baseState,
+        decimals: sasCallbacks.sas.decimal,
+        emojis: toVerificationEmojis(sasCallbacks.sas.emoji),
+      });
+      return;
+    }
+
+    switch (request.phase) {
+      case VerificationPhase.Requested:
+        setDeviceVerification({ status: 'waiting', ...baseState });
+        break;
+      case VerificationPhase.Ready:
+        setDeviceVerification({ status: 'ready', ...baseState });
+        break;
+      case VerificationPhase.Started:
+        setDeviceVerification({ status: 'starting_sas', ...baseState });
+        break;
+      case VerificationPhase.Done:
+        setDeviceVerification({ status: 'done', ...baseState });
+        break;
+      case VerificationPhase.Cancelled:
+        setDeviceVerification({
+          status: 'cancelled',
+          ...baseState,
+          error: 'Verification was cancelled.',
+        });
+        break;
+      default:
+        setDeviceVerification({ status: 'requesting', ...baseState });
+        break;
+    }
+  }, [toVerificationEmojis]);
+
+  const attachVerifier = useCallback(
+    (verifier: Verifier) => {
+      if (verifierRef.current === verifier) {
+        return;
+      }
+
+      clearVerifierListeners();
+      verifierRef.current = verifier;
+
+      const handleShowSas = (sas: ShowSasCallbacks) => {
+        sasCallbacksRef.current = sas;
+        updateDeviceVerificationState();
+      };
+
+      const handleCancel = (cause: Error | { getContent?: () => { reason?: string } }) => {
+        const message =
+          cause instanceof Error
+            ? cause.message
+            : cause.getContent?.().reason ?? 'Verification was cancelled.';
+
+        setDeviceVerification({
+          status: 'cancelled',
+          transactionId: verificationRequestRef.current?.transactionId,
+          otherDeviceId: verificationRequestRef.current?.otherDeviceId,
+          error: message,
+        });
+      };
+
+      verifier.on(VerifierEvent.ShowSas, handleShowSas);
+      verifier.on(VerifierEvent.Cancel, handleCancel);
+
+      verifierListenerCleanupRef.current = () => {
+        verifier.off(VerifierEvent.ShowSas, handleShowSas);
+        verifier.off(VerifierEvent.Cancel, handleCancel);
+      };
+    },
+    [clearVerifierListeners, updateDeviceVerificationState]
+  );
+
+  const attachVerificationRequest = useCallback(
+    (request: VerificationRequest) => {
+      if (verificationRequestRef.current === request) {
+        updateDeviceVerificationState();
+        return;
+      }
+
+      clearVerificationRequestListeners();
+      verificationRequestRef.current = request;
+
+      const handleChange = () => {
+        if (request.verifier) {
+          attachVerifier(request.verifier);
+        }
+
+        updateDeviceVerificationState();
+      };
+
+      request.on(VerificationRequestEvent.Change, handleChange);
+      verificationRequestListenerCleanupRef.current = () => {
+        request.off(VerificationRequestEvent.Change, handleChange);
+      };
+
+      handleChange();
+    },
+    [
+      attachVerifier,
+      clearVerificationRequestListeners,
+      updateDeviceVerificationState,
+    ]
+  );
 
   const persist = useCallback((session: MatrixSession) => {
     sessionRef.current = session;
@@ -73,6 +253,7 @@ export function useMatrixClientState() {
     buildAuthedClient(session, persist)
       .then((authedClient) => {
         setClient(authedClient);
+        setSyncState(authedClient.getSyncState() ?? null);
         setUser({ userId: session.userId, deviceId: session.deviceId });
         setAuthState('ready');
       })
@@ -123,6 +304,7 @@ export function useMatrixClientState() {
 
       const authedClient = await buildAuthedClient(session, persist);
       setClient(authedClient);
+      setSyncState(authedClient.getSyncState() ?? null);
       setAuthState('ready');
     } catch (cause: unknown) {
       console.error(cause);
@@ -152,6 +334,7 @@ export function useMatrixClientState() {
       }
     } finally {
       pendingRecoveryKeyRef.current = null;
+      resetDeviceVerification();
       resetAuthedClient();
       setClient(null);
       clearSession();
@@ -159,7 +342,7 @@ export function useMatrixClientState() {
       setSyncState(null);
       setAuthState('logged_out');
     }
-  }, [client]);
+  }, [client, resetDeviceVerification]);
 
   const handleGenerateRecoveryKey = useCallback(async (): Promise<string> => {
     if (!client) {
@@ -211,6 +394,137 @@ export function useMatrixClientState() {
     [client, user]
   );
 
+  const startDeviceVerificationUnlock = useCallback(async () => {
+    if (!client) {
+      throw new Error('Client not initialized.');
+    }
+
+    const cryptoApi = client.getCrypto?.();
+    if (!cryptoApi) {
+      throw new Error('Encryption is not initialized for this session.');
+    }
+
+    setDeviceVerification({ status: 'requesting' });
+
+    try {
+      const request = await cryptoApi.requestOwnUserVerification();
+      attachVerificationRequest(request);
+    } catch (cause) {
+      setDeviceVerification({
+        status: 'error',
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      throw cause;
+    }
+  }, [attachVerificationRequest, client]);
+
+  const startSasDeviceVerification = useCallback(async () => {
+    const request = verificationRequestRef.current;
+    if (!request) {
+      throw new Error('No verification request is in progress.');
+    }
+
+    setDeviceVerification({
+      status: 'starting_sas',
+      transactionId: request.transactionId,
+      otherDeviceId: request.otherDeviceId,
+    });
+
+    try {
+      const verifier = await request.startVerification(VerificationMethod.Sas);
+      attachVerifier(verifier);
+
+      verifyPromiseRef.current = verifier
+        .verify()
+        .then(async () => {
+          if (!client) {
+            throw new Error('Client not initialized.');
+          }
+
+          await finishDeviceVerificationUnlock(client);
+          setDeviceVerification({
+            status: 'done',
+            transactionId: verificationRequestRef.current?.transactionId,
+            otherDeviceId: verificationRequestRef.current?.otherDeviceId,
+          });
+        })
+        .catch((cause: unknown) => {
+          if (verificationRequestRef.current?.phase === VerificationPhase.Cancelled) {
+            setDeviceVerification({
+              status: 'cancelled',
+              transactionId: verificationRequestRef.current?.transactionId,
+              otherDeviceId: verificationRequestRef.current?.otherDeviceId,
+              error:
+                cause instanceof Error ? cause.message : 'Verification was cancelled.',
+            });
+            return;
+          }
+
+          setDeviceVerification({
+            status: 'error',
+            transactionId: verificationRequestRef.current?.transactionId,
+            otherDeviceId: verificationRequestRef.current?.otherDeviceId,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        });
+    } catch (cause) {
+      setDeviceVerification({
+        status: 'error',
+        transactionId: request.transactionId,
+        otherDeviceId: request.otherDeviceId,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      throw cause;
+    }
+  }, [attachVerifier, client]);
+
+  const confirmSasDeviceVerification = useCallback(async () => {
+    const request = verificationRequestRef.current;
+    const sasCallbacks = sasCallbacksRef.current;
+
+    if (!request || !sasCallbacks) {
+      throw new Error('No SAS confirmation is available.');
+    }
+
+    setDeviceVerification({
+      status: 'confirming',
+      transactionId: request.transactionId,
+      otherDeviceId: request.otherDeviceId,
+      decimals: sasCallbacks.sas.decimal,
+      emojis: toVerificationEmojis(sasCallbacks.sas.emoji),
+    });
+
+    try {
+      await sasCallbacks.confirm();
+      sasCallbacksRef.current = null;
+      updateDeviceVerificationState();
+      await verifyPromiseRef.current;
+    } catch (cause) {
+      setDeviceVerification({
+        status: 'error',
+        transactionId: request.transactionId,
+        otherDeviceId: request.otherDeviceId,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      throw cause;
+    }
+  }, [toVerificationEmojis, updateDeviceVerificationState]);
+
+  const cancelDeviceVerification = useCallback(async () => {
+    const request = verificationRequestRef.current;
+    const sasCallbacks = sasCallbacksRef.current;
+
+    try {
+      if (sasCallbacks) {
+        sasCallbacks.cancel();
+      } else if (request) {
+        await request.cancel();
+      }
+    } finally {
+      resetDeviceVerification();
+    }
+  }, [resetDeviceVerification]);
+
   return useMemo(
     () => ({
       state: authState,
@@ -223,6 +537,11 @@ export function useMatrixClientState() {
       getEncryptionSetupInfo: loadEncryptionSetupInfo,
       getEncryptionDiagnostics: loadEncryptionDiagnostics,
       handleFinishEncryptionSetup,
+      deviceVerification,
+      startDeviceVerificationUnlock,
+      startSasDeviceVerification,
+      confirmSasDeviceVerification,
+      cancelDeviceVerification,
       logout,
       isReady,
       user,
@@ -238,6 +557,11 @@ export function useMatrixClientState() {
       loadEncryptionSetupInfo,
       loadEncryptionDiagnostics,
       handleFinishEncryptionSetup,
+      deviceVerification,
+      startDeviceVerificationUnlock,
+      startSasDeviceVerification,
+      confirmSasDeviceVerification,
+      cancelDeviceVerification,
       logout,
       isReady,
       user,
