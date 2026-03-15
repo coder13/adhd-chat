@@ -1,13 +1,12 @@
 import { IonButton, IonIcon, IonSearchbar } from '@ionic/react';
 import { ellipsisHorizontal } from 'ionicons/icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { AppMenu, EncryptionSetupModal } from '../components';
+import { ContactsList, ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
-import { buildChatCatalog, type ChatCatalog } from '../lib/matrix/chatCatalog';
-import { ChatListSection, ListPageLayout } from '../components/ionic';
+import { buildContactCatalog, type ContactSummary } from '../lib/matrix/chatCatalog';
 
-function Home() {
+function Contacts() {
   const {
     client,
     isReady,
@@ -23,80 +22,60 @@ function Home() {
     cancelDeviceVerification,
     logout,
   } = useMatrixClient();
-  const [catalog, setCatalog] = useState<ChatCatalog | null>(null);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<ContactSummary[]>([]);
+  const [contactsError, setContactsError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showEncryptionModal, setShowEncryptionModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
-    if (!client || !user) {
-      setCatalog(null);
-      setCatalogError(null);
+    if (!client || !user || !isReady) {
+      setContacts([]);
+      setContactsError(null);
       return;
     }
 
     let cancelled = false;
 
-    const loadCatalog = async () => {
+    const loadContacts = async () => {
       try {
-        const nextCatalog = await buildChatCatalog(client, user.userId);
+        const nextContacts = await buildContactCatalog(client, user.userId);
         if (!cancelled) {
-          setCatalog(nextCatalog);
-          setCatalogError(null);
+          setContacts(nextContacts);
+          setContactsError(null);
         }
       } catch (cause) {
         if (!cancelled) {
-          setCatalogError(cause instanceof Error ? cause.message : String(cause));
+          setContactsError(cause instanceof Error ? cause.message : String(cause));
         }
       }
     };
 
-    void loadCatalog();
+    void loadContacts();
 
     return () => {
       cancelled = true;
     };
-  }, [client, user]);
+  }, [client, isReady, user]);
 
-  const visibleChats = useMemo(() => {
+  const visibleContacts = useMemo(() => {
     const searchValue = search.trim().toLowerCase();
-    const chats = catalog?.primaryChats ?? [];
-
     if (!searchValue) {
-      return chats;
+      return contacts;
     }
 
-    return chats.filter((chat) => {
+    return contacts.filter((contact) => {
       return (
-        chat.name.toLowerCase().includes(searchValue) ||
-        chat.preview.toLowerCase().includes(searchValue) ||
-        chat.nativeSpaceName?.toLowerCase().includes(searchValue)
+        contact.displayName.toLowerCase().includes(searchValue) ||
+        contact.userId.toLowerCase().includes(searchValue)
       );
     });
-  }, [catalog, search]);
-
-  if (!isReady || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="max-w-sm text-center">
-          <h1 className="text-3xl font-semibold text-text">ADHD Chat</h1>
-          <p className="mt-3 text-sm leading-6 text-text-muted">
-            Please{' '}
-            <Link to="/login" className="font-medium text-accent">
-              log in
-            </Link>{' '}
-            to open your chats.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  }, [contacts, search]);
 
   return (
     <>
       <ListPageLayout
-        title="Chats"
+        title="Contacts"
         endSlot={
           <IonButton fill="clear" color="medium" onClick={() => setShowMenu(true)}>
             <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
@@ -107,18 +86,14 @@ function Home() {
           <IonSearchbar
             value={search}
             onIonInput={(event) => setSearch(event.detail.value ?? '')}
-            placeholder="Search"
+            placeholder="Search contacts"
             className="app-searchbar"
           />
         </div>
-        {(error || catalogError) && (
-          <div className="px-4 pb-2 text-sm text-danger">{error || catalogError}</div>
+        {(error || contactsError) && (
+          <div className="px-4 pb-2 text-sm text-danger">{error || contactsError}</div>
         )}
-        <ChatListSection
-          chats={visibleChats}
-          emptyTitle="No chats yet"
-          emptyBody="Direct conversations and app-owned chat rooms will appear here."
-        />
+        <ContactsList contacts={visibleContacts} />
       </ListPageLayout>
 
       <AppMenu
@@ -148,4 +123,4 @@ function Home() {
   );
 }
 
-export default Home;
+export default Contacts;

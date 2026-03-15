@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Button from './Button';
 import Input from './Input';
+import Card from './ui/Card';
 
 interface LoginCardProps {
   onLogin: (homeserver: string) => void;
@@ -20,12 +21,12 @@ function LoginCard({ onLogin, isLoading = false, error }: LoginCardProps) {
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="bg-white rounded-xl shadow-lg p-8">
+      <Card className="p-8">
         <div className="text-center mb-6">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+          <h2 className="text-3xl font-bold text-text mb-2">
             Welcome to ADHD Chat
           </h2>
-          <p className="text-gray-600">
+          <p className="text-text-muted">
             Connect to your Matrix homeserver to get started
           </p>
         </div>
@@ -43,8 +44,8 @@ function LoginCard({ onLogin, isLoading = false, error }: LoginCardProps) {
           />
 
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-600">{error}</p>
+            <div className="rounded-2xl border border-danger/20 bg-danger-soft p-3">
+              <p className="text-sm text-danger">{error}</p>
             </div>
           )}
 
@@ -58,12 +59,12 @@ function LoginCard({ onLogin, isLoading = false, error }: LoginCardProps) {
           </Button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-xs text-gray-500 text-center">
+        <div className="mt-6 border-t border-line pt-6">
+          <p className="text-center text-xs text-text-subtle">
             This app uses Single Sign-On (SSO) for secure authentication
           </p>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

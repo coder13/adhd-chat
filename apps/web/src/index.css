@@ -2,14 +2,127 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom base styles */
 @layer base {
+  html {
+    min-height: 100%;
+  }
+
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply min-h-screen antialiased;
+    background: var(--ion-background-color);
+    color: var(--ion-text-color);
+    font-family: "Inter", "Segoe UI", sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
   }
 }
 
-/* Custom component styles */
 @layer components {
-  /* Add any custom component styles here if needed */
+  .app-shell {
+    max-width: 960px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: var(--app-shell-background);
+    box-shadow: 0 0 0 1px var(--app-border-color);
+  }
+
+  .app-list-page {
+    --background: var(--app-shell-background);
+  }
+
+  .app-chat-page {
+    --background: var(--app-chat-background);
+  }
+
+  .app-toolbar {
+    --background: var(--app-shell-background);
+    --border-color: transparent;
+    padding-top: 0.5rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .app-bottom-nav {
+    --background: rgba(255, 255, 255, 0.94);
+    --border-color: var(--app-border-color);
+    backdrop-filter: blur(18px);
+  }
+
+  .dark .app-bottom-nav {
+    --background: rgba(17, 24, 39, 0.94);
+  }
+
+  .app-searchbar {
+    --background: #f3f4f6;
+    --border-radius: 18px;
+    --box-shadow: none;
+    --color: var(--ion-text-color);
+    --placeholder-color: var(--ion-color-medium);
+    padding-inline: 0;
+  }
+
+  .dark .app-searchbar {
+    --background: #1f2937;
+  }
+
+  .app-list {
+    background: transparent;
+    padding: 0 12px 24px;
+  }
+
+  .app-list-item {
+    --background: transparent;
+    --border-color: transparent;
+    --padding-start: 14px;
+    --inner-padding-end: 14px;
+    --min-height: 72px;
+    border-radius: 24px;
+    margin-bottom: 4px;
+  }
+
+  .app-list-item.is-active {
+    --background: rgba(var(--ion-color-primary-rgb), 0.12);
+  }
+
+  .app-chat-bubble {
+    max-width: 82%;
+    border-radius: 22px;
+    padding: 12px 14px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .app-chat-bubble.own {
+    margin-left: auto;
+    background: var(--app-bubble-own);
+    color: #fff;
+    border-bottom-right-radius: 10px;
+  }
+
+  .app-chat-bubble.other {
+    background: var(--app-bubble-other);
+    color: var(--ion-text-color);
+    border-bottom-left-radius: 10px;
+  }
+
+  .app-composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: var(--app-shell-background);
+    border-top: 1px solid var(--app-border-color);
+  }
+
+  .app-compose-field {
+    flex: 1;
+    border-radius: 24px;
+    background: #f3f4f6;
+    padding: 12px 14px;
+  }
+
+  .dark .app-compose-field {
+    background: #1f2937;
+  }
 }

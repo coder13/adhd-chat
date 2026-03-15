@@ -1,0 +1,48 @@
+:root {
+  --ion-background-color: #f5f7fb;
+  --ion-background-color-rgb: 245, 247, 251;
+  --ion-text-color: #111827;
+  --ion-text-color-rgb: 17, 24, 39;
+  --ion-color-primary: #2f6fed;
+  --ion-color-primary-rgb: 47, 111, 237;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #295fd0;
+  --ion-color-primary-tint: #447df0;
+  --ion-color-medium: #6b7280;
+  --ion-color-medium-rgb: 107, 114, 128;
+  --ion-color-light: #ffffff;
+  --ion-color-light-rgb: 255, 255, 255;
+  --ion-color-step-50: #f9fafb;
+  --ion-color-step-100: #f3f4f6;
+  --ion-color-step-150: #eceef2;
+  --ion-color-step-200: #e5e7eb;
+  --ion-color-step-300: #d1d5db;
+  --ion-color-step-400: #9ca3af;
+  --ion-color-step-500: #6b7280;
+  --ion-color-step-600: #4b5563;
+  --ion-color-step-700: #374151;
+  --ion-color-step-800: #1f2937;
+  --ion-color-step-900: #111827;
+  --app-shell-background: #ffffff;
+  --app-chat-background: #eaf1ff;
+  --app-bubble-own: #2f6fed;
+  --app-bubble-other: #ffffff;
+  --app-border-color: rgba(15, 23, 42, 0.08);
+}
+
+.dark {
+  --ion-background-color: #0f172a;
+  --ion-background-color-rgb: 15, 23, 42;
+  --ion-text-color: #f8fafc;
+  --ion-text-color-rgb: 248, 250, 252;
+  --ion-color-light: #111827;
+  --ion-color-light-rgb: 17, 24, 39;
+  --ion-color-medium: #94a3b8;
+  --ion-color-medium-rgb: 148, 163, 184;
+  --app-shell-background: #111827;
+  --app-chat-background: #162033;
+  --app-bubble-own: #3b82f6;
+  --app-bubble-other: #1f2937;
+  --app-border-color: rgba(148, 163, 184, 0.14);
+}

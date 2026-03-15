@@ -1,13 +1,12 @@
 import { IonButton, IonIcon, IonSearchbar } from '@ionic/react';
 import { ellipsisHorizontal } from 'ionicons/icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { AppMenu, EncryptionSetupModal } from '../components';
+import { ChatListSection, ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { buildChatCatalog, type ChatCatalog } from '../lib/matrix/chatCatalog';
-import { ChatListSection, ListPageLayout } from '../components/ionic';
 
-function Home() {
+function OtherRooms() {
   const {
     client,
     isReady,
@@ -30,9 +29,8 @@ function Home() {
   const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
-    if (!client || !user) {
+    if (!client || !user || !isReady) {
       setCatalog(null);
-      setCatalogError(null);
       return;
     }
 
@@ -57,11 +55,11 @@ function Home() {
     return () => {
       cancelled = true;
     };
-  }, [client, user]);
+  }, [client, isReady, user]);
 
   const visibleChats = useMemo(() => {
     const searchValue = search.trim().toLowerCase();
-    const chats = catalog?.primaryChats ?? [];
+    const chats = catalog?.otherChats ?? [];
 
     if (!searchValue) {
       return chats;
@@ -70,33 +68,15 @@ function Home() {
     return chats.filter((chat) => {
       return (
         chat.name.toLowerCase().includes(searchValue) ||
-        chat.preview.toLowerCase().includes(searchValue) ||
-        chat.nativeSpaceName?.toLowerCase().includes(searchValue)
+        chat.preview.toLowerCase().includes(searchValue)
       );
     });
   }, [catalog, search]);
 
-  if (!isReady || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="max-w-sm text-center">
-          <h1 className="text-3xl font-semibold text-text">ADHD Chat</h1>
-          <p className="mt-3 text-sm leading-6 text-text-muted">
-            Please{' '}
-            <Link to="/login" className="font-medium text-accent">
-              log in
-            </Link>{' '}
-            to open your chats.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       <ListPageLayout
-        title="Chats"
+        title="Other"
         endSlot={
           <IonButton fill="clear" color="medium" onClick={() => setShowMenu(true)}>
             <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
@@ -107,7 +87,7 @@ function Home() {
           <IonSearchbar
             value={search}
             onIonInput={(event) => setSearch(event.detail.value ?? '')}
-            placeholder="Search"
+            placeholder="Search rooms"
             className="app-searchbar"
           />
         </div>
@@ -116,8 +96,8 @@ function Home() {
         )}
         <ChatListSection
           chats={visibleChats}
-          emptyTitle="No chats yet"
-          emptyBody="Direct conversations and app-owned chat rooms will appear here."
+          emptyTitle="No extra rooms"
+          emptyBody="Rooms outside the main ADHD Chat flow show up here."
         />
       </ListPageLayout>
 
@@ -148,4 +128,4 @@ function Home() {
   );
 }
 
-export default Home;
+export default OtherRooms;

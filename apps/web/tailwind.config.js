@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,6 +8,33 @@ export default {
   theme: {
     extend: {
       colors: {
+        canvas: 'rgb(var(--ion-background-color-rgb) / <alpha-value>)',
+        panel: 'rgb(var(--ion-color-light-rgb) / <alpha-value>)',
+        elevated: 'rgb(var(--ion-color-light-rgb) / <alpha-value>)',
+        line: 'var(--app-border-color)',
+        text: {
+          DEFAULT: 'rgb(var(--ion-text-color-rgb) / <alpha-value>)',
+          muted: 'rgb(var(--ion-color-medium-rgb) / <alpha-value>)',
+          subtle: 'rgb(var(--ion-color-medium-rgb) / <alpha-value>)',
+          inverse: '#ffffff',
+        },
+        accent: {
+          DEFAULT: 'rgb(var(--ion-color-primary-rgb) / <alpha-value>)',
+          strong: 'rgb(var(--ion-color-primary-rgb) / <alpha-value>)',
+          soft: 'rgba(var(--ion-color-primary-rgb), 0.12)',
+        },
+        success: {
+          DEFAULT: '#16a34a',
+          soft: '#dcfce7',
+        },
+        warning: {
+          DEFAULT: '#d97706',
+          soft: '#fef3c7',
+        },
+        danger: {
+          DEFAULT: '#dc2626',
+          soft: '#fee2e2',
+        },
         // Primary brand colors
         primary: {
           50: '#f0f9ff',
@@ -36,8 +64,11 @@ export default {
           950: '#3b0764',
         },
       },
+      boxShadow: {
+        panel:
+          '0 24px 60px -32px rgba(15, 23, 42, 0.30), 0 10px 24px -18px rgba(15, 23, 42, 0.22)',
+      },
     },
   },
   plugins: [],
 }
-

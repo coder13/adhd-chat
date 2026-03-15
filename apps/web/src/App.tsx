@@ -1,9 +1,12 @@
-import { Routes, Route } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
+import { IonApp } from '@ionic/react';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Room from './pages/Room';
 import AuthCallback from './pages/AuthCallback';
+import Contacts from './pages/Contacts';
+import OtherRooms from './pages/OtherRooms';
 import {
   BrowserInteractiveAuthModal,
   InteractiveAuthModal,
@@ -30,9 +33,11 @@ function App() {
 
   return (
     <MatrixClientProvider>
-      <>
+      <IonApp>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/other" element={<OtherRooms />} />
+          <Route path="/contacts" element={<Contacts />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/room/:roomId" element={<Room />} />
@@ -57,7 +62,7 @@ function App() {
           onContinue={handleContinueBrowserInteractiveAuth}
           onCancel={handleCancelBrowserInteractiveAuth}
         />
-      </>
+      </IonApp>
     </MatrixClientProvider>
   );
 }

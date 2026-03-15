@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { cn } from '../lib/cn';
 
 interface ModalProps {
   isOpen: boolean;
@@ -47,7 +48,7 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
     >
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         <div
-          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+          className="fixed inset-0 bg-text/45 backdrop-blur-sm transition-opacity"
           aria-hidden="true"
           onClick={onClose}
         />
@@ -61,13 +62,16 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
 
         <div
           ref={modalRef}
-          className={`inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle w-full ${sizeStyles[size]}`}
+          className={cn(
+            'inline-block w-full transform overflow-hidden rounded-[28px] border border-line bg-panel text-left shadow-panel transition-all sm:my-8 sm:align-middle',
+            sizeStyles[size]
+          )}
         >
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="sm:flex sm:items-start">
               <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
                 <h3
-                  className="text-lg leading-6 font-medium text-gray-900 mb-4"
+                  className="mb-4 text-lg font-medium leading-6 text-text"
                   id="modal-title"
                 >
                   {title}

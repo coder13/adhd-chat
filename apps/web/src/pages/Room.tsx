@@ -1,152 +1,120 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
-import { Button } from '../components';
 import {
-  ClientEvent,
-  MsgType,
-  RoomEvent,
-  type MatrixEvent,
-  type Room as MatrixRoom,
-  type SyncState,
-} from 'matrix-js-sdk';
-
-type RoomInfo = {
-  name?: string;
-  topic?: string;
-  memberCount?: number;
-  isEncrypted?: boolean;
-};
-
-type TimelineMessage = {
-  id: string;
-  sender: string;
-  body: string;
-  timestamp: number;
-};
+  IonActionSheet,
+  IonAvatar,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonFooter,
+  IonHeader,
+  IonIcon,
+  IonPage,
+  IonTextarea,
+  IonToolbar,
+} from '@ionic/react';
+import { arrowBack, ellipsisHorizontal, lockClosedOutline, send } from 'ionicons/icons';
+import { ClientEvent, MsgType, RoomEvent, type MatrixEvent, type Room as MatrixRoom } from 'matrix-js-sdk';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
+import { buildChatCatalog, getRoomDisplayName, getTimelineMessages, type TimelineMessage } from '../lib/matrix/chatCatalog';
 
 const ROOM_LOAD_TIMEOUT_MS = 15000;
 
-function getRoomInfo(room: MatrixRoom): RoomInfo {
-  const encryptionEvent = room.currentState.getStateEvents(
-    'm.room.encryption',
-    ''
-  );
-
-  return {
-    name: room.name,
-    topic: room.currentState.getStateEvents('m.room.topic', '')?.getContent()?.topic,
-    memberCount: room.getJoinedMemberCount(),
-    isEncrypted: !!encryptionEvent,
-  };
-}
-
-function getTimelineMessages(room: MatrixRoom): TimelineMessage[] {
-  return room
-    .getLiveTimeline()
-    .getEvents()
-    .filter((event) => event.getType() === 'm.room.message')
-    .map((event) => {
-      const content = event.getContent<{ body?: string; msgtype?: string }>();
-
-      return {
-        id: event.getId() ?? event.getTs().toString(),
-        sender: event.getSender() ?? 'Unknown sender',
-        body:
-          content.msgtype === MsgType.Text || !content.msgtype
-            ? content.body ?? ''
-            : `[${content.msgtype}] ${content.body ?? ''}`,
-        timestamp: event.getTs(),
-      };
-    })
-    .filter((message) => message.body.trim().length > 0)
-    .sort((a, b) => a.timestamp - b.timestamp);
+function formatTimestamp(timestamp: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(timestamp);
 }
 
 function RoomPage() {
-  const { roomId } = useParams<{ roomId: string }>();
-  const { client, isReady, syncState } = useMatrixClient();
-  const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
+  const { roomId: encodedRoomId } = useParams<{ roomId: string }>();
+  const roomId = encodedRoomId ? decodeURIComponent(encodedRoomId) : null;
+  const navigate = useNavigate();
+  const { client, isReady, user, logout } = useMatrixClient();
   const [messages, setMessages] = useState<TimelineMessage[]>([]);
+  const [roomName, setRoomName] = useState('Conversation');
+  const [roomSubtitle, setRoomSubtitle] = useState('Connecting...');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [isEncrypted, setIsEncrypted] = useState(false);
   const [enablingEncryption, setEnablingEncryption] = useState(false);
-  const isInitialSyncComplete = useMemo(() => syncState === 'PREPARED', [syncState]);
+  const [showMenu, setShowMenu] = useState(false);
+  const contentRef = useRef<HTMLIonContentElement>(null);
 
   useEffect(() => {
-    if (!client || !roomId) {
+    if (!client || !user || !roomId) {
       setLoading(false);
       return;
     }
 
     let cancelled = false;
-
     let roomLoadTimeoutId: number | null = null;
 
     const resolveMissingRoom = () => {
-      if (cancelled) {
-        return;
+      if (!cancelled) {
+        setLoading(false);
+        setError('Conversation not found');
       }
-
-      setLoading(false);
-      setError('Room not found');
     };
 
     const queueMissingRoomTimeout = () => {
       if (roomLoadTimeoutId !== null) {
         window.clearTimeout(roomLoadTimeoutId);
       }
-
       roomLoadTimeoutId = window.setTimeout(resolveMissingRoom, ROOM_LOAD_TIMEOUT_MS);
     };
 
     const updateRoomState = async () => {
-      setLoading(true);
-      setError(null);
-
       const room = client.getRoom(roomId);
       if (!room) {
-        if (isInitialSyncComplete) {
-          queueMissingRoomTimeout();
-        }
+        queueMissingRoomTimeout();
         return;
       }
 
       try {
+        setLoading(true);
+        setError(null);
+
         if (roomLoadTimeoutId !== null) {
           window.clearTimeout(roomLoadTimeoutId);
           roomLoadTimeoutId = null;
         }
 
         await room.loadMembersIfNeeded();
-
         if (cancelled) {
           return;
         }
 
-        setRoomInfo(getRoomInfo(room));
-        setMessages(getTimelineMessages(room));
-      } catch (e) {
-        console.error(e);
+        const catalog = await buildChatCatalog(client, user.userId);
+        const chat =
+          catalog.primaryChats.find((entry) => entry.id === roomId) ??
+          catalog.otherChats.find((entry) => entry.id === roomId) ??
+          null;
+        const encryptionEvent = room.currentState.getStateEvents('m.room.encryption', '');
+
+        setRoomName(getRoomDisplayName(room, user.userId));
+        setRoomSubtitle(chat?.nativeSpaceName || `${room.getJoinedMemberCount()} members`);
+        setMessages(getTimelineMessages(room, user.userId));
+        setIsEncrypted(Boolean(encryptionEvent));
+      } catch (cause) {
+        console.error(cause);
         if (!cancelled) {
-          setError(String(e));
+          setError(cause instanceof Error ? cause.message : String(cause));
         }
       } finally {
         if (!cancelled) {
           setLoading(false);
+          requestAnimationFrame(() => {
+            void contentRef.current?.scrollToBottom(250);
+          });
         }
       }
     };
 
     void updateRoomState();
-
-    const handleSync = (state: SyncState | null) => {
-      if (!state) {
-        return;
-      }
-
-      void updateRoomState();
-    };
 
     const handleTimeline = (
       _event: MatrixEvent,
@@ -158,11 +126,10 @@ function RoomPage() {
       if (!data.liveEvent || eventRoom?.roomId !== roomId) {
         return;
       }
-
       void updateRoomState();
     };
 
-    client.on(ClientEvent.Sync, handleSync);
+    client.on(ClientEvent.Sync, updateRoomState);
     client.on(RoomEvent.Timeline, handleTimeline);
     client.on(RoomEvent.Name, updateRoomState);
     client.on(RoomEvent.MyMembership, updateRoomState);
@@ -172,162 +139,221 @@ function RoomPage() {
       if (roomLoadTimeoutId !== null) {
         window.clearTimeout(roomLoadTimeoutId);
       }
-      client.off(ClientEvent.Sync, handleSync);
+      client.off(ClientEvent.Sync, updateRoomState);
       client.off(RoomEvent.Timeline, handleTimeline);
       client.off(RoomEvent.Name, updateRoomState);
       client.off(RoomEvent.MyMembership, updateRoomState);
     };
-  }, [client, isInitialSyncComplete, roomId]);
+  }, [client, roomId, user]);
 
   if (!roomId) {
-    return <div>No room ID provided</div>;
+    return (
+      <IonPage className="app-shell">
+        <IonContent className="app-list-page">
+          <div className="flex min-h-screen items-center justify-center text-text">
+            No conversation selected.
+          </div>
+        </IonContent>
+      </IonPage>
+    );
   }
 
-  if (!client || !isReady) {
-    return <div>Please log in to view room information</div>;
-  }
-
-  if (loading) {
-    return <div>Loading room information...</div>;
-  }
-
-  if (error) {
-    return <div style={{ color: 'red' }}>Error: {error}</div>;
+  if (!client || !isReady || !user) {
+    return (
+      <IonPage className="app-shell">
+        <IonContent className="app-list-page">
+          <div className="flex min-h-screen items-center justify-center px-6 text-center">
+            <p className="text-text">
+              Please <Link to="/login" className="text-accent">log in</Link> to view this chat.
+            </p>
+          </div>
+        </IonContent>
+      </IonPage>
+    );
   }
 
   const handleEnableEncryption = async () => {
-    if (!client || !roomId) return;
-
     setEnablingEncryption(true);
     setError(null);
 
     try {
-      // Send state event to enable encryption in the room
-      // Using type assertion as m.room.encryption is not in the StateEvents type union
       await (
         client.sendStateEvent as (
-          roomId: string,
+          nextRoomId: string,
           eventType: string,
           content: Record<string, unknown>,
           stateKey: string
         ) => Promise<unknown>
-      )(
-        roomId,
-        'm.room.encryption',
-        {
-          algorithm: 'm.megolm.v1.aes-sha2',
-        },
-        ''
-      );
-
-      const room = client.getRoom(roomId);
-      if (room) {
-        setRoomInfo(getRoomInfo(room));
-      }
-    } catch (e) {
-      console.error(e);
-      setError(`Failed to enable encryption: ${String(e)}`);
+      )(roomId, 'm.room.encryption', { algorithm: 'm.megolm.v1.aes-sha2' }, '');
+      setIsEncrypted(true);
+    } catch (cause) {
+      console.error(cause);
+      setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setEnablingEncryption(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto p-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">
-          Room: {roomId}
-        </h1>
-        {roomInfo ? (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                {roomInfo.name || 'Unnamed Room'}
-              </h2>
-              {roomInfo.topic && (
-                <p className="text-gray-600 mb-4">
-                  <strong>Topic:</strong> {roomInfo.topic}
-                </p>
-              )}
-              <p className="text-gray-600">
-                <strong>Members:</strong> {roomInfo.memberCount}
-              </p>
-            </div>
+  const handleSendMessage = async () => {
+    const body = draft.trim();
+    if (!body) {
+      return;
+    }
 
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                Encryption
-              </h3>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600">
-                    <strong>Status:</strong>{' '}
-                    {roomInfo.isEncrypted ? (
-                      <span className="text-green-600">✓ Encrypted</span>
-                    ) : (
-                      <span className="text-gray-500">Not encrypted</span>
-                    )}
-                  </p>
-                  {!roomInfo.isEncrypted && (
-                    <p className="text-sm text-gray-500 mt-2">
-                      Enable end-to-end encryption to secure messages in this
-                      room. Once enabled, encryption cannot be disabled.
-                    </p>
-                  )}
-                </div>
-                {!roomInfo.isEncrypted && (
-                  <Button
-                    onClick={handleEnableEncryption}
-                    disabled={enablingEncryption}
-                  >
-                    {enablingEncryption ? 'Enabling...' : 'Enable Encryption'}
-                  </Button>
-                )}
+    setSending(true);
+
+    try {
+      await (
+        client.sendEvent as (
+          nextRoomId: string,
+          eventType: string,
+          content: Record<string, unknown>,
+          txnId?: string
+        ) => Promise<unknown>
+      )(
+        roomId,
+        'm.room.message',
+        { msgtype: MsgType.Text, body },
+        window.crypto?.randomUUID?.() ?? `${Date.now()}`
+      );
+      setDraft('');
+      requestAnimationFrame(() => {
+        void contentRef.current?.scrollToBottom(250);
+      });
+    } catch (cause) {
+      console.error(cause);
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const conversationMenuButtons = [
+    ...(!isEncrypted
+      ? [
+          {
+            text: enablingEncryption ? 'Enabling encryption...' : 'Enable encryption',
+            icon: lockClosedOutline,
+            handler: () => {
+              void handleEnableEncryption();
+            },
+          },
+        ]
+      : []),
+    {
+      text: 'Back to chats',
+      handler: () => navigate('/'),
+    },
+    {
+      text: 'Log out',
+      role: 'destructive' as const,
+      handler: () => {
+        void logout();
+      },
+    },
+    {
+      text: 'Cancel',
+      role: 'cancel' as const,
+    },
+  ];
+
+  return (
+    <IonPage className="app-shell">
+      <IonHeader className="ion-no-border">
+        <IonToolbar className="app-toolbar">
+          <IonButtons slot="start">
+            <IonButton fill="clear" onClick={() => navigate(-1)}>
+              <IonIcon slot="icon-only" icon={arrowBack} />
+            </IonButton>
+          </IonButtons>
+          <div className="flex items-center gap-3 px-2">
+            <IonAvatar className="h-10 w-10 bg-accent-soft">
+              <div className="flex h-full items-center justify-center font-semibold text-accent">
+                {roomName.charAt(0).toUpperCase()}
+              </div>
+            </IonAvatar>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[15px] font-semibold text-text">{roomName}</div>
+              <div className="truncate text-xs text-text-muted">
+                {roomSubtitle}
+                {isEncrypted ? ' • encrypted' : ''}
               </div>
             </div>
+          </div>
+          <IonButtons slot="end">
+            <IonButton fill="clear" color="medium" onClick={() => setShowMenu(true)}>
+              <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
+            </IonButton>
+          </IonButtons>
+        </IonToolbar>
+      </IonHeader>
 
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                Messages
-              </h3>
-              {messages.length === 0 ? (
-                <p className="text-gray-500">
-                  No timeline messages loaded yet for this room.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className="border border-gray-200 rounded-lg p-3"
-                    >
-                      <div className="flex items-center justify-between gap-4 mb-1">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {message.sender}
-                        </p>
-                        <p className="text-xs text-gray-500 whitespace-nowrap">
-                          {new Date(message.timestamp).toLocaleString()}
-                        </p>
-                      </div>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                        {message.body}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
+      <IonContent ref={contentRef} fullscreen className="app-chat-page">
+        <div className="px-4 pb-4 pt-6">
+          {loading ? (
+            <div className="py-12 text-center text-sm text-text-muted">Loading messages...</div>
+          ) : error ? (
+            <div className="py-6 text-center text-sm text-danger">{error}</div>
+          ) : messages.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-base font-medium text-text">No messages yet</p>
+              <p className="mt-2 text-sm text-text-muted">Start the conversation below.</p>
             </div>
-          </div>
-        ) : (
-          <p className="text-gray-600">No room information available</p>
-        )}
-        {error && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-600">{error}</p>
-          </div>
-        )}
-      </div>
-    </div>
+          ) : (
+            <div className="space-y-3">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`app-chat-bubble ${message.isOwn ? 'own' : 'other'}`}
+                >
+                  {!message.isOwn && (
+                    <div className="mb-1 text-[11px] font-medium text-text-subtle">
+                      {message.senderId}
+                    </div>
+                  )}
+                  <div>{message.body}</div>
+                  <div
+                    className={`mt-2 text-right text-[11px] ${
+                      message.isOwn ? 'text-white/75' : 'text-text-subtle'
+                    }`}
+                  >
+                    {formatTimestamp(message.timestamp)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </IonContent>
+
+      <IonFooter className="ion-no-border">
+        <div className="app-composer">
+          <IonTextarea
+            value={draft}
+            onIonInput={(event) => setDraft(event.detail.value ?? '')}
+            autoGrow
+            rows={1}
+            placeholder="Message"
+            className="app-compose-field"
+          />
+          <IonButton
+            shape="round"
+            color="primary"
+            onClick={handleSendMessage}
+            disabled={sending || !draft.trim()}
+          >
+            <IonIcon slot="icon-only" icon={send} />
+          </IonButton>
+        </div>
+      </IonFooter>
+
+      <IonActionSheet
+        isOpen={showMenu}
+        onDidDismiss={() => setShowMenu(false)}
+        header="Conversation"
+        buttons={conversationMenuButtons}
+      />
+    </IonPage>
   );
 }
 
