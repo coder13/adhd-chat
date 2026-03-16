@@ -12,13 +12,14 @@ import { arrowBack } from 'ionicons/icons';
 import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, SegmentedControl } from '../components';
+import { useBrowserNotificationSettings } from '../hooks/useBrowserNotifications';
 import { useChatPreferences } from '../hooks/useChatPreferences';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 
 const copyBySection: Record<string, { title: string; body: string }> = {
   notifications: {
     title: 'Notifications',
-    body: 'Notification preferences will live here. For now this is a stub page.',
+    body: 'Control background message alerts for this browser.',
   },
   encryption: {
     title: 'Encryption',
@@ -44,6 +45,14 @@ function UserMenuStubPage() {
   const { client, user } = useMatrixClient();
   const { preferences, updateChatViewMode, isSaving, error } =
     useChatPreferences(client, user?.userId);
+  const {
+    isSupported: notificationsSupported,
+    permission: notificationPermission,
+    isEnabled: notificationsEnabled,
+    isMuted: notificationsMuted,
+    requestAccess,
+    updateEnabled,
+  } = useBrowserNotificationSettings();
 
   const content = useMemo(() => {
     return (
@@ -76,6 +85,62 @@ function UserMenuStubPage() {
               {content.body}
             </p>
           </Card>
+
+          {section === 'notifications' && (
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-semibold text-text">
+                    Browser alerts
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-text-muted">
+                    {notificationsSupported
+                      ? notificationPermission === 'granted'
+                        ? notificationsMuted
+                          ? 'Notifications are muted in Tandem.'
+                          : 'Notifications are enabled for background activity.'
+                        : notificationPermission === 'denied'
+                          ? 'Notifications are blocked by this browser.'
+                          : 'Turn on notifications for new background messages.'
+                      : 'This browser does not support notifications.'}
+                  </p>
+                </div>
+                <div className="rounded-full bg-elevated px-3 py-1 text-xs font-medium text-text-muted">
+                  {notificationsSupported
+                    ? notificationPermission === 'granted'
+                      ? notificationsEnabled
+                        ? 'On'
+                        : 'Muted'
+                      : notificationPermission === 'denied'
+                        ? 'Blocked'
+                        : 'Off'
+                    : 'Unavailable'}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                {notificationsSupported && notificationPermission !== 'granted' ? (
+                  <IonButton
+                    fill="solid"
+                    onClick={() => {
+                      void requestAccess();
+                    }}
+                  >
+                    Enable notifications
+                  </IonButton>
+                ) : null}
+
+                {notificationPermission === 'granted' ? (
+                  <IonButton
+                    fill="outline"
+                    onClick={() => updateEnabled(!notificationsEnabled)}
+                  >
+                    {notificationsEnabled ? 'Mute in Tandem' : 'Unmute'}
+                  </IonButton>
+                ) : null}
+              </div>
+            </Card>
+          )}
 
           {section === 'chat-appearance' && (
             <Card>

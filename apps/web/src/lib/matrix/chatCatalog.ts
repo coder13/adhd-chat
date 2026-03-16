@@ -61,6 +61,7 @@ export type TimelineMessage = {
   fileSize?: number | null;
   imageWidth?: number | null;
   imageHeight?: number | null;
+  readByNames?: string[] | null;
 };
 
 function asArray<T>(value: T | T[] | null | undefined): T[] {
@@ -339,6 +340,24 @@ export function getTimelineMessages(
           ) ?? null)
         : null;
       const msgtype = content.msgtype ?? MsgType.Text;
+      const readByNames = event
+        .getId()
+        ? room
+            .getUsersReadUpTo(event)
+            .filter((readerId) => {
+              if (readerId === currentUserId) {
+                return false;
+              }
+
+              const member = room.getMember(readerId);
+              return member?.membership === 'join';
+            })
+            .map((readerId) => {
+              const member = room.getMember(readerId);
+              return member?.name || member?.rawDisplayName || readerId;
+            })
+            .sort((left, right) => left.localeCompare(right))
+        : [];
       const body = (() => {
         switch (msgtype) {
           case MsgType.Image:
@@ -381,6 +400,7 @@ export function getTimelineMessages(
         fileSize: content.info?.size ?? null,
         imageWidth: content.info?.w ?? null,
         imageHeight: content.info?.h ?? null,
+        readByNames,
       };
     })
     .filter(

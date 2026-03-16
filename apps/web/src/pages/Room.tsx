@@ -24,6 +24,7 @@ import {
   ClientEvent,
   MsgType,
   RoomEvent,
+  RoomMemberEvent,
   type MatrixEvent,
   type Room as MatrixRoom,
 } from 'matrix-js-sdk';
@@ -58,6 +59,16 @@ import {
   subscribeToPendingTandemRooms,
   type PendingTandemRoomRecord,
 } from '../lib/matrix/pendingTandemRoom';
+import {
+  findLatestOwnReadReceipt,
+} from '../lib/matrix/readReceipts';
+import {
+  formatTypingIndicator,
+  getTypingMemberNames,
+  TYPING_IDLE_TIMEOUT_MS,
+  TYPING_RENEWAL_INTERVAL_MS,
+  TYPING_SERVER_TIMEOUT_MS,
+} from '../lib/matrix/typingIndicators';
 import {
   buildTandemSpaceRoomCatalog,
   type TandemSpaceRoomSummary,
@@ -180,13 +191,25 @@ function RoomPage() {
   const [optimisticMessages, setOptimisticMessages] = useState<
     OptimisticTimelineMessage[]
   >([]);
+  const [typingMemberNames, setTypingMemberNames] = useState<string[]>([]);
   const [pendingRoom, setPendingRoom] =
     useState<PendingTandemRoomRecord | null>(() =>
       getPendingTandemRoom(roomId)
     );
   const contentRef = useRef<HTMLIonContentElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const outgoingTypingRef = useRef(false);
+  const lastTypingSentAtRef = useRef(0);
+  const typingIdleTimeoutRef = useRef<number | null>(null);
+  const lastReadReceiptEventIdRef = useRef<string | null>(null);
   const currentRoom = client?.getRoom(roomId ?? undefined) ?? null;
+  const roomMembership = currentRoom?.getMyMembership() ?? 'join';
+  const membershipPolicy =
+    !isPendingRoom && client && currentRoom
+      ? getTandemMembershipPolicy(client, currentRoom)
+      : null;
+  const canInteractWithTimeline =
+    isPendingRoom || !membershipPolicy || roomMembership === 'join';
   const tangentSpaceId = isPendingRoom
     ? (pendingRoom?.sharedSpaceId ?? null)
     : client
@@ -274,8 +297,15 @@ function RoomPage() {
       }
     };
 
+    const handleReceipt = (_event: MatrixEvent, eventRoom: MatrixRoom) => {
+      if (eventRoom.roomId === roomId) {
+        void updateRoomState();
+      }
+    };
+
     client.on(ClientEvent.Sync, updateRoomState);
     client.on(RoomEvent.Timeline, handleTimeline);
+    client.on(RoomEvent.Receipt, handleReceipt);
     client.on(RoomEvent.Name, updateRoomState);
     client.on(RoomEvent.MyMembership, updateRoomState);
     client.on(RoomEvent.AccountData, handleRoomAccountData);
@@ -286,6 +316,7 @@ function RoomPage() {
       }
       client.off(ClientEvent.Sync, updateRoomState);
       client.off(RoomEvent.Timeline, handleTimeline);
+      client.off(RoomEvent.Receipt, handleReceipt);
       client.off(RoomEvent.Name, updateRoomState);
       client.off(RoomEvent.MyMembership, updateRoomState);
       client.off(RoomEvent.AccountData, handleRoomAccountData);
@@ -356,6 +387,176 @@ function RoomPage() {
     };
   }, [client, isReady, refreshTangentTopics, tangentSpaceId, user]);
 
+  useEffect(() => {
+    if (isPendingRoom || !currentRoom || !user) {
+      setTypingMemberNames([]);
+      return;
+    }
+
+    if (!client || !roomId) {
+      return;
+    }
+
+    const updateTypingMembers = () => {
+      setTypingMemberNames(
+        getTypingMemberNames(currentRoom.getMembers(), user.userId)
+      );
+    };
+
+    const handleTypingChange = (_event: MatrixEvent, member: { roomId: string }) => {
+      if (member.roomId !== roomId) {
+        return;
+      }
+
+      updateTypingMembers();
+    };
+
+    const handleMemberNameChange = (
+      _event: MatrixEvent,
+      member: { roomId: string; typing?: boolean }
+    ) => {
+      if (member.roomId !== roomId || !member.typing) {
+        return;
+      }
+
+      updateTypingMembers();
+    };
+
+    updateTypingMembers();
+    client.on(RoomMemberEvent.Typing, handleTypingChange);
+    client.on(RoomMemberEvent.Name, handleMemberNameChange);
+
+    return () => {
+      client.off(RoomMemberEvent.Typing, handleTypingChange);
+      client.off(RoomMemberEvent.Name, handleMemberNameChange);
+    };
+  }, [client, currentRoom, isPendingRoom, roomId, user]);
+
+  useEffect(() => {
+    const activeClient = client;
+    const activeRoomId = roomId;
+
+    if (typingIdleTimeoutRef.current !== null) {
+      window.clearTimeout(typingIdleTimeoutRef.current);
+      typingIdleTimeoutRef.current = null;
+    }
+
+    if (
+      !activeClient ||
+      !activeRoomId ||
+      !canInteractWithTimeline ||
+      isPendingRoom ||
+      draft.length === 0
+    ) {
+      if (!outgoingTypingRef.current) {
+        return;
+      }
+
+      outgoingTypingRef.current = false;
+      lastTypingSentAtRef.current = 0;
+      if (!activeClient || !activeRoomId) {
+        return;
+      }
+      void activeClient
+        .sendTyping(activeRoomId, false, TYPING_SERVER_TIMEOUT_MS)
+        .catch((cause) => {
+          console.error('Failed to clear typing state', cause);
+        });
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      !outgoingTypingRef.current ||
+      now - lastTypingSentAtRef.current >= TYPING_RENEWAL_INTERVAL_MS
+    ) {
+      outgoingTypingRef.current = true;
+      lastTypingSentAtRef.current = now;
+      void activeClient
+        .sendTyping(activeRoomId, true, TYPING_SERVER_TIMEOUT_MS)
+        .catch((cause) => {
+          console.error('Failed to send typing state', cause);
+        });
+    }
+
+    typingIdleTimeoutRef.current = window.setTimeout(() => {
+      if (!outgoingTypingRef.current) {
+        return;
+      }
+
+      outgoingTypingRef.current = false;
+      lastTypingSentAtRef.current = 0;
+      void activeClient
+        .sendTyping(activeRoomId, false, TYPING_SERVER_TIMEOUT_MS)
+        .catch((cause) => {
+          console.error('Failed to clear typing state', cause);
+        });
+    }, TYPING_IDLE_TIMEOUT_MS);
+
+    return () => {
+      if (typingIdleTimeoutRef.current !== null) {
+        window.clearTimeout(typingIdleTimeoutRef.current);
+        typingIdleTimeoutRef.current = null;
+      }
+    };
+  }, [canInteractWithTimeline, client, draft, isPendingRoom, roomId]);
+
+  useEffect(() => {
+    if (!client || !currentRoom || !user || isPendingRoom || !canInteractWithTimeline) {
+      return;
+    }
+
+    const sendLatestReadReceipt = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      const latestIncomingEvent = [...currentRoom.getLiveTimeline().getEvents()]
+        .reverse()
+        .find(
+          (event) =>
+            event.getType() === 'm.room.message' &&
+            Boolean(event.getId()) &&
+            event.getSender() !== user.userId
+        );
+
+      if (!latestIncomingEvent) {
+        return;
+      }
+
+      const latestIncomingEventId = latestIncomingEvent.getId();
+      if (
+        !latestIncomingEventId ||
+        lastReadReceiptEventIdRef.current === latestIncomingEventId
+      ) {
+        return;
+      }
+
+      void client.sendReadReceipt(latestIncomingEvent).then(() => {
+        lastReadReceiptEventIdRef.current = latestIncomingEventId;
+      }).catch((cause) => {
+        console.error('Failed to send read receipt', cause);
+      });
+    };
+
+    sendLatestReadReceipt();
+    window.addEventListener('focus', sendLatestReadReceipt);
+    document.addEventListener('visibilitychange', sendLatestReadReceipt);
+
+    return () => {
+      window.removeEventListener('focus', sendLatestReadReceipt);
+      document.removeEventListener('visibilitychange', sendLatestReadReceipt);
+    };
+  }, [
+    canInteractWithTimeline,
+    client,
+    currentRoom,
+    isPendingRoom,
+    roomId,
+    snapshot.messages,
+    user,
+  ]);
+
   if (!roomId) {
     return (
       <IonPage className="app-shell">
@@ -385,6 +586,25 @@ function RoomPage() {
       </IonPage>
     );
   }
+
+  const clearOwnTypingState = () => {
+    if (typingIdleTimeoutRef.current !== null) {
+      window.clearTimeout(typingIdleTimeoutRef.current);
+      typingIdleTimeoutRef.current = null;
+    }
+
+    if (!outgoingTypingRef.current) {
+      return;
+    }
+
+    outgoingTypingRef.current = false;
+    lastTypingSentAtRef.current = 0;
+    void client
+      .sendTyping(roomId, false, TYPING_SERVER_TIMEOUT_MS)
+      .catch((cause) => {
+        console.error('Failed to clear typing state', cause);
+      });
+  };
 
   const handleEnableEncryption = async () => {
     setEnablingEncryption(true);
@@ -514,6 +734,7 @@ function RoomPage() {
       return;
     }
 
+    clearOwnTypingState();
     setDraft('');
     await sendTextMessage({ body });
   };
@@ -786,17 +1007,14 @@ function RoomPage() {
     messages,
     reconciledOptimisticMessages
   );
-  const roomMembership = currentRoom?.getMyMembership() ?? 'join';
-  const membershipPolicy =
-    !isPendingRoom && client && currentRoom
-      ? getTandemMembershipPolicy(client, currentRoom)
-      : null;
-  const canInteractWithTimeline =
-    isPendingRoom || !membershipPolicy || roomMembership === 'join';
   const visibleError =
     pendingRoom?.status === 'failed'
       ? (pendingRoom.error ?? actionError)
       : (actionError ?? error);
+  const typingIndicator = formatTypingIndicator(typingMemberNames);
+  const latestOwnReadReceipt = findLatestOwnReadReceipt(visibleMessages);
+  const readReceiptMessageId = latestOwnReadReceipt?.messageId ?? null;
+  const readReceiptNames = latestOwnReadReceipt?.readerNames ?? [];
   const handleBackNavigation = () => {
     if (tangentSpaceId) {
       navigate(`/tandem/space/${encodeURIComponent(tangentSpaceId)}`);
@@ -930,7 +1148,7 @@ function RoomPage() {
                 {roomName}
               </div>
               <div className="truncate text-xs text-text-muted">
-                {roomSubtitle}
+                {typingIndicator ?? roomSubtitle}
                 {isEncrypted ? ' • encrypted' : ''}
               </div>
             </div>
@@ -1030,6 +1248,9 @@ function RoomPage() {
                   accessToken={client.getAccessToken()}
                   viewMode={preferences.chatViewMode}
                   onRetry={handleRetryMessage}
+                  receiptNames={
+                    message.id === readReceiptMessageId ? readReceiptNames : null
+                  }
                 />
               ))}
             </div>

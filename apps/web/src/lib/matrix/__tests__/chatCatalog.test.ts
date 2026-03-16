@@ -88,9 +88,11 @@ function createRoom(events: MockEvent[]) {
     getLiveTimeline: jest.fn(() => ({
       getEvents: jest.fn(() => events),
     })),
+    getUsersReadUpTo: jest.fn((_event: MockEvent) => [] as string[]),
     getMember: jest.fn((userId: string) => ({
       name: userId === '@me:matrix.org' ? 'Me' : 'Alex',
       rawDisplayName: userId === '@me:matrix.org' ? 'Me' : 'Alex',
+      membership: 'join',
     })),
   };
 }
@@ -184,5 +186,30 @@ describe('getTimelineMessages', () => {
 
     expect(message.transactionId).toBe('txn-local-echo');
     expect(message.deliveryStatus).toBe('sending');
+  });
+
+  it('includes reader names from joined members on timeline messages', () => {
+    const room = createRoom([
+      createMessageEvent({
+        id: 'sent-message',
+        sender: '@me:matrix.org',
+        timestamp: 50,
+        body: 'Seen by someone',
+      }),
+    ]);
+    room.getUsersReadUpTo.mockImplementation((_event: MockEvent) => [
+      '@me:matrix.org',
+      '@alex:matrix.org',
+    ]);
+
+    const [message] = getTimelineMessages(
+      {
+        mxcUrlToHttp: jest.fn(() => null),
+      } as never,
+      room as never,
+      '@me:matrix.org'
+    );
+
+    expect(message.readByNames).toEqual(['Alex']);
   });
 });

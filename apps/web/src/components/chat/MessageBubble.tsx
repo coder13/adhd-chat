@@ -33,6 +33,7 @@ interface MessageBubbleProps {
   accessToken?: string | null;
   viewMode?: ChatViewMode;
   onRetry?: (messageId: string) => void;
+  receiptNames?: string[] | null;
 }
 
 function MessageBubble({
@@ -40,6 +41,7 @@ function MessageBubble({
   accessToken = null,
   viewMode = 'timeline',
   onRetry,
+  receiptNames = null,
 }: MessageBubbleProps) {
   const fileSize = formatFileSize(message.fileSize);
   const isNotice = message.msgtype === 'm.notice';
@@ -116,6 +118,26 @@ function MessageBubble({
     : isFailed
       ? 'Failed to send'
       : null;
+  const visibleReceiptNames = receiptNames?.slice(0, 3) ?? [];
+  const receiptAvatars = visibleReceiptNames.length ? (
+    <div
+      className="flex items-center"
+      aria-label={`Read by ${visibleReceiptNames.join(', ')}`}
+      title={`Read by ${visibleReceiptNames.join(', ')}`}
+    >
+      {visibleReceiptNames.map((name, index) => (
+        <AppAvatar
+          key={`${message.id}:receipt:${name}`}
+          name={name}
+          className={cn(
+            'h-4 w-4 border border-panel text-[8px]',
+            index === 0 ? '' : '-ml-1'
+          )}
+          textClassName="text-[8px]"
+        />
+      ))}
+    </div>
+  ) : null;
   const retryMediaLoadButton = mediaError ? (
     <button
       type="button"
@@ -211,6 +233,7 @@ function MessageBubble({
                   </span>
                 ) : null}
               </p>
+              {receiptAvatars}
             </div>
           ) : (
             <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-1 text-sm leading-6">
@@ -226,6 +249,7 @@ function MessageBubble({
                   </span>
                 ) : null}
               </p>
+              {receiptAvatars}
             </div>
           )}
           {isFailed && onRetry ? (
@@ -309,6 +333,7 @@ function MessageBubble({
           )}
           <div className="mt-2 flex items-center gap-2 text-[11px] text-text-subtle">
             {statusLabel ? <span>{statusLabel}</span> : null}
+            {receiptAvatars}
             {isFailed && onRetry ? (
               <button
                 type="button"

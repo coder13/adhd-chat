@@ -105,6 +105,26 @@ describe('MessageBubble', () => {
     expect(onRetry).toHaveBeenCalledWith('failed-message');
   });
 
+  it('renders read receipt avatars on the supplied message', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'read-message',
+          senderId: '@me:matrix.org',
+          senderName: 'Me',
+          body: 'Did you see this?',
+          timestamp: Date.UTC(2026, 2, 15, 10, 33),
+          isOwn: true,
+          msgtype: 'm.text',
+          deliveryStatus: 'sent',
+        }}
+        receiptNames={['Alex']}
+      />
+    );
+
+    expect(screen.getByLabelText('Read by Alex')).toBeInTheDocument();
+  });
+
   it('shows a media reload action when authenticated image fetch fails', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = jest.fn(async () => ({

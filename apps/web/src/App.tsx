@@ -22,9 +22,11 @@ import {
 import { useBrowserInteractiveAuthRequest } from './hooks/useBrowserInteractiveAuthRequest';
 import { useSecretStorageKeyRequest } from './hooks/useSecretStorageKeyRequest';
 import { useInteractiveAuthRequest } from './hooks/useInteractiveAuthRequest';
+import { useBrowserNotifications } from './hooks/useBrowserNotifications';
 import { MatrixClientProvider } from './hooks/useMatrixClient';
 
-function App() {
+function AppShell() {
+  useBrowserNotifications();
   const { isRequesting, handleProvideKey, handleCancel } =
     useSecretStorageKeyRequest();
   const {
@@ -39,49 +41,53 @@ function App() {
   } = useBrowserInteractiveAuthRequest();
 
   return (
-    <MatrixClientProvider>
-      <IonApp>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/other" element={<OtherRooms />} />
-          <Route path="/contacts" element={<Contacts />} />
-          <Route path="/contacts/new" element={<AddContactPage />} />
-          <Route path="/menu" element={<UserMenuPage />} />
-          <Route path="/menu/:section" element={<UserMenuStubPage />} />
-          <Route path="/tandem/invite" element={<TandemInvitePage />} />
-          <Route path="/tandem/space/:spaceId" element={<TandemSpacePage />} />
-          <Route
-            path="/tandem/space/:spaceId/members"
-            element={<TandemSpaceMembersPage />}
-          />
-          <Route path="/tandem/rooms/new" element={<TandemCreateRoomPage />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/room/:roomId" element={<Room />} />
-          <Route path="/auth/callback" element={<AuthCallback />} />
-        </Routes>
+    <IonApp>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/other" element={<OtherRooms />} />
+        <Route path="/contacts" element={<Contacts />} />
+        <Route path="/contacts/new" element={<AddContactPage />} />
+        <Route path="/menu" element={<UserMenuPage />} />
+        <Route path="/menu/:section" element={<UserMenuStubPage />} />
+        <Route path="/tandem/invite" element={<TandemInvitePage />} />
+        <Route path="/tandem/space/:spaceId" element={<TandemSpacePage />} />
+        <Route
+          path="/tandem/space/:spaceId/members"
+          element={<TandemSpaceMembersPage />}
+        />
+        <Route path="/tandem/rooms/new" element={<TandemCreateRoomPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/room/:roomId" element={<Room />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+      </Routes>
 
-        <SecretStorageKeyModal
-          isOpen={isRequesting}
-          onProvideKey={handleProvideKey}
-          onCancel={handleCancel}
-        />
-        <InteractiveAuthModal
-          isOpen={isRequestingInteractiveAuth}
-          onSubmit={handleProvidePassword}
-          onCancel={handleCancelInteractiveAuth}
-        />
-        <BrowserInteractiveAuthModal
-          isOpen={browserInteractiveAuthPayload !== null}
-          title={
-            browserInteractiveAuthPayload?.title ?? 'Complete Authentication'
-          }
-          description={browserInteractiveAuthPayload?.description ?? ''}
-          url={browserInteractiveAuthPayload?.url ?? ''}
-          onContinue={handleContinueBrowserInteractiveAuth}
-          onCancel={handleCancelBrowserInteractiveAuth}
-        />
-      </IonApp>
+      <SecretStorageKeyModal
+        isOpen={isRequesting}
+        onProvideKey={handleProvideKey}
+        onCancel={handleCancel}
+      />
+      <InteractiveAuthModal
+        isOpen={isRequestingInteractiveAuth}
+        onSubmit={handleProvidePassword}
+        onCancel={handleCancelInteractiveAuth}
+      />
+      <BrowserInteractiveAuthModal
+        isOpen={browserInteractiveAuthPayload !== null}
+        title={browserInteractiveAuthPayload?.title ?? 'Complete Authentication'}
+        description={browserInteractiveAuthPayload?.description ?? ''}
+        url={browserInteractiveAuthPayload?.url ?? ''}
+        onContinue={handleContinueBrowserInteractiveAuth}
+        onCancel={handleCancelBrowserInteractiveAuth}
+      />
+    </IonApp>
+  );
+}
+
+function App() {
+  return (
+    <MatrixClientProvider>
+      <AppShell />
     </MatrixClientProvider>
   );
 }
