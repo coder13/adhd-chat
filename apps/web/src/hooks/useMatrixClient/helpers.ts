@@ -3,8 +3,10 @@ import type { MatrixClient, TokenRefreshFunction } from 'matrix-js-sdk';
 import { initAsync as initCryptoWasm } from '@matrix-org/matrix-sdk-crypto-wasm';
 import type { MatrixSession } from './types';
 import { decodeRecoveryKey } from 'matrix-js-sdk/lib/crypto-api';
+import { isInactiveMatrixSessionError } from './sessionErrors';
 
 const KEY = 'matrix.session.v1';
+const SESSION_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 export const keyCache = new Map<
   string,
@@ -164,6 +166,71 @@ export function createUnauthedClient(baseUrl: string) {
   });
 }
 
+async function refreshMatrixSession(
+  session: MatrixSession,
+  refreshToken: string,
+  onPersist: (s: MatrixSession) => void
+) {
+  const tmp = sdk.createClient({
+    baseUrl: session.baseUrl,
+    accessToken: session.accessToken,
+    useAuthorizationHeader: true,
+  });
+  const response = await tmp.refreshToken(refreshToken);
+  const updatedSession: MatrixSession = {
+    ...session,
+    accessToken: response.access_token,
+    refreshToken: response.refresh_token ?? refreshToken,
+    expiresAt:
+      typeof response.expires_in_ms === 'number'
+        ? Date.now() + response.expires_in_ms
+        : undefined,
+  };
+
+  onPersist(updatedSession);
+  return updatedSession;
+}
+
+async function refreshSessionIfNeeded(
+  session: MatrixSession,
+  onPersist: (s: MatrixSession) => void
+) {
+  if (!session.refreshToken) {
+    return session;
+  }
+
+  if (
+    typeof session.expiresAt === 'number' &&
+    session.expiresAt > Date.now() + SESSION_REFRESH_BUFFER_MS
+  ) {
+    return session;
+  }
+
+  return refreshMatrixSession(session, session.refreshToken, onPersist);
+}
+
+async function validateSessionWithRecovery(
+  client: MatrixClient,
+  session: MatrixSession,
+  onPersist: (s: MatrixSession) => void
+) {
+  try {
+    await client.getJoinedRooms();
+    return session;
+  } catch (error) {
+    if (!session.refreshToken || !isInactiveMatrixSessionError(error)) {
+      throw error;
+    }
+
+    const refreshedSession = await refreshMatrixSession(
+      session,
+      session.refreshToken,
+      onPersist
+    );
+    return refreshedSession;
+  }
+}
+
 function createCryptoStore(session: MatrixSession) {
   if (typeof indexedDB !== 'undefined') {
     return new sdk.IndexedDBCryptoStore(
@@ -257,10 +324,12 @@ export async function buildAuthedClient(
   session: MatrixSession,
   onPersist: (s: MatrixSession) => void
 ): Promise<MatrixClient> {
+  let activeSession = await refreshSessionIfNeeded(session, onPersist);
+
   if (
     _client &&
-    _client.getUserId() === session.userId &&
-    _client.getDeviceId() === session.deviceId
+    _client.getUserId() === activeSession.userId &&
+    _client.getDeviceId() === activeSession.deviceId
   ) {
     return _client;
   }
@@ -271,39 +340,31 @@ export async function buildAuthedClient(
   }
 
   await initCryptoWasm();
-  const cryptoStore = createCryptoStore(session);
+  const cryptoStore = createCryptoStore(activeSession);
   await cryptoStore.startup();
 
-  const tokenRefresh: TokenRefreshFunction | undefined = session.refreshToken
+  const tokenRefresh: TokenRefreshFunction | undefined = activeSession.refreshToken
     ? async (refreshToken: string) => {
-        const tmp = sdk.createClient({
-          baseUrl: session.baseUrl,
-          accessToken: session.accessToken,
-          useAuthorizationHeader: true,
-        });
-        const r = await tmp.refreshToken(refreshToken);
-        // Update persisted session
-        const updated: MatrixSession = {
-          ...session,
-          accessToken: r.access_token,
-          refreshToken: r.refresh_token ?? refreshToken,
-          expiresAt:
-            typeof r.expires_in_ms === 'number'
-              ? Date.now() + r.expires_in_ms
-              : undefined,
-        };
-        onPersist(updated);
+        const updated = await refreshMatrixSession(
+          activeSession,
+          refreshToken,
+          onPersist
+        );
+        activeSession = updated;
         // Update the live client
-        _client?.setAccessToken(r.access_token);
-        return { accessToken: r.access_token, refreshToken: r.refresh_token };
+        _client?.setAccessToken(updated.accessToken);
+        return {
+          accessToken: updated.accessToken,
+          refreshToken: updated.refreshToken,
+        };
       }
     : undefined;
 
   _client = sdk.createClient({
-    baseUrl: session.baseUrl,
-    accessToken: session.accessToken,
-    userId: session.userId,
-    deviceId: session.deviceId,
+    baseUrl: activeSession.baseUrl,
+    accessToken: activeSession.accessToken,
+    userId: activeSession.userId,
+    deviceId: activeSession.deviceId,
     useAuthorizationHeader: true,
     tokenRefreshFunction: tokenRefresh,
     cryptoStore,
@@ -350,6 +411,17 @@ export async function buildAuthedClient(
   await initRustCryptoWithRecovery(_client, cryptoStore);
 
   await _client.startClient({ initialSyncLimit: 20 });
+
+  const validatedSession = await validateSessionWithRecovery(
+    _client,
+    activeSession,
+    onPersist
+  );
+  if (validatedSession.accessToken !== activeSession.accessToken) {
+    _client.stopClient();
+    _client = null;
+    return buildAuthedClient(validatedSession, onPersist);
+  }
 
   return _client;
 }

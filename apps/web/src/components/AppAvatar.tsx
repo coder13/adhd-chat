@@ -3,6 +3,7 @@ import { cn } from '../lib/cn';
 
 interface AppAvatarProps {
   name: string;
+  icon?: string | null;
   avatarUrl?: string | null;
   alt?: string;
   className?: string;
@@ -23,6 +24,7 @@ function getInitial(name: string) {
 
 function AppAvatar({
   name,
+  icon = null,
   avatarUrl = null,
   alt,
   className,
@@ -30,7 +32,17 @@ function AppAvatar({
 }: AppAvatarProps) {
   return (
     <IonAvatar className={cn('bg-accent-soft', className)}>
-      {avatarUrl ? (
+      {icon ? (
+        <div
+          className={cn(
+            'flex h-full w-full items-center justify-center text-[1.2em]',
+            textClassName
+          )}
+          aria-label={alt ?? name}
+        >
+          {icon}
+        </div>
+      ) : avatarUrl ? (
         <img
           src={avatarUrl}
           alt={alt ?? name}

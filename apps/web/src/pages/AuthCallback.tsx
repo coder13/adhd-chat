@@ -6,10 +6,12 @@ import {
   clearPostAuthRedirectPath,
   getPostAuthRedirectPath,
 } from '../hooks/useMatrixClient/auth';
+import { EXPIRED_SESSION_MESSAGE } from '../hooks/useMatrixClient/sessionErrors';
 
 function AuthCallback() {
   const { completeSsoLogin, state, error, logout } = useMatrixClient();
   const navigate = useNavigate();
+  const isExpiredSession = error === EXPIRED_SESSION_MESSAGE;
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -48,11 +50,26 @@ function AuthCallback() {
         )}
         {error && (
           <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-600">Error: {error}</p>
+            <p className="text-sm text-red-600">{error}</p>
             <div className="mt-3 flex justify-center">
-              <Button variant="outline" onClick={logout}>
-                Log Out
-              </Button>
+              {isExpiredSession ? (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    navigate(
+                      `/login?redirect=${encodeURIComponent(
+                        getPostAuthRedirectPath()
+                      )}`
+                    )
+                  }
+                >
+                  Sign in again
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={logout}>
+                  Log Out
+                </Button>
+              )}
             </div>
           </div>
         )}

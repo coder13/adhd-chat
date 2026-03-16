@@ -12,6 +12,7 @@ import { AppAvatar, Button, Card } from '../components';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useTandem } from '../hooks/useTandem';
 import { getInviteLinkPayloadFromSearchParams } from '../lib/matrix/tandem';
+import { getTandemPartnerSummary } from '../lib/matrix/tandemPresentation';
 
 function TandemInvitePage() {
   const [searchParams] = useSearchParams();
@@ -120,9 +121,8 @@ function TandemInvitePage() {
                 Sign in to join Tandem
               </h2>
               <p className="mt-2 text-sm leading-6 text-text-muted">
-                {linkPayload.inviter} created a Tandem home for you. Sign in or
-                create an account with your Matrix homeserver, then come back to
-                join the private hub.
+                {linkPayload.inviter} created a shared hub for you. Sign in or
+                create an account, then come back to join it.
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link to={`/login?redirect=${redirectTarget}`}>
@@ -144,6 +144,7 @@ function TandemInvitePage() {
   const isBusy = busyInviteId === invite?.inviteId;
   const isAccepted = invite?.status === 'accepted';
   const isDeclined = invite?.status === 'declined';
+  const partner = getTandemPartnerSummary(client, invite?.inviterMatrixId ?? linkPayload.inviter);
 
   return (
     <IonPage className="app-shell">
@@ -159,16 +160,22 @@ function TandemInvitePage() {
           <Card tone="accent">
             <div className="flex items-center gap-4">
               <AppAvatar
-                name={invite?.inviterMatrixId ?? linkPayload.inviter}
+                name={partner.displayName}
+                avatarUrl={
+                  partner.avatarUrl
+                    ? client?.mxcUrlToHttp(partner.avatarUrl, 96, 96, 'crop') ??
+                      null
+                    : null
+                }
                 className="h-14 w-14"
                 textClassName="text-lg"
               />
               <div>
                 <h2 className="text-xl font-semibold text-text">
-                  Join your Tandem home
+                  Join your shared hub
                 </h2>
                 <p className="mt-1 text-sm text-text-muted">
-                  Invited by {invite?.inviterMatrixId ?? linkPayload.inviter}
+                  {partner.displayName} wants to build a private place for the two of you.
                 </p>
               </div>
             </div>
@@ -179,9 +186,9 @@ function TandemInvitePage() {
               </p>
             )}
 
-            <div className="mt-4 text-sm leading-6 text-text-muted">
-              <p>Space: {invite?.spaceId ?? linkPayload.spaceId}</p>
-              <p>Main chat: {invite?.mainRoomId ?? linkPayload.roomId}</p>
+            <div className="mt-4 rounded-2xl border border-line bg-panel/70 px-4 py-4 text-sm leading-6 text-text-muted">
+              <p>This hub gives you one shared home together.</p>
+              <p className="mt-2">Inside it, you can keep separate topics for ongoing parts of life like plans, errands, trips, or finances.</p>
             </div>
 
             {isWrongUser && (
@@ -196,7 +203,7 @@ function TandemInvitePage() {
             )}
             {isAccepted && (
               <p className="mt-4 text-sm text-success">
-                You already joined this Tandem home.
+                You already joined this shared hub.
               </p>
             )}
             {isDeclined && (
@@ -212,7 +219,7 @@ function TandemInvitePage() {
                   !invite || isWrongUser || isBusy || isAccepted || isDeclined
                 }
               >
-                {isBusy ? 'Joining...' : isAccepted ? 'Joined' : 'Join Tandem'}
+                {isBusy ? 'Joining...' : isAccepted ? 'Joined' : 'Join hub'}
               </Button>
               <Button
                 variant="outline"
@@ -230,7 +237,7 @@ function TandemInvitePage() {
                     navigate(`/room/${encodeURIComponent(invite.mainRoomId)}`)
                   }
                 >
-                  Open main chat
+                  Open main topic
                 </IonButton>
               )}
             </div>

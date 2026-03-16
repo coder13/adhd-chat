@@ -3,6 +3,7 @@ import { IonApp } from '@ionic/react';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import SearchPage from './pages/Search';
 import Room from './pages/Room';
 import RoomPinnedMessages from './pages/RoomPinnedMessages';
 import AuthCallback from './pages/AuthCallback';
@@ -45,6 +46,7 @@ function AppShell() {
     <IonApp>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/search" element={<SearchPage />} />
         <Route path="/other" element={<OtherRooms />} />
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/contacts/new" element={<AddContactPage />} />

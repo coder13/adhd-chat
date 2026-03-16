@@ -13,7 +13,9 @@ import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AppAvatar, Card } from '../components';
 import { usePersistedResource } from '../hooks/usePersistedResource';
+import { useTandem } from '../hooks/useTandem';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+import { getTandemPartnerSummary } from '../lib/matrix/tandemPresentation';
 
 interface TandemSpaceMemberSummary {
   userId: string;
@@ -63,6 +65,7 @@ function TandemSpaceMembersPage() {
   const spaceId = encodedSpaceId ? decodeURIComponent(encodedSpaceId) : null;
   const navigate = useNavigate();
   const { client, isReady, user } = useMatrixClient();
+  const { relationships } = useTandem(client, user?.userId);
   const {
     data: members,
     error,
@@ -77,6 +80,11 @@ function TandemSpaceMembersPage() {
     initialValue: [],
     load: async () => buildTandemSpaceMembers(spaceId!, client!),
   });
+  const relationship =
+    relationships.find((entry) => entry.sharedSpaceId === spaceId) ?? null;
+  const partner = relationship
+    ? getTandemPartnerSummary(client, relationship.partnerUserId)
+    : null;
 
   useEffect(() => {
     if (!client || !user || !isReady || !spaceId) {
@@ -144,11 +152,12 @@ function TandemSpaceMembersPage() {
         <div className="space-y-4 px-4 py-4">
           <Card tone="accent">
             <h2 className="text-lg font-semibold text-text">
-              People in this Tandem hub
+              Everyone in this hub
             </h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">
-              These are the current members and invitees for this shared Tandem
-              home.
+              {partner
+                ? `This shared hub belongs to you and ${partner.displayName}.`
+                : 'These are the current members and invitees for this shared hub.'}
             </p>
           </Card>
 
@@ -173,7 +182,11 @@ function TandemSpaceMembersPage() {
                         {member.displayName}
                       </div>
                       <div className="truncate text-xs text-text-muted">
-                        {member.userId}
+                        {member.userId === user.userId
+                          ? 'You'
+                          : partner && member.userId === partner.userId
+                            ? 'Partner'
+                            : member.userId}
                       </div>
                     </div>
                     <div className="shrink-0 text-xs font-medium text-text-muted">

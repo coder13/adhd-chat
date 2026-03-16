@@ -8,7 +8,6 @@ interface TangentTopicOption {
   id: string;
   name: string;
   membership: string;
-  category: string | null;
 }
 
 interface TangentModalProps {
@@ -71,11 +70,10 @@ function TangentModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Start a tangent" size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title="Open or create a topic" size="sm">
       <div className="space-y-4">
         <p className="text-sm leading-6 text-text-muted">
-          Start typing to jump into an existing topic, or create a new tangent
-          in one tap.
+          Jump into an existing topic or create a new one without leaving the flow.
         </p>
         <Input
           label="Topic"
@@ -86,7 +84,7 @@ function TangentModal({
           helperText={
             normalizedQuery
               ? 'Existing topics appear below as you type.'
-              : 'Leave this blank to open a fresh tangent and start writing.'
+              : 'Give the topic a name to create it right away.'
           }
         />
         <div className="rounded-[24px] border border-line bg-elevated/80 p-3">
@@ -128,9 +126,9 @@ function TangentModal({
                         {topic.name}
                       </div>
                       <div className="mt-1 text-xs text-text-muted">
-                        {topic.membership === 'invite'
-                          ? 'Tap to join'
-                          : (topic.category ?? 'Existing topic')}
+                        {topic.membership === 'join'
+                          ? 'Open topic'
+                          : 'Tap to join'}
                       </div>
                     </div>
                     <div className="shrink-0 text-xs font-medium text-accent">
@@ -144,7 +142,7 @@ function TangentModal({
             <div className="rounded-2xl border border-dashed border-line bg-panel/70 px-4 py-5 text-sm text-text-muted">
               {normalizedQuery
                 ? 'No topic matches yet. Create it below.'
-                : 'Your Tandem topics will appear here once you have a few topics.'}
+                : 'Recent topics will show up here so you can jump back in quickly.'}
             </div>
           )}
         </div>
@@ -163,7 +161,7 @@ function TangentModal({
                 ? `Open "${exactMatch.name}"`
                 : normalizedQuery
                   ? `Create "${query.trim()}"`
-                  : 'Start new tangent'}
+                  : 'Create topic'}
           </Button>
         </div>
       </div>

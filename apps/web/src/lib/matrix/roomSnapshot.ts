@@ -5,12 +5,13 @@ import {
   getTimelineMessages,
   type TimelineMessage,
 } from './chatCatalog';
-import { getRoomTopic } from './identity';
+import { getRoomIcon, getRoomTopic } from './identity';
 import { getTandemRoomMeta, type TandemRoomMeta } from './tandem';
 
 export interface RoomSnapshot {
   roomName: string;
   roomDescription: string | null;
+  roomIcon: string | null;
   roomSubtitle: string;
   messages: TimelineMessage[];
   isEncrypted: boolean;
@@ -37,6 +38,7 @@ export async function buildRoomSnapshot(
   return {
     roomName: getRoomDisplayName(room, userId),
     roomDescription: getRoomTopic(room),
+    roomIcon: getRoomIcon(room),
     roomSubtitle:
       chat?.nativeSpaceName || `${room.getJoinedMemberCount()} members`,
     messages: getTimelineMessages(client, room, userId),

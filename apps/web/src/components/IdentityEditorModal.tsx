@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Button from './Button';
+import IconPickerField from './IconPickerField';
 import Input from './Input';
 import Modal from './Modal';
 
@@ -10,11 +11,16 @@ interface IdentityEditorModalProps {
   descriptionLabel: string;
   nameValue: string;
   descriptionValue?: string | null;
+  iconValue?: string | null;
   saveLabel: string;
   isSaving?: boolean;
   error?: string | null;
   onClose: () => void;
-  onSave: (values: { name: string; description: string }) => Promise<void>;
+  onSave: (values: {
+    name: string;
+    description: string;
+    icon: string | null;
+  }) => Promise<void>;
 }
 
 function IdentityEditorModal({
@@ -24,6 +30,7 @@ function IdentityEditorModal({
   descriptionLabel,
   nameValue,
   descriptionValue = '',
+  iconValue = null,
   saveLabel,
   isSaving = false,
   error = null,
@@ -32,6 +39,7 @@ function IdentityEditorModal({
 }: IdentityEditorModalProps) {
   const [name, setName] = useState(nameValue);
   const [description, setDescription] = useState(descriptionValue ?? '');
+  const [icon, setIcon] = useState<string | null>(iconValue ?? null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -40,7 +48,8 @@ function IdentityEditorModal({
 
     setName(nameValue);
     setDescription(descriptionValue ?? '');
-  }, [descriptionValue, isOpen, nameValue]);
+    setIcon(iconValue ?? null);
+  }, [descriptionValue, iconValue, isOpen, nameValue]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
@@ -50,6 +59,12 @@ function IdentityEditorModal({
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder={nameLabel}
+        />
+        <IconPickerField
+          name={name}
+          value={icon}
+          onChange={setIcon}
+          disabled={isSaving}
         />
         <div>
           <label className="mb-1 block text-sm font-medium text-text">
@@ -69,7 +84,7 @@ function IdentityEditorModal({
             Cancel
           </Button>
           <Button
-            onClick={() => void onSave({ name, description })}
+            onClick={() => void onSave({ name, description, icon })}
             disabled={isSaving || !name.trim()}
           >
             {isSaving ? 'Saving...' : saveLabel}

@@ -1,5 +1,6 @@
-import { IonSearchbar } from '@ionic/react';
+import { IonButton, IonIcon, IonSearchbar } from '@ionic/react';
 import { ClientEvent, RoomEvent } from 'matrix-js-sdk';
+import { searchOutline } from 'ionicons/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppAvatar, Button, Card } from '../components';
@@ -11,6 +12,10 @@ import {
   buildTandemSpaceCatalog,
   type TandemSpaceSummary,
 } from '../lib/matrix/spaceCatalog';
+import {
+  formatTopicCountLabel,
+  getTandemPartnerSummary,
+} from '../lib/matrix/tandemPresentation';
 
 function formatTimestamp(timestamp: number) {
   if (!timestamp) {
@@ -124,7 +129,7 @@ function Home() {
             <Link to="/login" className="font-medium text-accent">
               log in
             </Link>{' '}
-            to open your Tandem hubs.
+            to open your shared hubs.
           </p>
         </div>
       </div>
@@ -134,12 +139,21 @@ function Home() {
   return (
     <>
       <ListPageLayout
-        title="Chats"
+        title="Hubs"
+        endSlot={
+          <IonButton
+            fill="clear"
+            color="medium"
+            onClick={() => navigate('/search')}
+          >
+            <IonIcon slot="icon-only" icon={searchOutline} />
+          </IonButton>
+        }
         headerContent={
           <IonSearchbar
             value={search}
             onIonInput={(event) => setSearch(event.detail.value ?? '')}
-            placeholder="Search hubs"
+            placeholder="Search hubs or topics"
             className="app-searchbar"
           />
         }
@@ -148,20 +162,28 @@ function Home() {
           {pendingIncomingInvites.length > 0 && (
             <section className="space-y-3">
               <div>
-                <h2 className="text-lg font-semibold text-text">Invites</h2>
+                <h2 className="text-lg font-semibold text-text">Pending invites</h2>
                 <p className="mt-1 text-sm text-text-muted">
-                  Join incoming Tandem hubs before they appear in your main
-                  feed.
+                  Accept a shared hub and it will become part of your everyday home.
                 </p>
               </div>
               {pendingIncomingInvites.map((invite) => (
                 <Card key={invite.inviteId} tone="accent">
-                  <h3 className="text-base font-semibold text-text">
-                    {invite.inviterMatrixId}
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-text-muted">
-                    Invited you into a private Tandem hub.
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <AppAvatar
+                      name={invite.inviterMatrixId}
+                      className="h-11 w-11"
+                      textClassName="text-sm"
+                    />
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-semibold text-text">
+                        Shared hub invite
+                      </h3>
+                      <p className="mt-1 text-sm text-text-muted">
+                        {invite.inviterMatrixId} wants to start a private hub with you.
+                      </p>
+                    </div>
+                  </div>
                   {invite.message && (
                     <p className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-sm text-text">
                       {invite.message}
@@ -202,30 +224,21 @@ function Home() {
                   Restoring your Tandem hubs
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-text-muted">
-                  Tandem is reconnecting your accepted topics so they appear in
-                  the main feed after refreshes or delayed sync.
+                  Tandem is reconnecting your shared hubs and topics after sync so your home stays organized.
                 </p>
               </Card>
             ) : visibleSpaces.length === 0 && !isLoadingSpaces ? (
               <Card tone="accent">
                 <h3 className="text-base font-semibold text-text">
-                  Start your first Tandem hub
+                  Start your first shared hub
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-text-muted">
-                  Invite someone you trust and your shared hub will show up
-                  here once they join.
+                  Invite your partner, then use one shared hub to keep plans, routines, and ongoing topics in one place.
                 </p>
                 <div className="mt-4 flex items-center gap-4">
                   <Button onClick={() => navigate('/contacts/new')}>
                     Invite a partner
                   </Button>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/contacts/new')}
-                    className="text-sm font-medium text-accent"
-                  >
-                    How Tandem invites work
-                  </button>
                 </div>
               </Card>
             ) : isLoadingSpaces && visibleSpaces.length === 0 ? (
@@ -234,19 +247,32 @@ function Home() {
               </div>
             ) : (
               <div className="space-y-3">
-                {visibleSpaces.map((space) => (
-                  <Card
-                    key={space.spaceId}
-                    className="app-hover-surface cursor-pointer"
-                    onClick={() =>
-                      navigate(
-                        `/tandem/space/${encodeURIComponent(space.spaceId)}`
-                      )
-                    }
-                  >
+                {visibleSpaces.map((space) => {
+                  const partner = getTandemPartnerSummary(
+                    client,
+                    space.partnerUserId
+                  );
+
+                  return (
+                    <Card
+                      key={space.spaceId}
+                      className="app-hover-surface cursor-pointer"
+                      onClick={() =>
+                        navigate(
+                          `/tandem/space/${encodeURIComponent(space.spaceId)}`
+                        )
+                      }
+                    >
                     <div className="flex items-start gap-4">
                       <AppAvatar
-                        name={space.name || space.partnerUserId}
+                        name={partner.displayName || space.name || space.partnerUserId}
+                        icon={space.icon}
+                        avatarUrl={
+                          !space.icon && partner.avatarUrl
+                            ? client?.mxcUrlToHttp(partner.avatarUrl, 96, 96, 'crop') ??
+                              null
+                            : null
+                        }
                         className="h-12 w-12"
                       />
                       <div className="min-w-0 flex-1">
@@ -265,17 +291,21 @@ function Home() {
                             </div>
                           </div>
                         </div>
+                        <p className="mt-1 text-xs font-medium uppercase tracking-[0.12em] text-text-subtle">
+                          Shared with {partner.displayName}
+                        </p>
                         <p className="mt-1 truncate text-sm text-text-muted">
                           {space.description || space.preview}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
-                          <span>{space.partnerUserId}</span>
-                          <span>{space.roomCount} topics</span>
+                          <span>{formatTopicCountLabel(space.roomCount)}</span>
+                          {space.preview ? <span>Latest activity in a topic</span> : null}
                         </div>
                       </div>
                     </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </section>

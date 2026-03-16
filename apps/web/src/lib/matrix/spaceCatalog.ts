@@ -8,12 +8,11 @@ import {
 import {
   getResolvedTandemRelationships,
   getTandemRoomMeta,
-  TANDEM_ROOM_EVENT_TYPE,
   TANDEM_SPACE_EVENT_TYPE,
   type TandemRelationshipRecord,
 } from './tandem';
 import { getRoomDisplayName } from './chatCatalog';
-import { getRoomTopic } from './identity';
+import { getRoomIcon, getRoomTopic } from './identity';
 import {
   getRoomTimelineEvents,
   getTimelineEventContent,
@@ -27,6 +26,7 @@ const SPACE_ROOM_TYPE = 'm.space';
 export interface TandemSpaceSummary {
   spaceId: string;
   name: string;
+  icon: string | null;
   description: string | null;
   partnerUserId: string;
   mainRoomId: string;
@@ -39,16 +39,15 @@ export interface TandemSpaceSummary {
 export interface TandemSpaceRoomSummary {
   id: string;
   name: string;
+  icon: string | null;
   description: string | null;
   preview: string;
   timestamp: number;
   unreadCount: number;
   memberCount: number;
   membership: string;
-  isMain: boolean;
   isPinned: boolean;
   isArchived: boolean;
-  category: string | null;
 }
 
 function asArray<T>(value: T | T[] | null | undefined): T[] {
@@ -125,7 +124,6 @@ function getChildRoomIds(spaceRoom: Room) {
 function compareRooms(a: TandemSpaceRoomSummary, b: TandemSpaceRoomSummary) {
   return (
     Number(b.isPinned) - Number(a.isPinned) ||
-    Number(b.isMain) - Number(a.isMain) ||
     b.timestamp - a.timestamp ||
     a.name.localeCompare(b.name)
   );
@@ -158,6 +156,7 @@ function getSpaceSummary(
   return {
     spaceId: spaceRoom.roomId,
     name: getRoomDisplayName(spaceRoom, userId),
+    icon: getRoomIcon(spaceRoom),
     description: getRoomTopic(spaceRoom),
     partnerUserId: relationship.partnerUserId,
     mainRoomId: relationship.mainRoomId,
@@ -225,7 +224,6 @@ export async function buildTandemSpaceRoomCatalog(
 
   await spaceRoom.loadMembersIfNeeded();
 
-  const relationship = relationshipBySpaceId(client).get(spaceId);
   const childRoomIds = getChildRoomIds(spaceRoom);
 
   const rooms = await Promise.all(
@@ -249,18 +247,15 @@ export async function buildTandemSpaceRoomCatalog(
       return {
         id: room.roomId,
         name: getRoomDisplayName(room, userId),
+        icon: getRoomIcon(room),
         description: getRoomTopic(room),
         preview: getPreviewText(room),
         timestamp: getLatestTimestamp(room),
         unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
         memberCount: room.getJoinedMemberCount(),
         membership: room.getMyMembership(),
-        isMain:
-          relationship?.mainRoomId === room.roomId ||
-          Boolean(room.currentState.getStateEvents(TANDEM_ROOM_EVENT_TYPE, '')),
         isPinned: Boolean(meta.pinned),
         isArchived: Boolean(meta.archived),
-        category: meta.category ?? null,
       } satisfies TandemSpaceRoomSummary;
     })
   );

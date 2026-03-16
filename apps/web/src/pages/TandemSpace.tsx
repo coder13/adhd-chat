@@ -10,11 +10,10 @@ import {
 } from '@ionic/react';
 import {
   arrowBack,
-  chatbubbleEllipsesOutline,
   ellipsisHorizontal,
   gitBranchOutline,
   peopleOutline,
-  star,
+  searchOutline,
 } from 'ionicons/icons';
 import { ClientEvent } from 'matrix-js-sdk';
 import { useEffect, useMemo, useState } from 'react';
@@ -32,13 +31,16 @@ import { usePersistedResource } from '../hooks/usePersistedResource';
 import { useChatPreferences } from '../hooks/useChatPreferences';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useTandem } from '../hooks/useTandem';
-import { getRoomTopic, updateRoomIdentity } from '../lib/matrix/identity';
+import { getRoomIcon, getRoomTopic, updateRoomIdentity } from '../lib/matrix/identity';
 import {
   buildTandemSpaceRoomCatalog,
   type TandemSpaceRoomSummary,
 } from '../lib/matrix/spaceCatalog';
 import { getRoomDisplayName } from '../lib/matrix/chatCatalog';
 import { startPendingTandemRoomCreation } from '../lib/matrix/pendingTandemRoom';
+import {
+  getTandemPartnerSummary,
+} from '../lib/matrix/tandemPresentation';
 import {
   ensureTandemSpaceLinks,
   joinTandemRoom,
@@ -106,12 +108,14 @@ function TandemSpacePage() {
   const hubName =
     currentHub && user ? getRoomDisplayName(currentHub, user.userId) : null;
   const hubDescription = currentHub ? getRoomTopic(currentHub) : null;
-
   const relationship = useMemo(
     () =>
       relationships.find((entry) => entry.sharedSpaceId === spaceId) ?? null,
     [relationships, spaceId]
   );
+  const partner = relationship
+    ? getTandemPartnerSummary(client, relationship.partnerUserId)
+    : null;
   const archivedRooms = useMemo(
     () => rooms.filter((room) => room.isArchived),
     [rooms]
@@ -219,7 +223,7 @@ function TandemSpacePage() {
 
   const handleCreateTangent = async (name: string) => {
     if (!client || !user || !relationship) {
-      setTangentError('Open a Tandem hub first, then start a tangent.');
+      setTangentError('Open a shared hub first, then create a topic.');
       return;
     }
 
@@ -231,7 +235,6 @@ function TandemSpacePage() {
       relationship,
       creatorUserId: user.userId,
       name,
-      category: 'Tandem',
     });
     setShowTangentModal(false);
     setCreatingTangent(false);
@@ -241,6 +244,7 @@ function TandemSpacePage() {
   const handleSaveHubIdentity = async (values: {
     name: string;
     description: string;
+    icon: string | null;
   }) => {
     if (!client || !currentHub) {
       return;
@@ -253,6 +257,7 @@ function TandemSpacePage() {
       await updateRoomIdentity(client, currentHub, {
         name: values.name,
         topic: values.description,
+        icon: values.icon,
       });
       setShowHubIdentityModal(false);
       await refresh();
@@ -276,12 +281,7 @@ function TandemSpacePage() {
   };
 
   const renderRoomCard = (room: TandemSpaceRoomSummary) => {
-    const joinLabel =
-      room.membership === 'invite'
-        ? 'Join topic'
-        : room.membership === 'leave'
-          ? 'Rejoin topic'
-          : 'Open topic';
+    const joinLabel = room.membership === 'join' ? 'Open topic' : 'Join topic';
 
     return (
       <button
@@ -290,14 +290,12 @@ function TandemSpacePage() {
         className="app-hover-surface flex w-full items-start gap-2.5 rounded-[24px] border border-transparent px-3 py-3 text-left"
         onClick={() => handleOpenRoom(room)}
       >
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-elevated text-text-muted">
-          <IonIcon
-            icon={room.isPinned ? star : chatbubbleEllipsesOutline}
-            className={
-              room.isPinned ? 'text-[15px] text-warning' : 'text-[15px]'
-            }
-          />
-        </div>
+        <AppAvatar
+          name={room.name}
+          icon={room.icon}
+          className="mt-0.5 h-9 w-9 shrink-0"
+          textClassName="text-sm"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-3">
             <h3 className="truncate text-[14px] font-semibold text-text">
@@ -318,11 +316,8 @@ function TandemSpacePage() {
             {room.description || room.preview}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-2 text-[11px] text-text-muted">
-            {room.isMain && <span>Main</span>}
-            {room.category && <span>{room.category}</span>}
             {room.isArchived && <span>Archived</span>}
             {room.membership === 'invite' && <span>Invited</span>}
-            {room.membership === 'leave' && <span>Left</span>}
           </div>
         </div>
         {room.membership !== 'join' && (
@@ -355,6 +350,12 @@ function TandemSpacePage() {
           <div className="flex items-center gap-3 px-2">
             <AppAvatar
               name={hubName ?? relationship?.partnerUserId ?? 'Hub'}
+              icon={currentHub ? getRoomIcon(currentHub) : null}
+              avatarUrl={
+                !(currentHub ? getRoomIcon(currentHub) : null) && partner?.avatarUrl
+                  ? client?.mxcUrlToHttp(partner.avatarUrl, 96, 96, 'crop') ?? null
+                  : null
+              }
               className="w-10 h-10"
               textClassName="text-sm"
             />
@@ -366,16 +367,28 @@ function TandemSpacePage() {
                     : 'Tandem Hub')}
               </div>
               <div className="text-xs truncate text-text-muted">
-                {hubDescription || `${rooms.length} topics`}
+                {partner
+                  ? `Shared with ${partner.displayName} • ${rooms.length} ${
+                      rooms.length === 1 ? 'topic' : 'topics'
+                    }`
+                  : hubDescription || `${rooms.length} ${rooms.length === 1 ? 'topic' : 'topics'}`}
               </div>
             </div>
           </div>
           <IonButtons slot="end">
             <IonButton
               fill="clear"
+              color="medium"
+              onClick={() => navigate('/search')}
+              aria-label="Search conversations"
+            >
+              <IonIcon slot="icon-only" icon={searchOutline} />
+            </IonButton>
+            <IonButton
+              fill="clear"
               color="primary"
               onClick={() => setShowTangentModal(true)}
-              aria-label="Create tangent"
+              aria-label="Create topic"
             >
               <IonIcon slot="icon-only" icon={gitBranchOutline} />
             </IonButton>
@@ -411,11 +424,11 @@ function TandemSpacePage() {
                 No topics yet
               </h3>
               <p className="mt-2 text-sm leading-6 text-text-muted">
-                Create the first topic in this hub.
+                Create the first topic in this hub so you and your partner can keep different parts of life separate.
               </p>
               <div className="mt-4">
                 <Button onClick={() => setShowTangentModal(true)}>
-                  Start a tangent
+                  Create a topic
                 </Button>
               </div>
             </Card>
@@ -423,6 +436,9 @@ function TandemSpacePage() {
             <div className="space-y-4">
               {pinnedRooms.length > 0 && (
                 <section className="space-y-1.5">
+                  <div className="pb-1 text-xs font-medium uppercase tracking-[0.14em] text-text-subtle">
+                    Pinned topics
+                  </div>
                   {pinnedRooms.map(renderRoomCard)}
                 </section>
               )}
@@ -439,6 +455,11 @@ function TandemSpacePage() {
 
               {unpinnedRooms.length > 0 && (
                 <section className="space-y-1.5">
+                  {pinnedRooms.length === 0 ? (
+                    <div className="pb-1 text-xs font-medium uppercase tracking-[0.14em] text-text-subtle">
+                      All topics
+                    </div>
+                  ) : null}
                   {unpinnedRooms.map(renderRoomCard)}
                 </section>
               )}
@@ -531,6 +552,7 @@ function TandemSpacePage() {
         descriptionLabel="Description"
         nameValue={hubName ?? ''}
         descriptionValue={hubDescription}
+        iconValue={currentHub ? getRoomIcon(currentHub) : null}
         saveLabel="Save hub"
         isSaving={savingHubIdentity}
         error={spaceNotice}

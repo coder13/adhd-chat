@@ -29,6 +29,10 @@ import {
   startSsoRedirect,
 } from './auth';
 import {
+  getAuthFailureMessage,
+  isInactiveMatrixSessionError,
+} from './sessionErrors';
+import {
   finishEncryptionSetup,
   finishDeviceVerificationUnlock,
   generateRecoveryKey,
@@ -235,6 +239,17 @@ export function useMatrixClientState() {
     // Reserved for future event-driven updates.
   }, []);
 
+  const recoverExpiredSession = useCallback((cause: unknown) => {
+    console.error(cause);
+    resetAuthedClient();
+    clearSession();
+    setClient(null);
+    setUser(null);
+    setSyncState(null);
+    setError(getAuthFailureMessage(cause));
+    setAuthState('logged_out');
+  }, []);
+
   useEffect(() => {
     if (!client || !isReady) {
       return;
@@ -265,13 +280,18 @@ export function useMatrixClientState() {
         setAuthState('ready');
       })
       .catch((cause: unknown) => {
+        if (isInactiveMatrixSessionError(cause)) {
+          recoverExpiredSession(cause);
+          return;
+        }
+
         console.error(cause);
         resetAuthedClient();
         clearSession();
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(getAuthFailureMessage(cause));
         setAuthState('error');
       });
-  }, [persist]);
+  }, [persist, recoverExpiredSession]);
 
   useEffect(() => {
     return () => {
@@ -317,17 +337,21 @@ export function useMatrixClientState() {
       setSyncState(authedClient.getSyncState() ?? null);
       setAuthState('ready');
     } catch (cause: unknown) {
-      console.error(cause);
-      resetAuthedClient();
-      clearSession();
-      setError(cause instanceof Error ? cause.message : String(cause));
-      setAuthState('error');
-      setSyncState(null);
+      if (isInactiveMatrixSessionError(cause)) {
+        recoverExpiredSession(cause);
+      } else {
+        console.error(cause);
+        resetAuthedClient();
+        clearSession();
+        setError(getAuthFailureMessage(cause));
+        setAuthState('error');
+        setSyncState(null);
+      }
     } finally {
       loggingIn = false;
       clearSsoCallbackUrl();
     }
-  }, [authState, persist]);
+  }, [authState, persist, recoverExpiredSession]);
 
   const logout = useCallback(async () => {
     setError(null);

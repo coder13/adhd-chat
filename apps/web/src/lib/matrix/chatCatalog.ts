@@ -10,6 +10,7 @@ import {
   getTandemRoomMeta,
   TANDEM_ROOM_EVENT_TYPE,
 } from './tandem';
+import { getRoomIcon } from './identity';
 import {
   buildReactionIndex,
   buildReplacementIndex,
@@ -33,6 +34,7 @@ const SPACE_ROOM_TYPE = 'm.space';
 export type ChatSummary = {
   id: string;
   name: string;
+  icon: string | null;
   preview: string;
   timestamp: number;
   unreadCount: number;
@@ -44,7 +46,6 @@ export type ChatSummary = {
   isTandemMain: boolean;
   isPinned: boolean;
   isArchived: boolean;
-  category: string | null;
 };
 
 export type ChatCatalog = {
@@ -266,6 +267,7 @@ export async function buildChatCatalog(
       return {
         id: room.roomId,
         name: getRoomDisplayName(room, userId),
+        icon: getRoomIcon(room),
         preview: getPreviewText(room),
         timestamp: getLatestTimestamp(room),
         unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
@@ -282,7 +284,6 @@ export async function buildChatCatalog(
         isTandemMain,
         isPinned: Boolean(tandemRoomMeta.pinned),
         isArchived: Boolean(tandemRoomMeta.archived),
-        category: tandemRoomMeta.category ?? null,
       } satisfies ChatSummary;
     })
     .filter((chat) => !getTandemRoomMeta(client.getRoom(chat.id)).hidden)

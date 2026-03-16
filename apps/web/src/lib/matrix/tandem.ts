@@ -82,7 +82,6 @@ export interface TandemRoomMeta {
   hidden?: boolean;
   archived?: boolean;
   pinned?: boolean;
-  category?: string;
   updatedAt?: string;
 }
 
@@ -730,7 +729,6 @@ export async function createTandemInvite(params: {
   });
   await updateTandemRoomMeta(client, mainRoomId, {
     pinned: true,
-    category: 'Tandem',
   });
 
   const directAccountData = client
@@ -842,9 +840,8 @@ export async function createTandemChildRoom(params: {
   creatorUserId: string;
   name?: string;
   topic?: string;
-  category?: string;
 }) {
-  const { client, relationship, creatorUserId, name, topic, category } = params;
+  const { client, relationship, creatorUserId, name, topic } = params;
   const roomName = name?.trim() || 'Tangent';
 
   const { room_id: roomId } = await client.createRoom({
@@ -873,11 +870,6 @@ export async function createTandemChildRoom(params: {
     roomIds: [roomId],
     userIds: [creatorUserId, relationship.partnerUserId],
   });
-
-  await updateTandemRoomMeta(client, roomId, {
-    category: category?.trim() || 'Tandem',
-  });
-
   return roomId;
 }
 

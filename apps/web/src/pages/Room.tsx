@@ -17,6 +17,7 @@ import {
   gitBranchOutline,
   lockClosedOutline,
   pin,
+  searchOutline,
   send,
   star,
   starOutline,
@@ -55,7 +56,7 @@ import {
   insertMentionToken,
 } from '../components/chat/mentions';
 import { createId } from '../lib/id';
-import { updateRoomIdentity } from '../lib/matrix/identity';
+import { getRoomIcon, updateRoomIdentity } from '../lib/matrix/identity';
 import { buildMatrixMediaPayload } from '../lib/matrix/media';
 import {
   buildRoomSnapshot,
@@ -190,6 +191,7 @@ function RoomPage() {
     initialValue: {
       roomName: 'Conversation',
       roomDescription: null,
+      roomIcon: null,
       roomSubtitle: 'Connecting...',
       messages: [],
       isEncrypted: false,
@@ -1205,6 +1207,7 @@ function RoomPage() {
   const handleSaveTopicIdentity = async (values: {
     name: string;
     description: string;
+    icon: string | null;
   }) => {
     if (!client || !currentRoom) {
       return;
@@ -1217,6 +1220,7 @@ function RoomPage() {
       await updateRoomIdentity(client, currentRoom, {
         name: values.name,
         topic: values.description,
+        icon: values.icon,
       });
       setShowIdentityModal(false);
       await refresh();
@@ -1231,7 +1235,7 @@ function RoomPage() {
 
   const handleCreateTangent = async (name: string) => {
     if (!client || !user || !tangentRelationship) {
-      setTangentError('This topic is not inside a Tandem hub.');
+      setTangentError('This topic is not inside a shared hub.');
       return;
     }
 
@@ -1242,7 +1246,6 @@ function RoomPage() {
       relationship: tangentRelationship,
       creatorUserId: user.userId,
       name,
-      category: roomMeta.category ?? 'Tandem',
     });
     setShowTangentModal(false);
     setCreatingTangent(false);
@@ -1277,19 +1280,18 @@ function RoomPage() {
     ? {
         roomName: pendingRoom.roomName,
         roomDescription: pendingRoom.topic ?? null,
+        roomIcon: null,
         roomSubtitle:
           pendingRoom.status === 'failed'
             ? 'Topic setup ran into a problem'
             : 'Setting up your new topic...',
         messages: buildPendingRoomMessages(pendingRoom),
         isEncrypted: false,
-        roomMeta: {
-          category: pendingRoom.category ?? 'Tandem',
-        } as TandemRoomMeta,
+        roomMeta: {} as TandemRoomMeta,
       }
     : null;
   const activeSnapshot = pendingSnapshot ?? snapshot;
-  const { roomName, roomDescription, roomSubtitle, messages, isEncrypted, roomMeta } =
+  const { roomName, roomDescription, roomIcon, roomSubtitle, messages, isEncrypted, roomMeta } =
     activeSnapshot;
   const reconciledOptimisticMessages = reconcileOptimisticTimeline(
     messages,
@@ -1386,25 +1388,6 @@ function RoomPage() {
           },
         ]
       : []),
-    ...(!roomMeta.category
-      ? [
-          {
-            text: 'Set category',
-            handler: () => {
-              const nextCategory = window.prompt(
-                'Category label for this topic',
-                roomMeta.category ?? ''
-              );
-              if (nextCategory === null) {
-                return;
-              }
-              void handleUpdateRoomMeta({
-                category: nextCategory.trim() || undefined,
-              });
-            },
-          },
-        ]
-      : []),
     ...(!isPendingRoom
       ? [
           {
@@ -1465,6 +1448,7 @@ function RoomPage() {
           <div className="flex items-center gap-3 px-2">
             <AppAvatar
               name={roomName}
+              icon={roomIcon}
               className="h-10 w-10"
               textClassName="text-sm"
             />
@@ -1496,6 +1480,14 @@ function RoomPage() {
             )}
           </div>
           <IonButtons slot="end">
+            <IonButton
+              fill="clear"
+              color="medium"
+              onClick={() => navigate('/search')}
+              aria-label="Search conversations"
+            >
+              <IonIcon slot="icon-only" icon={searchOutline} />
+            </IonButton>
             {!isPendingRoom && (
               <IonButton
                 fill="clear"
@@ -1516,7 +1508,7 @@ function RoomPage() {
                 fill="clear"
                 color="primary"
                 onClick={() => setShowTangentModal(true)}
-                aria-label="Start a tangent"
+                aria-label="Create topic"
               >
                 <IonIcon slot="icon-only" icon={gitBranchOutline} />
               </IonButton>
@@ -1574,7 +1566,7 @@ function RoomPage() {
               <div className="rounded-[28px] border border-line bg-panel/95 px-5 py-5 shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
                 {membershipPolicy.supportsJoin ? (
                   <Button onClick={() => void handleJoinCurrentRoom()}>
-                    {roomMembership === 'invite' ? 'Join topic' : 'Rejoin topic'}
+                    Join topic
                   </Button>
                 ) : (
                   <div className="text-sm text-text-muted">Unavailable</div>
@@ -1762,6 +1754,7 @@ function RoomPage() {
         descriptionLabel="Description"
         nameValue={roomName}
         descriptionValue={roomDescription}
+        iconValue={currentRoom ? getRoomIcon(currentRoom) : null}
         saveLabel="Save topic"
         isSaving={savingIdentity}
         error={actionError}

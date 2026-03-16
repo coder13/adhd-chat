@@ -11,7 +11,6 @@ export interface PendingTandemRoomRecord {
   pendingRoomId: string;
   roomName: string;
   topic?: string;
-  category?: string;
   sharedSpaceId: string;
   partnerUserId: string;
   createdAt: number;
@@ -105,15 +104,13 @@ export function startPendingTandemRoomCreation(params: {
   creatorUserId: string;
   name?: string;
   topic?: string;
-  category?: string;
 }) {
-  const { client, relationship, creatorUserId, name, topic, category } = params;
+  const { client, relationship, creatorUserId, name, topic } = params;
   const pendingRoomId = `${PENDING_ROOM_PREFIX}${createId('room')}`;
   const record: PendingTandemRoomRecord = {
     pendingRoomId,
     roomName: name?.trim() || 'Tangent',
     topic: topic?.trim() || undefined,
-    category: category?.trim() || undefined,
     sharedSpaceId: relationship.sharedSpaceId,
     partnerUserId: relationship.partnerUserId,
     createdAt: Date.now(),
@@ -130,7 +127,6 @@ export function startPendingTandemRoomCreation(params: {
         creatorUserId,
         name,
         topic,
-        category,
       });
 
       upsertPendingRoom({

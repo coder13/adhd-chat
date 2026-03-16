@@ -55,7 +55,7 @@ function ChatListSection({
           routerLink={`/room/${encodeURIComponent(chat.id)}`}
           className="app-list-item app-hover-surface"
         >
-          <AppAvatar name={chat.name} className="h-12 w-12" />
+          <AppAvatar name={chat.name} icon={chat.icon} className="h-12 w-12" />
           <IonLabel className="py-1">
             <div className="flex items-center justify-between gap-3">
               <h2 className="truncate text-[15px] font-semibold text-text">
@@ -87,28 +87,12 @@ function ChatListSection({
                   {chat.nativeSpaceName}
                 </IonBadge>
               )}
-              {chat.isTandemMain && (
-                <IonBadge
-                  color="warning"
-                  className="rounded-full px-2 py-1 text-[10px]"
-                >
-                  Tandem
-                </IonBadge>
-              )}
               {chat.isPinned && (
                 <IonBadge
                   color="medium"
                   className="rounded-full px-2 py-1 text-[10px]"
                 >
                   Pinned
-                </IonBadge>
-              )}
-              {chat.category && (
-                <IonBadge
-                  color="tertiary"
-                  className="rounded-full px-2 py-1 text-[10px]"
-                >
-                  {chat.category}
                 </IonBadge>
               )}
               {chat.isEncrypted && (

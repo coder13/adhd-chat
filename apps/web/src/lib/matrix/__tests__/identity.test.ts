@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 
-import { getRoomTopic, updateRoomIdentity } from '../identity';
+import { getRoomIcon, getRoomTopic, updateRoomIdentity } from '../identity';
 
 describe('matrix identity helpers', () => {
   it('reads the trimmed room topic from state', () => {
@@ -15,27 +15,52 @@ describe('matrix identity helpers', () => {
     ).toBe('Shared plans');
   });
 
+  it('reads the trimmed room icon from state', () => {
+    expect(
+      getRoomIcon({
+        currentState: {
+          getStateEvents: jest.fn((eventType: string) =>
+            eventType === 'com.tandem.identity'
+              ? {
+                  getContent: () => ({ icon: '  🍎  ' }),
+                }
+              : null
+          ),
+        },
+      } as never)
+    ).toBe('🍎');
+  });
+
   it('updates room name and topic only when values change', async () => {
     const setRoomName = jest.fn();
     const setRoomTopic = jest.fn();
+    const sendStateEvent = jest.fn();
 
     await updateRoomIdentity(
       {
         setRoomName,
         setRoomTopic,
+        sendStateEvent,
       } as never,
       {
         roomId: '!topic:example.com',
         name: 'Plans',
         currentState: {
-          getStateEvents: jest.fn(() => ({
-            getContent: () => ({ topic: 'Old topic' }),
-          })),
+          getStateEvents: jest.fn((eventType: string) =>
+            eventType === 'm.room.topic'
+              ? {
+                  getContent: () => ({ topic: 'Old topic' }),
+                }
+              : {
+                  getContent: () => ({ icon: '🧠' }),
+                }
+          ),
         },
       } as never,
       {
         name: 'New plans',
         topic: 'Fresh description',
+        icon: '🍎',
       }
     );
 
@@ -43,6 +68,12 @@ describe('matrix identity helpers', () => {
     expect(setRoomTopic).toHaveBeenCalledWith(
       '!topic:example.com',
       'Fresh description'
+    );
+    expect(sendStateEvent).toHaveBeenCalledWith(
+      '!topic:example.com',
+      'com.tandem.identity',
+      expect.objectContaining({ icon: '🍎' }),
+      ''
     );
   });
 });

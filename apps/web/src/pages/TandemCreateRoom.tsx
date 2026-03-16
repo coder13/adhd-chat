@@ -23,7 +23,6 @@ function TandemCreateRoomPage() {
   const { relationships } = useTandem(client, user?.userId);
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
-  const [category, setCategory] = useState('Tandem');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const selectedSpaceId = searchParams.get('space');
@@ -35,24 +34,20 @@ function TandemCreateRoomPage() {
     {
       label: 'Plans',
       topic: 'Trips, dates, chores, and the next things to do together.',
-      category: 'Planning',
     },
     {
       label: 'Trips',
       topic: 'Travel ideas, bookings, and shared itineraries.',
-      category: 'Travel',
     },
     {
       label: 'Check-ins',
       topic: 'Weekly reflections, mood updates, and what support looks like.',
-      category: 'Care',
     },
   ];
 
   const applyStarter = (starter: (typeof starterRooms)[number]) => {
     setName(starter.label);
     setTopic(starter.topic);
-    setCategory(starter.category);
   };
 
   const handleCreate = async () => {
@@ -69,7 +64,6 @@ function TandemCreateRoomPage() {
       creatorUserId: user.userId,
       name,
       topic,
-      category,
     });
     setCreating(false);
     navigate(`/room/${encodeURIComponent(pendingRoom.pendingRoomId)}`);
@@ -135,12 +129,6 @@ function TandemCreateRoomPage() {
                 value={topic}
                 onChange={(event) => setTopic(event.target.value)}
                 placeholder="What this topic is for"
-              />
-              <Input
-                label="Category"
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                placeholder="Planning"
               />
             </div>
 
