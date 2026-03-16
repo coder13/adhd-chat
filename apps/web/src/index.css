@@ -205,10 +205,6 @@
         var(--app-shell-background) 60%,
         rgba(var(--ion-color-primary-rgb), 0.14)
       );
-      transform: translateY(-1px);
-      box-shadow:
-        0 12px 28px -22px rgba(15, 23, 42, 0.35),
-        0 6px 18px -18px rgba(15, 23, 42, 0.28);
     }
 
     .app-hover-surface:hover {
@@ -218,10 +214,6 @@
         rgba(var(--ion-color-primary-rgb), 0.12)
       );
       border-color: rgba(var(--ion-color-primary-rgb), 0.18);
-      transform: translateY(-1px);
-      box-shadow:
-        0 18px 34px -26px rgba(15, 23, 42, 0.34),
-        0 10px 22px -22px rgba(15, 23, 42, 0.25);
     }
 
     .app-message-surface:hover {
@@ -230,20 +222,10 @@
         var(--app-shell-background) 76%,
         rgba(var(--ion-color-primary-rgb), 0.1)
       );
-      box-shadow: 0 14px 28px -26px rgba(15, 23, 42, 0.28);
-    }
-
-    .app-chat-bubble:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 16px 28px -24px rgba(15, 23, 42, 0.28);
     }
 
     .app-chat-bubble.own:hover {
-      background: color-mix(
-        in srgb,
-        var(--app-bubble-own) 90%,
-        white 10%
-      );
+      background: color-mix(in srgb, var(--app-bubble-own) 90%, white 10%);
     }
 
     .app-chat-bubble.other:hover {

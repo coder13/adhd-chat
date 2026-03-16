@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AppAvatar, Modal } from '..';
 import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
 import type { ChatViewMode } from '../../lib/matrix/preferences';
+import { renderLinkedMessageText } from './linkSegments';
 
 function formatMessageTimestamp(timestamp: number) {
   return new Intl.DateTimeFormat(undefined, {
@@ -30,12 +31,14 @@ interface MessageBubbleProps {
   message: TimelineMessage;
   accessToken?: string | null;
   viewMode?: ChatViewMode;
+  onRetry?: (messageId: string) => void;
 }
 
 function MessageBubble({
   message,
   accessToken = null,
   viewMode = 'timeline',
+  onRetry,
 }: MessageBubbleProps) {
   const fileSize = formatFileSize(message.fileSize);
   const isNotice = message.msgtype === 'm.notice';
@@ -103,6 +106,9 @@ function MessageBubble({
   }
 
   const imageAltText = message.body?.trim() || 'Image';
+  const linkedMessageBody = renderLinkedMessageText(message.body);
+  const isSending = message.deliveryStatus === 'sending';
+  const isFailed = message.deliveryStatus === 'failed';
   const imagePreview = resolvedMediaUrl ? (
     <button
       type="button"
@@ -155,17 +161,34 @@ function MessageBubble({
             </a>
           ) : message.msgtype === 'm.emote' ? (
             <p className="whitespace-pre-wrap text-sm italic leading-6">
-              * {message.senderName} {message.body}
+              * {message.senderName} {linkedMessageBody}
             </p>
           ) : (
             <p className="whitespace-pre-wrap text-sm leading-6">
-              {message.body}
+              {linkedMessageBody}
             </p>
           )}
 
           <p className="mt-2 text-right text-[11px] text-text-subtle">
             {formatMessageTimestamp(message.timestamp)}
+            {(isSending || isFailed) && (
+              <span>
+                {' · '}
+                {isSending ? 'Sending…' : 'Failed to send'}
+              </span>
+            )}
           </p>
+          {isFailed && onRetry ? (
+            <div className="mt-1 flex justify-end">
+              <button
+                type="button"
+                onClick={() => onRetry(message.id)}
+                className="text-[11px] font-medium text-accent underline underline-offset-2"
+              >
+                Retry
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <Modal
@@ -227,13 +250,28 @@ function MessageBubble({
             </a>
           ) : message.msgtype === 'm.emote' ? (
             <p className="mt-1 whitespace-pre-wrap text-sm italic leading-6 text-text">
-              * {message.senderName} {message.body}
+              * {message.senderName} {linkedMessageBody}
             </p>
           ) : (
             <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-text">
-              {message.body}
+              {linkedMessageBody}
             </p>
           )}
+          <div className="mt-2 flex items-center gap-2 text-[11px] text-text-subtle">
+            <span>{formatMessageTimestamp(message.timestamp)}</span>
+            {(isSending || isFailed) && (
+              <span>{isSending ? 'Sending…' : 'Failed to send'}</span>
+            )}
+            {isFailed && onRetry ? (
+              <button
+                type="button"
+                onClick={() => onRetry(message.id)}
+                className="font-medium text-accent underline underline-offset-2"
+              >
+                Retry
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 

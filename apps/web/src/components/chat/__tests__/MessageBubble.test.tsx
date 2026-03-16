@@ -55,4 +55,53 @@ describe('MessageBubble', () => {
     expect(screen.getByText('<strong>hello</strong> 😀')).toBeInTheDocument();
     expect(container.querySelector('strong')).not.toBeInTheDocument();
   });
+
+  it('renders recognizable urls as safe links without splitting surrounding text', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'link-message',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'See https://example.com/test?x=1 and also www.openai.com today',
+          timestamp: Date.UTC(2026, 2, 15, 10, 32),
+          isOwn: false,
+          msgtype: 'm.text',
+        }}
+      />
+    );
+
+    expect(screen.getByText('See', { exact: false })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'https://example.com/test?x=1' })
+    ).toHaveAttribute('href', 'https://example.com/test?x=1');
+    expect(screen.getByRole('link', { name: 'www.openai.com' })).toHaveAttribute(
+      'href',
+      'https://www.openai.com'
+    );
+  });
+
+  it('shows failed optimistic messages with a retry action', () => {
+    const onRetry = jest.fn();
+
+    render(
+      <MessageBubble
+        message={{
+          id: 'failed-message',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'hello again',
+          timestamp: Date.UTC(2026, 2, 15, 10, 33),
+          isOwn: true,
+          msgtype: 'm.text',
+          deliveryStatus: 'failed',
+        }}
+        onRetry={onRetry}
+      />
+    );
+
+    screen.getByRole('button', { name: 'Retry' }).click();
+    expect(screen.getByText('Failed to send')).toBeInTheDocument();
+    expect(onRetry).toHaveBeenCalledWith('failed-message');
+  });
 });

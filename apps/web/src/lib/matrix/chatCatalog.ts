@@ -1,4 +1,5 @@
 import {
+  EventStatus,
   MsgType,
   type MatrixClient,
   type MatrixEvent,
@@ -52,6 +53,9 @@ export type TimelineMessage = {
   timestamp: number;
   isOwn: boolean;
   msgtype: string;
+  transactionId?: string | null;
+  deliveryStatus?: 'sent' | 'sending' | 'failed';
+  errorText?: string | null;
   mediaUrl?: string | null;
   mimeType?: string | null;
   fileSize?: number | null;
@@ -310,6 +314,19 @@ export function getTimelineMessages(
           h?: number;
         };
       }>();
+      const unsigned = event.getUnsigned() as
+        | { transaction_id?: string }
+        | undefined;
+      const transactionId =
+        event.getTxnId?.() ?? unsigned?.transaction_id ?? null;
+      const deliveryStatus: TimelineMessage['deliveryStatus'] =
+        event.status === EventStatus.NOT_SENT
+          ? 'failed'
+          : event.status === EventStatus.SENDING ||
+              event.status === EventStatus.QUEUED ||
+              event.status === EventStatus.ENCRYPTING
+            ? 'sending'
+            : 'sent';
       const mediaUrl = content.url
         ? (client.mxcUrlToHttp(
             content.url,
@@ -353,6 +370,12 @@ export function getTimelineMessages(
         timestamp: event.getTs(),
         isOwn: event.getSender() === currentUserId,
         msgtype,
+        transactionId,
+        deliveryStatus,
+        errorText:
+          event.status === EventStatus.NOT_SENT
+            ? event.error?.message ?? 'Failed to send'
+            : null,
         mediaUrl,
         mimeType: content.info?.mimetype ?? null,
         fileSize: content.info?.size ?? null,

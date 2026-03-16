@@ -1,6 +1,13 @@
 /// <reference types="jest" />
 
 jest.mock('matrix-js-sdk', () => ({
+  EventStatus: {
+    NOT_SENT: 'not_sent',
+    ENCRYPTING: 'encrypting',
+    SENDING: 'sending',
+    QUEUED: 'queued',
+    SENT: 'sent',
+  },
   MsgType: {
     Text: 'm.text',
     Image: 'm.image',
@@ -41,6 +48,10 @@ type MockEvent = {
   getId: jest.Mock<string, []>;
   getTs: jest.Mock<number, []>;
   getSender: jest.Mock<string, []>;
+  getTxnId: jest.Mock<string | null, []>;
+  getUnsigned: jest.Mock<{ transaction_id?: string }, []>;
+  status?: string | null;
+  error?: { message?: string };
 };
 
 function createMessageEvent({
@@ -49,12 +60,16 @@ function createMessageEvent({
   timestamp,
   body,
   msgtype = 'm.text',
+  txnId = null,
+  status = null,
 }: {
   id: string;
   sender: string;
   timestamp: number;
   body: string;
   msgtype?: string;
+  txnId?: string | null;
+  status?: string | null;
 }): MockEvent {
   return {
     getType: jest.fn(() => 'm.room.message'),
@@ -62,6 +77,9 @@ function createMessageEvent({
     getId: jest.fn(() => id),
     getTs: jest.fn(() => timestamp),
     getSender: jest.fn(() => sender),
+    getTxnId: jest.fn(() => txnId),
+    getUnsigned: jest.fn(() => (txnId ? { transaction_id: txnId } : {})),
+    status,
   };
 }
 
@@ -109,6 +127,7 @@ describe('getTimelineMessages', () => {
         isOwn: true,
         senderName: 'Me',
         msgtype: 'm.text',
+        deliveryStatus: 'sent',
       }),
       expect.objectContaining({
         id: 'emoji',
@@ -116,6 +135,7 @@ describe('getTimelineMessages', () => {
         isOwn: false,
         senderName: 'Alex',
         msgtype: 'm.text',
+        deliveryStatus: 'sent',
       }),
     ]);
   });
@@ -140,5 +160,29 @@ describe('getTimelineMessages', () => {
 
     expect(message.body).toBe('<strong>bold</strong> 😀 but still plain text');
     expect(message.msgtype).toBe('m.text');
+  });
+
+  it('captures Matrix local echo transaction ids and delivery status', () => {
+    const room = createRoom([
+      createMessageEvent({
+        id: 'local-echo',
+        sender: '@me:matrix.org',
+        timestamp: 40,
+        body: 'Still sending',
+        txnId: 'txn-local-echo',
+        status: 'sending',
+      }),
+    ]);
+
+    const [message] = getTimelineMessages(
+      {
+        mxcUrlToHttp: jest.fn(() => null),
+      } as never,
+      room as never,
+      '@me:matrix.org'
+    );
+
+    expect(message.transactionId).toBe('txn-local-echo');
+    expect(message.deliveryStatus).toBe('sending');
   });
 });

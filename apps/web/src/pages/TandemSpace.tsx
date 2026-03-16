@@ -238,7 +238,7 @@ function TandemSpacePage() {
       <button
         key={room.id}
         type="button"
-        className="app-hover-surface flex w-full items-start gap-2.5 border-t border-line px-1 py-3 text-left first:border-t-0 hover:bg-elevated/40"
+        className="app-hover-surface flex w-full items-start gap-2.5 rounded-[24px] border border-transparent px-3 py-3 text-left"
         onClick={() => handleOpenRoom(room)}
       >
         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-elevated text-text-muted">
@@ -365,7 +365,9 @@ function TandemSpacePage() {
           ) : (
             <div className="space-y-4">
               {pinnedRooms.length > 0 && (
-                <section>{pinnedRooms.map(renderRoomCard)}</section>
+                <section className="space-y-1.5">
+                  {pinnedRooms.map(renderRoomCard)}
+                </section>
               )}
 
               {pinnedRooms.length > 0 && unpinnedRooms.length > 0 && (
@@ -379,7 +381,9 @@ function TandemSpacePage() {
               )}
 
               {unpinnedRooms.length > 0 && (
-                <section>{unpinnedRooms.map(renderRoomCard)}</section>
+                <section className="space-y-1.5">
+                  {unpinnedRooms.map(renderRoomCard)}
+                </section>
               )}
 
               {archivedRooms.length > 0 && (
@@ -402,7 +406,9 @@ function TandemSpacePage() {
                         </span>
                         <div className="flex-1 h-px bg-line" />
                       </div>
-                      <div>{archivedRooms.map(renderRoomCard)}</div>
+                      <div className="space-y-1.5">
+                        {archivedRooms.map(renderRoomCard)}
+                      </div>
                     </div>
                   )}
                 </section>

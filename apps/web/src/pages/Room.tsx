@@ -35,12 +35,20 @@ import { useChatPreferences } from '../hooks/useChatPreferences';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
 import { AppAvatar, Button, Modal, TangentModal } from '../components';
 import { MessageBubble } from '../components/chat';
+import { shouldSubmitComposerOnEnter } from '../components/chat/composerBehavior';
 import { createId } from '../lib/id';
 import { buildMatrixMediaPayload } from '../lib/matrix/media';
 import {
   buildRoomSnapshot,
   type RoomSnapshot,
 } from '../lib/matrix/roomSnapshot';
+import {
+  createOptimisticTextMessage,
+  mergeTimelineMessages,
+  reconcileOptimisticTimeline,
+  resolveOwnSenderName,
+  type OptimisticTimelineMessage,
+} from '../lib/matrix/optimisticTimeline';
 import {
   clearPendingTandemRoom,
   getPendingTandemRoom,
@@ -159,7 +167,6 @@ function RoomPage() {
     },
   });
   const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [enablingEncryption, setEnablingEncryption] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -169,6 +176,9 @@ function RoomPage() {
   const [showTangentModal, setShowTangentModal] = useState(false);
   const [creatingTangent, setCreatingTangent] = useState(false);
   const [tangentError, setTangentError] = useState<string | null>(null);
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    OptimisticTimelineMessage[]
+  >([]);
   const [pendingRoom, setPendingRoom] =
     useState<PendingTandemRoomRecord | null>(() =>
       getPendingTandemRoom(roomId)
@@ -285,7 +295,13 @@ function RoomPage() {
     requestAnimationFrame(() => {
       void contentRef.current?.scrollToBottom(250);
     });
-  }, [pendingRoom?.status, isPendingRoom, snapshot.messages]);
+  }, [optimisticMessages, pendingRoom?.status, isPendingRoom, snapshot.messages]);
+
+  useEffect(() => {
+    setOptimisticMessages((currentMessages) =>
+      reconcileOptimisticTimeline(snapshot.messages, currentMessages)
+    );
+  }, [snapshot.messages]);
 
   useEffect(() => {
     if (!roomId || !isPendingRoom) {
@@ -391,20 +407,55 @@ function RoomPage() {
     }
   };
 
-  const handleSendMessage = async () => {
+  const sendTextMessage = async ({
+    body,
+    optimisticMessageId,
+  }: {
+    body: string;
+    optimisticMessageId?: string;
+  }) => {
     if (isPendingRoom || !canInteractWithTimeline) {
       return;
     }
 
-    const body = draft.trim();
     if (!body) {
       return;
     }
 
-    setSending(true);
+    const transactionId = createId('txn');
+    const senderName = resolveOwnSenderName(client, roomId, user.userId);
+    const nextOptimisticMessage =
+      optimisticMessageId === undefined
+        ? createOptimisticTextMessage({
+            body,
+            senderId: user.userId,
+            senderName,
+            transactionId,
+          })
+        : null;
+
+    if (nextOptimisticMessage) {
+      setOptimisticMessages((currentMessages) => [
+        ...currentMessages,
+        nextOptimisticMessage,
+      ]);
+    } else {
+      setOptimisticMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === optimisticMessageId
+            ? {
+                ...message,
+                deliveryStatus: 'sending',
+                errorText: null,
+                transactionId,
+              }
+            : message
+        )
+      );
+    }
 
     try {
-      await (
+      const response = (await (
         client.sendEvent as (
           nextRoomId: string,
           eventType: string,
@@ -415,18 +466,55 @@ function RoomPage() {
         roomId,
         'm.room.message',
         { msgtype: MsgType.Text, body },
-        createId('txn')
+        transactionId
+      )) as { event_id?: string } | string | undefined;
+
+      const remoteEventId =
+        typeof response === 'string'
+          ? response
+          : response && typeof response === 'object' && 'event_id' in response
+            ? response.event_id ?? null
+            : null;
+
+      setOptimisticMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.transactionId === transactionId
+            ? {
+                ...message,
+                remoteEventId,
+              }
+            : message
+        )
       );
-      setDraft('');
       requestAnimationFrame(() => {
         void contentRef.current?.scrollToBottom(250);
       });
+      void refresh();
     } catch (cause) {
       console.error(cause);
-      setActionError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setSending(false);
+      const errorText = cause instanceof Error ? cause.message : String(cause);
+      setOptimisticMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.transactionId === transactionId
+            ? {
+                ...message,
+                deliveryStatus: 'failed',
+                errorText,
+              }
+            : message
+        )
+      );
     }
+  };
+
+  const handleSendMessage = async () => {
+    const body = draft.trim();
+    if (!body) {
+      return;
+    }
+
+    setDraft('');
+    await sendTextMessage({ body });
   };
 
   const handleAttachmentSelection = async (
@@ -466,16 +554,36 @@ function RoomPage() {
   const handleComposerKeyDown = (
     event: KeyboardEvent<HTMLIonTextareaElement>
   ) => {
-    if (event.key !== 'Enter' || event.shiftKey) {
+    if (
+      !shouldSubmitComposerOnEnter({
+        key: event.key,
+        shiftKey: event.shiftKey,
+        isComposing: event.nativeEvent.isComposing,
+      })
+    ) {
       return;
     }
 
     event.preventDefault();
-    if (sending || !draft.trim()) {
+    if (!draft.trim()) {
       return;
     }
 
     void handleSendMessage();
+  };
+
+  const handleRetryMessage = (messageId: string) => {
+    const failedMessage = optimisticMessages.find(
+      (message) => message.id === messageId && message.deliveryStatus === 'failed'
+    );
+    if (!failedMessage) {
+      return;
+    }
+
+    void sendTextMessage({
+      body: failedMessage.body,
+      optimisticMessageId: failedMessage.id,
+    });
   };
 
   const handleUpdateRoomMeta = async (metaUpdate: Partial<TandemRoomMeta>) => {
@@ -549,6 +657,14 @@ function RoomPage() {
   const activeSnapshot = pendingSnapshot ?? snapshot;
   const { roomName, roomSubtitle, messages, isEncrypted, roomMeta } =
     activeSnapshot;
+  const reconciledOptimisticMessages = reconcileOptimisticTimeline(
+    messages,
+    optimisticMessages
+  );
+  const visibleMessages = mergeTimelineMessages(
+    messages,
+    reconciledOptimisticMessages
+  );
   const roomMembership = currentRoom?.getMyMembership() ?? 'join';
   const membershipPolicy =
     !isPendingRoom && client && currentRoom
@@ -772,7 +888,7 @@ function RoomPage() {
                 )}
               </div>
             </div>
-          ) : messages.length === 0 ? (
+          ) : visibleMessages.length === 0 ? (
             <div className="py-12 text-center">
               <p className="text-base font-medium text-text">No messages yet</p>
               <p className="mt-2 text-sm text-text-muted">
@@ -786,12 +902,13 @@ function RoomPage() {
                   {visibleError}
                 </div>
               )}
-              {messages.map((message) => (
+              {visibleMessages.map((message) => (
                 <MessageBubble
                   key={message.id}
                   message={message}
                   accessToken={client.getAccessToken()}
                   viewMode={preferences.chatViewMode}
+                  onRetry={handleRetryMessage}
                 />
               ))}
             </div>
@@ -800,7 +917,7 @@ function RoomPage() {
       </IonContent>
 
       <IonFooter className="ion-no-border">
-        <div className="app-composer">
+        <div className="app-composer gap-2 px-3 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2 sm:gap-3 sm:px-4">
           {!isPendingRoom && (
             <>
               <input
@@ -815,8 +932,9 @@ function RoomPage() {
                 fill="clear"
                 color="medium"
                 onClick={() => attachmentInputRef.current?.click()}
+                className="h-12 w-12 shrink-0 rounded-full bg-elevated text-text shadow-[0_10px_24px_-20px_rgba(15,23,42,0.45)]"
                 disabled={
-                  !canInteractWithTimeline || uploadingAttachment || sending
+                  !canInteractWithTimeline || uploadingAttachment
                 }
               >
                 <IonIcon slot="icon-only" icon={attachOutline} />
@@ -836,17 +954,17 @@ function RoomPage() {
                   ? 'Message'
                   : 'Join this room to send messages'
             }
-            className="app-compose-field"
+            className="app-compose-field min-h-[52px] rounded-[24px] px-4 py-3 text-[15px] leading-6"
             disabled={!canInteractWithTimeline}
           />
           <IonButton
             shape="round"
             color="primary"
             onClick={handleSendMessage}
+            className="h-12 w-12 shrink-0 shadow-[0_12px_28px_-18px_rgba(15,23,42,0.45)]"
             disabled={
               !canInteractWithTimeline ||
               isPendingRoom ||
-              sending ||
               uploadingAttachment ||
               !draft.trim()
             }
