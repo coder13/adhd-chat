@@ -5,6 +5,8 @@ interface ReactionPickerProps {
   onSelect: (emoji: string) => void;
   theme?: 'light' | 'dark';
   inline?: boolean;
+  className?: string;
+  align?: 'left' | 'right';
 }
 
 type EmojiMartSelection = {
@@ -15,13 +17,17 @@ function ReactionPicker({
   onSelect,
   theme = 'light',
   inline = false,
+  className = '',
+  align = 'right',
 }: ReactionPickerProps) {
+  const anchoredClass = align === 'left' ? 'left-0' : 'right-0';
+
   return (
     <div
       className={
         inline
-          ? ''
-          : 'absolute right-0 top-full z-30 mt-2 overflow-hidden rounded-[24px] border border-line bg-white shadow-[0_20px_48px_-24px_rgba(15,23,42,0.35)]'
+          ? className
+          : `absolute ${anchoredClass} top-full z-30 mt-2 overflow-hidden rounded-[24px] border border-line bg-white shadow-[0_20px_48px_-24px_rgba(15,23,42,0.35)] ${className}`
       }
     >
       <div

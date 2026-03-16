@@ -3,6 +3,20 @@
   "version": "0.0.0",
   "type": "module",
   "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./id": "./src/id.ts",
+    "./matrix/tandem": "./src/matrix/tandem.ts",
+    "./matrix/tandemData": "./src/matrix/tandemData.ts",
+    "./matrix/tandemShared": "./src/matrix/tandemShared.ts",
+    "./matrix/tandemRelationships": "./src/matrix/tandemRelationships.ts",
+    "./matrix/tandemRooms": "./src/matrix/tandemRooms.ts",
+    "./matrix/tandemInvites": "./src/matrix/tandemInvites.ts",
+    "./matrix/timelineEvents": "./src/matrix/timelineEvents.ts",
+    "./matrix/timelineRelations": "./src/matrix/timelineRelations.ts",
+    "./matrix/readReceipts": "./src/matrix/readReceipts.ts",
+    "./matrix/typingIndicators": "./src/matrix/typingIndicators.ts"
+  },
   "scripts": {
     "lint": "eslint src --max-warnings 0",
     "test": "jest",

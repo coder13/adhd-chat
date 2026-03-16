@@ -37,12 +37,17 @@ function isImageFile(file: File) {
 
 export async function buildMatrixMediaPayload(
   client: MatrixClient,
-  file: File
+  file: File,
+  options?: {
+    body?: string | null;
+  }
 ): Promise<MatrixMediaPayload> {
   const upload = await client.uploadContent(file, {
     type: file.type || undefined,
     includeFilename: true,
   });
+
+  const messageBody = options?.body?.trim() || file.name;
 
   const baseInfo = {
     mimetype: file.type || undefined,
@@ -53,7 +58,7 @@ export async function buildMatrixMediaPayload(
     const dimensions = await getImageDimensions(file);
 
     return {
-      body: file.name,
+      body: messageBody,
       msgtype: MsgType.Image,
       url: upload.content_uri,
       info: {
@@ -64,7 +69,7 @@ export async function buildMatrixMediaPayload(
   }
 
   return {
-    body: file.name,
+    body: messageBody,
     msgtype: MsgType.File,
     url: upload.content_uri,
     info: baseInfo,

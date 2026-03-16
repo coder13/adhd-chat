@@ -9,6 +9,7 @@ export type OptimisticTimelineMessage = TimelineMessage & {
   errorText?: string | null;
   remoteEventId?: string | null;
   retryFile?: File | null;
+  attachmentCaption?: string | null;
 };
 
 export type OptimisticReactionChange = {
@@ -53,11 +54,13 @@ export function createOptimisticAttachmentMessage(options: {
   senderId: string;
   senderName: string;
   transactionId: string;
+  caption?: string | null;
   timestamp?: number;
 }) {
   const timestamp = options.timestamp ?? Date.now();
   const isImage = options.file.type.startsWith('image/');
   const previewUrl = URL.createObjectURL(options.file);
+  const attachmentCaption = options.caption?.trim() || null;
 
   return {
     id: `local:${options.transactionId}`,
@@ -65,7 +68,7 @@ export function createOptimisticAttachmentMessage(options: {
     transactionId: options.transactionId,
     senderId: options.senderId,
     senderName: options.senderName,
-    body: options.file.name,
+    body: attachmentCaption || options.file.name,
     timestamp,
     isOwn: true,
     msgtype: isImage ? MsgType.Image : MsgType.File,
@@ -73,6 +76,7 @@ export function createOptimisticAttachmentMessage(options: {
     errorText: null,
     remoteEventId: null,
     retryFile: options.file,
+    attachmentCaption,
     mediaUrl: previewUrl,
     mimeType: options.file.type || null,
     fileSize: options.file.size,

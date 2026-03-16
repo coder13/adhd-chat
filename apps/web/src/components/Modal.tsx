@@ -1,6 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { cn } from '../lib/cn';
+import {
+  clampSheetOffset,
+  shouldDismissSheet,
+} from './modalSheetGesture';
 
 interface ModalProps {
   isOpen: boolean;
@@ -12,6 +16,12 @@ interface ModalProps {
 
 function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const [sheetOffset, setSheetOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const touchStartYRef = useRef<number | null>(null);
+
+  const isMobileSheet =
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false;
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -31,6 +41,14 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
     };
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setSheetOffset(0);
+      setIsDragging(false);
+      touchStartYRef.current = null;
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const sizeStyles = {
@@ -46,9 +64,14 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
       role="dialog"
       aria-modal="true"
     >
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+      <div
+        className={cn(
+          'flex min-h-screen px-4 pb-20 pt-4 text-center sm:block sm:p-0',
+          isMobileSheet ? 'items-end justify-stretch' : 'items-center justify-center'
+        )}
+      >
         <div
-          className="fixed inset-0 bg-text/45 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-text/45 transition-opacity app-sheet-backdrop"
           aria-hidden="true"
           onClick={onClose}
         />
@@ -63,11 +86,54 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
         <div
           ref={modalRef}
           className={cn(
-            'inline-block w-full transform overflow-hidden rounded-[28px] border border-line text-left text-text shadow-panel transition-all sm:my-8 sm:align-middle',
+            'inline-block w-full overflow-hidden border border-line text-left text-text shadow-panel transition-all sm:my-8 sm:align-middle',
+            isMobileSheet
+              ? 'app-mobile-sheet rounded-t-[28px] rounded-b-none border-b-0'
+              : 'rounded-[28px]',
             sizeStyles[size]
           )}
-          style={{ backgroundColor: 'var(--app-shell-background)' }}
+          style={{
+            backgroundColor: 'var(--app-shell-background)',
+            transform: isMobileSheet ? `translateY(${sheetOffset}px)` : undefined,
+            transitionDuration: isDragging ? '0ms' : undefined,
+          }}
         >
+          {isMobileSheet ? (
+            <div
+              className="flex justify-center px-4 pt-3"
+              onTouchStart={(event) => {
+                touchStartYRef.current = event.touches[0]?.clientY ?? null;
+                setIsDragging(true);
+              }}
+              onTouchMove={(event) => {
+                if (touchStartYRef.current === null) {
+                  return;
+                }
+
+                const nextY = event.touches[0]?.clientY ?? touchStartYRef.current;
+                setSheetOffset(clampSheetOffset(nextY - touchStartYRef.current));
+              }}
+              onTouchEnd={() => {
+                const shouldDismiss = shouldDismissSheet(sheetOffset);
+                setIsDragging(false);
+                touchStartYRef.current = null;
+                if (shouldDismiss) {
+                  setSheetOffset(0);
+                  onClose();
+                  return;
+                }
+
+                setSheetOffset(0);
+              }}
+              onTouchCancel={() => {
+                setIsDragging(false);
+                touchStartYRef.current = null;
+                setSheetOffset(0);
+              }}
+            >
+              <div className="h-1.5 w-12 rounded-full bg-line" />
+            </div>
+          ) : null}
           <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="sm:flex sm:items-start">
               <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">

@@ -26,6 +26,7 @@
     min-height: 100vh;
     background: var(--app-shell-background);
     box-shadow: 0 0 0 1px var(--app-border-color);
+    animation: app-page-enter 320ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .app-list-page {
@@ -41,6 +42,20 @@
     --border-color: transparent;
     padding-top: 0.5rem;
     padding-bottom: 0.25rem;
+    backdrop-filter: blur(20px);
+  }
+
+  .app-toolbar ion-button::part(native) {
+    border-radius: 18px;
+    transition:
+      transform 180ms ease,
+      background-color 180ms ease,
+      box-shadow 220ms ease;
+  }
+
+  .app-toolbar ion-button:active::part(native) {
+    transform: scale(0.96);
+    background: rgba(var(--ion-color-primary-rgb), 0.1);
   }
 
   .app-bottom-nav {
@@ -88,6 +103,10 @@
       box-shadow 160ms ease;
   }
 
+  .app-list-item:active::part(native) {
+    transform: scale(0.985);
+  }
+
   .app-list-item.is-active::part(native) {
     --background: rgba(var(--ion-color-primary-rgb), 0.12);
   }
@@ -100,12 +119,20 @@
       transform 160ms ease;
   }
 
+  .app-hover-surface:active {
+    transform: scale(0.988);
+  }
+
   .app-message-surface {
     border-radius: 20px;
     transition:
       background-color 160ms ease,
       box-shadow 160ms ease,
       transform 160ms ease;
+  }
+
+  .app-message-surface:active {
+    transform: scale(0.992);
   }
 
   .app-chat-bubble {
@@ -119,6 +146,10 @@
       background-color 160ms ease,
       box-shadow 160ms ease,
       transform 160ms ease;
+  }
+
+  .app-chat-bubble:active {
+    transform: scale(0.992);
   }
 
   .app-chat-bubble.own {
@@ -141,16 +172,37 @@
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
     background: var(--app-shell-background);
     border-top: 1px solid var(--app-border-color);
+    backdrop-filter: blur(22px);
+    box-shadow: 0 -14px 30px -28px rgba(15, 23, 42, 0.3);
   }
 
   .app-compose-field {
     flex: 1;
-    border-radius: 24px;
-    background: #f3f4f6;
-    padding: 12px 14px;
+    --padding-top: 10px;
+    --padding-bottom: 10px;
+    --padding-start: 4px;
+    --padding-end: 4px;
+    background: transparent;
+    box-shadow: none;
   }
 
   .dark .app-compose-field {
+    background: #1f2937;
+  }
+
+  .app-compose-surface {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    border-radius: 24px;
+    background: #f3f4f6;
+    padding: 4px 6px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.8),
+      0 10px 24px -24px rgba(15, 23, 42, 0.24);
+  }
+
+  .dark .app-compose-surface {
     background: #1f2937;
   }
 
@@ -199,6 +251,55 @@
     font-weight: 600;
   }
 
+  .app-nav-dock {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 28px;
+    background: color-mix(in srgb, white 92%, rgba(var(--ion-color-primary-rgb), 0.08));
+    box-shadow:
+      0 20px 40px -28px rgba(15, 23, 42, 0.34),
+      0 10px 22px -20px rgba(15, 23, 42, 0.2);
+    padding: 6px;
+    animation: app-nav-enter 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .app-nav-button {
+    border-radius: 22px;
+    color: var(--ion-color-medium);
+    min-height: 56px;
+    transition:
+      transform 180ms ease,
+      background-color 180ms ease,
+      color 180ms ease,
+      box-shadow 220ms ease;
+  }
+
+  .app-nav-button.is-active {
+    background: rgba(var(--ion-color-primary-rgb), 0.12);
+    color: rgb(var(--ion-color-primary-rgb));
+    box-shadow: inset 0 0 0 1px rgba(var(--ion-color-primary-rgb), 0.08);
+  }
+
+  .app-nav-button:active {
+    transform: scale(0.98);
+  }
+
+  .app-mobile-sheet {
+    animation: app-sheet-enter 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+
+  .app-sheet-backdrop {
+    animation: app-backdrop-enter 220ms ease;
+  }
+
+  .app-pressable {
+    transition: transform 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+  }
+
+  .app-pressable:active {
+    transform: scale(0.985);
+  }
+
   @media (hover: hover) and (pointer: fine) {
     .app-list-item:hover::part(native) {
       --background: color-mix(
@@ -236,5 +337,47 @@
         rgba(var(--ion-color-primary-rgb), 0.12)
       );
     }
+  }
+}
+
+@keyframes app-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes app-nav-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes app-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(44px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes app-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

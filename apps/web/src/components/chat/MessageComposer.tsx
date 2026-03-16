@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { cn } from '../../lib/cn';
-import { shouldSubmitComposerOnEnter } from './composerBehavior';
+import { shouldSubmitComposerOnEnter } from '../../lib/chat/composerBehavior';
 
 interface MessageComposerProps {
   onSend: (message: string) => Promise<void>;

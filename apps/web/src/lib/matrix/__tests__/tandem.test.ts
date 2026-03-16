@@ -7,6 +7,7 @@ jest.mock('matrix-js-sdk', () => ({
 }));
 
 import {
+  deleteTandemRoom,
   ensureTandemRelationshipRooms,
   getTandemMembershipPolicy,
   joinTandemRoom,
@@ -19,6 +20,8 @@ import {
 type MockRoom = {
   roomId: string;
   getMyMembership: jest.Mock<string | undefined, []>;
+  getMembers: jest.Mock<Array<{ userId: string; membership: string }>, []>;
+  getAccountData: jest.Mock<{ getContent: () => Record<string, unknown> } | null, [string]>;
   leave: jest.Mock<Promise<void>, []>;
   currentState: {
     getStateEvents: jest.Mock<
@@ -32,6 +35,10 @@ type MockClient = {
   getRoom: jest.Mock<MockRoom | null, [string | undefined]>;
   joinRoom: jest.Mock<Promise<void>, [string]>;
   leave: jest.Mock<Promise<void>, [string]>;
+  forget: jest.Mock<Promise<object>, [string, boolean?]>;
+  kick: jest.Mock<Promise<object>, [string, string, string?]>;
+  sendStateEvent: jest.Mock<Promise<unknown>, [string, string, Record<string, unknown>, string?]>;
+  setRoomAccountData: jest.Mock<Promise<void>, [string, string, Record<string, unknown>]>;
   getAccountData: jest.Mock<
     {
       getContent: () => {
@@ -55,6 +62,11 @@ function createRoom(membership: string | undefined): MockRoom {
   return {
     roomId: '!room:matrix.org',
     getMyMembership: jest.fn(() => membership),
+    getMembers: jest.fn(() => [
+      { userId: '@sam:matrix.org', membership: membership ?? 'join' },
+      { userId: '@alex:matrix.org', membership: 'join' },
+    ]),
+    getAccountData: jest.fn((_eventType: string) => null),
     leave: jest.fn(async () => {}),
     currentState: {
       getStateEvents: jest.fn((eventType: string) => stateEvents.get(eventType) ?? null),
@@ -95,6 +107,16 @@ function createClient({
     ),
     joinRoom: jest.fn<Promise<void>, [string]>(async (_roomId: string) => {}),
     leave: jest.fn<Promise<void>, [string]>(async (_roomId: string) => {}),
+    forget: jest.fn<Promise<object>, [string, boolean?]>(async () => ({})),
+    kick: jest.fn<Promise<object>, [string, string, string?]>(async () => ({})),
+    sendStateEvent: jest.fn<
+      Promise<unknown>,
+      [string, string, Record<string, unknown>, string?]
+    >(async () => ({})),
+    setRoomAccountData: jest.fn<
+      Promise<void>,
+      [string, string, Record<string, unknown>]
+    >(async () => {}),
     getAccountData: jest.fn((eventType: string) => {
       if (eventType !== TANDEM_RELATIONSHIPS_EVENT_TYPE) {
         return null;
@@ -263,5 +285,61 @@ describe('milestone 1 membership policy', () => {
     await leaveTandemRoom(client as never, room as never);
 
     expect(client.leave).toHaveBeenCalledWith('!topic:matrix.org');
+  });
+
+  it('deletes extra Tandem topics by unlinking and forgetting the room', async () => {
+    const room = withStateEvent(
+      {
+        ...createRoom('join'),
+        roomId: '!topic:matrix.org',
+      },
+      'com.tandem.room',
+      { kind: 'tandem-child-room', spaceId: '!space:matrix.org' }
+    );
+    const client = createClient({
+      roomsById: {
+        '!topic:matrix.org': room,
+      },
+    });
+
+    await deleteTandemRoom(client as never, room as never);
+
+    expect(client.sendStateEvent).toHaveBeenNthCalledWith(
+      1,
+      '!space:matrix.org',
+      'm.space.child',
+      {},
+      '!topic:matrix.org'
+    );
+    expect(client.sendStateEvent).toHaveBeenNthCalledWith(
+      2,
+      '!topic:matrix.org',
+      'm.space.parent',
+      {},
+      '!space:matrix.org'
+    );
+    expect(client.kick).toHaveBeenCalledWith(
+      '!topic:matrix.org',
+      '@alex:matrix.org',
+      'Topic deleted'
+    );
+    expect(client.leave).toHaveBeenCalledWith('!topic:matrix.org');
+    expect(client.forget).toHaveBeenCalledWith('!topic:matrix.org', true);
+  });
+
+  it('does not allow deleting the main Tandem topic', async () => {
+    const client = createClient();
+    const room = withStateEvent(
+      {
+        ...createRoom('join'),
+        roomId: '!main:matrix.org',
+      },
+      'com.tandem.room',
+      { kind: 'tandem-main-room', spaceId: '!space:matrix.org' }
+    );
+
+    await expect(
+      deleteTandemRoom(client as never, room as never)
+    ).rejects.toThrow('Only extra topics can be deleted.');
   });
 });

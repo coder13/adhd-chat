@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { createMentionToken } from './mentions';
+import { createMentionToken } from '../../lib/chat/mentions';
 
 type LinkSegment =
   | { type: 'text'; value: string }

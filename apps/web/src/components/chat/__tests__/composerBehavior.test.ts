@@ -3,7 +3,7 @@
 import {
   prefersDesktopComposerShortcuts,
   shouldSubmitComposerOnEnter,
-} from '../composerBehavior';
+} from '../../../lib/chat/composerBehavior';
 
 describe('composer behavior', () => {
   it('submits enter on fine-pointer environments', () => {

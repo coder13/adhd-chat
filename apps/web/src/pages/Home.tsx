@@ -58,12 +58,15 @@ function Home() {
     error: catalogError,
     refresh: refreshSpaces,
     isLoading: isLoadingSpaces,
+    isRefreshing: isRefreshingSpaces,
+    hasCachedData,
   } = usePersistedResource<TandemSpaceSummary[]>({
     cacheKey,
     enabled: Boolean(client && user),
     initialValue: [],
     load: async () => buildTandemSpaceCatalog(client!, user!.userId),
   });
+  const [stableSpaces, setStableSpaces] = useState<TandemSpaceSummary[]>([]);
 
   useEffect(() => {
     if (!client || !user) {
@@ -100,20 +103,52 @@ function Home() {
     void refreshSpaces();
   }, [client, refreshSpaces, relationships, isRecoveringRelationships, user]);
 
-  const visibleSpaces = useMemo(() => {
-    const searchValue = search.trim().toLowerCase();
-    if (!searchValue) {
+  useEffect(() => {
+    if (spaces.length > 0) {
+      setStableSpaces(spaces);
+      return;
+    }
+
+    if (!hasCachedData && relationships.length === 0 && !isRefreshingSpaces) {
+      setStableSpaces([]);
+    }
+  }, [hasCachedData, isRefreshingSpaces, relationships.length, spaces]);
+
+  const displaySpaces = useMemo(() => {
+    if (spaces.length > 0) {
       return spaces;
     }
 
-    return spaces.filter((space) => {
+    if (
+      stableSpaces.length > 0 &&
+      (isRefreshingSpaces || isRecoveringRelationships || relationships.length > 0)
+    ) {
+      return stableSpaces;
+    }
+
+    return spaces;
+  }, [
+    isRecoveringRelationships,
+    isRefreshingSpaces,
+    relationships.length,
+    spaces,
+    stableSpaces,
+  ]);
+
+  const visibleSpaces = useMemo(() => {
+    const searchValue = search.trim().toLowerCase();
+    if (!searchValue) {
+      return displaySpaces;
+    }
+
+    return displaySpaces.filter((space) => {
       return (
         space.name.toLowerCase().includes(searchValue) ||
         space.partnerUserId.toLowerCase().includes(searchValue) ||
         space.preview.toLowerCase().includes(searchValue)
       );
     });
-  }, [search, spaces]);
+  }, [displaySpaces, search]);
 
   const pendingIncomingInvites = incomingInvites.filter(
     (invite) => invite.status === 'pending'
@@ -216,7 +251,7 @@ function Home() {
               <div className="text-sm text-danger">{error || catalogError}</div>
             )}
 
-            {visibleSpaces.length === 0 &&
+            {displaySpaces.length === 0 &&
             (isRecoveringRelationships || relationships.length > 0) &&
             !catalogError ? (
               <Card tone="accent">
@@ -227,7 +262,9 @@ function Home() {
                   Tandem is reconnecting your shared hubs and topics after sync so your home stays organized.
                 </p>
               </Card>
-            ) : visibleSpaces.length === 0 && !isLoadingSpaces ? (
+            ) : visibleSpaces.length === 0 &&
+              displaySpaces.length === 0 &&
+              !isLoadingSpaces ? (
               <Card tone="accent">
                 <h3 className="text-base font-semibold text-text">
                   Start your first shared hub
@@ -241,7 +278,7 @@ function Home() {
                   </Button>
                 </div>
               </Card>
-            ) : isLoadingSpaces && visibleSpaces.length === 0 ? (
+            ) : isLoadingSpaces && displaySpaces.length === 0 ? (
               <div className="py-12 text-center text-sm text-text-muted">
                 Loading hubs...
               </div>

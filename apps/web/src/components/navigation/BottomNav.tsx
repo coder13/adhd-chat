@@ -1,12 +1,11 @@
 import {
-  IonButton,
   IonFooter,
   IonIcon,
-  IonLabel,
   IonToolbar,
 } from '@ionic/react';
 import { chatbubbleEllipsesOutline, peopleOutline } from 'ionicons/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { cn } from '../../lib/cn';
 
 const navItems = [
   { path: '/', label: 'Chats', icon: chatbubbleEllipsesOutline },
@@ -20,7 +19,8 @@ function BottomNav() {
   return (
     <IonFooter className="app-bottom-nav ion-no-border">
       <IonToolbar className="app-bottom-nav">
-        <div className="grid grid-cols-2 gap-1 px-2 pb-1 pt-2">
+        <div className="px-3 pb-2 pt-2">
+          <div className="app-nav-dock grid grid-cols-2 gap-2">
           {navItems.map((item) => {
             const isActive =
               location.pathname === item.path ||
@@ -28,20 +28,23 @@ function BottomNav() {
                 location.pathname.startsWith('/contacts'));
 
             return (
-              <IonButton
+              <button
                 key={item.path}
-                fill="clear"
-                color={isActive ? 'primary' : 'medium'}
+                type="button"
                 onClick={() => navigate(item.path)}
-                className="h-14"
+                className={cn(
+                  'app-nav-button app-pressable h-14',
+                  isActive && 'is-active'
+                )}
               >
-                <div className="flex flex-col items-center gap-1 text-[11px] font-medium">
-                  <IonIcon icon={item.icon} className="text-[22px]" />
-                  <IonLabel>{item.label}</IonLabel>
+                <div className="flex items-center justify-center gap-2 text-[12px] font-semibold">
+                  <IonIcon icon={item.icon} className="text-[20px]" />
+                  <span>{item.label}</span>
                 </div>
-              </IonButton>
+              </button>
             );
           })}
+          </div>
         </div>
       </IonToolbar>
     </IonFooter>

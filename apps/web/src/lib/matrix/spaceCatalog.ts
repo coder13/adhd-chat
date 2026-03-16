@@ -117,6 +117,10 @@ function getChildRoomIds(spaceRoom: Room) {
       | MatrixEvent[]
       | null
   )
+    .filter((event) => {
+      const content = event.getContent<{ via?: string[] }>();
+      return Array.isArray(content?.via) && content.via.length > 0;
+    })
     .map((event) => event.getStateKey())
     .filter((roomId): roomId is string => Boolean(roomId));
 }

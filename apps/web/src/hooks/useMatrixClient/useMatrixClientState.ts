@@ -14,7 +14,6 @@ import type {
   AuthState,
   DeviceVerificationState,
   MatrixSession,
-  VerificationEmoji,
 } from './types';
 import {
   buildAuthedClient,
@@ -41,6 +40,10 @@ import {
   type EncryptionDiagnostics,
   type EncryptionSetupInfo,
 } from './crypto';
+import {
+  getDeviceVerificationState,
+  toVerificationEmojis,
+} from './verificationState';
 
 let loggingIn = false;
 
@@ -96,61 +99,14 @@ export function useMatrixClientState() {
     setDeviceVerification({ status: 'idle' });
   }, [clearVerificationRequestListeners, clearVerifierListeners]);
 
-  const toVerificationEmojis = useCallback(
-    (emojis: [string, string][] | undefined): VerificationEmoji[] | undefined =>
-      emojis?.map(([symbol, name]) => ({ symbol, name })),
-    []
-  );
-
   const updateDeviceVerificationState = useCallback(() => {
-    const request = verificationRequestRef.current;
-    const sasCallbacks = sasCallbacksRef.current;
-
-    if (!request) {
-      setDeviceVerification({ status: 'idle' });
-      return;
-    }
-
-    const baseState = {
-      transactionId: request.transactionId,
-      otherDeviceId: request.otherDeviceId,
-    };
-
-    if (sasCallbacks) {
-      setDeviceVerification({
-        status: 'showing_sas',
-        ...baseState,
-        decimals: sasCallbacks.sas.decimal,
-        emojis: toVerificationEmojis(sasCallbacks.sas.emoji),
-      });
-      return;
-    }
-
-    switch (request.phase) {
-      case VerificationPhase.Requested:
-        setDeviceVerification({ status: 'waiting', ...baseState });
-        break;
-      case VerificationPhase.Ready:
-        setDeviceVerification({ status: 'ready', ...baseState });
-        break;
-      case VerificationPhase.Started:
-        setDeviceVerification({ status: 'starting_sas', ...baseState });
-        break;
-      case VerificationPhase.Done:
-        setDeviceVerification({ status: 'done', ...baseState });
-        break;
-      case VerificationPhase.Cancelled:
-        setDeviceVerification({
-          status: 'cancelled',
-          ...baseState,
-          error: 'Verification was cancelled.',
-        });
-        break;
-      default:
-        setDeviceVerification({ status: 'requesting', ...baseState });
-        break;
-    }
-  }, [toVerificationEmojis]);
+    setDeviceVerification(
+      getDeviceVerificationState(
+        verificationRequestRef.current,
+        sasCallbacksRef.current
+      )
+    );
+  }, []);
 
   const attachVerifier = useCallback(
     (verifier: Verifier) => {
@@ -546,7 +502,7 @@ export function useMatrixClientState() {
       });
       throw cause;
     }
-  }, [toVerificationEmojis, updateDeviceVerificationState]);
+  }, [updateDeviceVerificationState]);
 
   const cancelDeviceVerification = useCallback(async () => {
     const request = verificationRequestRef.current;

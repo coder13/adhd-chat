@@ -6,12 +6,16 @@ export function prefersDesktopComposerShortcuts() {
   return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 }
 
-export function shouldSubmitComposerOnEnter(options: {
+export function shouldSubmitComposerOnEnter({
+  key,
+  shiftKey,
+  isComposing,
+}: {
   key: string;
   shiftKey: boolean;
-  isComposing?: boolean;
+  isComposing: boolean;
 }) {
-  if (options.key !== 'Enter' || options.shiftKey || options.isComposing) {
+  if (key !== 'Enter' || shiftKey || isComposing) {
     return false;
   }
 
