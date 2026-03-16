@@ -8,18 +8,30 @@ jest.mock('matrix-js-sdk', () => ({
 
 import {
   ensureTandemRelationshipRooms,
+  getTandemMembershipPolicy,
+  joinTandemRoom,
+  leaveTandemRoom,
   recoverTandemRelationshipRooms,
   TANDEM_RELATIONSHIPS_EVENT_TYPE,
   type TandemRelationshipRecord,
 } from '../tandem';
 
 type MockRoom = {
+  roomId: string;
   getMyMembership: jest.Mock<string | undefined, []>;
+  leave: jest.Mock<Promise<void>, []>;
+  currentState: {
+    getStateEvents: jest.Mock<
+      { getContent: () => { kind?: string; spaceId?: string } } | null,
+      [string, string?]
+    >;
+  };
 };
 
 type MockClient = {
   getRoom: jest.Mock<MockRoom | null, [string | undefined]>;
   joinRoom: jest.Mock<Promise<void>, [string]>;
+  leave: jest.Mock<Promise<void>, [string]>;
   getAccountData: jest.Mock<
     {
       getContent: () => {
@@ -35,9 +47,39 @@ type MockClient = {
 };
 
 function createRoom(membership: string | undefined): MockRoom {
+  const stateEvents = new Map<
+    string,
+    { getContent: () => { kind?: string; spaceId?: string } }
+  >();
+
   return {
+    roomId: '!room:matrix.org',
     getMyMembership: jest.fn(() => membership),
+    leave: jest.fn(async () => {}),
+    currentState: {
+      getStateEvents: jest.fn((eventType: string) => stateEvents.get(eventType) ?? null),
+    },
   };
+}
+
+function withStateEvent(
+  room: MockRoom,
+  eventType: string,
+  content: { kind?: string; spaceId?: string }
+) {
+  room.currentState.getStateEvents.mockImplementation(
+    (requestedType: string) => {
+      if (requestedType === eventType) {
+        return {
+          getContent: () => content,
+        };
+      }
+
+      return null;
+    }
+  );
+
+  return room;
 }
 
 function createClient({
@@ -52,6 +94,7 @@ function createClient({
       roomId ? roomsById[roomId] ?? null : null
     ),
     joinRoom: jest.fn<Promise<void>, [string]>(async (_roomId: string) => {}),
+    leave: jest.fn<Promise<void>, [string]>(async (_roomId: string) => {}),
     getAccountData: jest.fn((eventType: string) => {
       if (eventType !== TANDEM_RELATIONSHIPS_EVENT_TYPE) {
         return null;
@@ -154,5 +197,71 @@ describe('tandem room recovery', () => {
       recoveredRoomIds: ['!space-a:matrix.org', '!main-b:matrix.org'],
       failedRoomIds: [],
     });
+  });
+});
+
+describe('milestone 1 membership policy', () => {
+  it('allows leave flows only for Tandem topic rooms', () => {
+    const client = createClient();
+    const childRoom = withStateEvent(
+      {
+        ...createRoom('join'),
+        roomId: '!topic:matrix.org',
+      },
+      'com.tandem.room',
+      { kind: 'tandem-child-room', spaceId: '!space:matrix.org' }
+    );
+    const mainRoom = withStateEvent(
+      {
+        ...createRoom('join'),
+        roomId: '!main:matrix.org',
+      },
+      'com.tandem.room',
+      { kind: 'tandem-main-room', spaceId: '!space:matrix.org' }
+    );
+
+    expect(getTandemMembershipPolicy(client as never, childRoom as never))
+      .toMatchObject({
+        roomKind: 'tandem-child-room',
+        supportsJoin: true,
+        supportsLeave: true,
+      });
+    expect(getTandemMembershipPolicy(client as never, mainRoom as never))
+      .toMatchObject({
+        roomKind: 'tandem-main-room',
+        supportsJoin: true,
+        supportsLeave: false,
+      });
+  });
+
+  it('blocks unsupported non-Tandem room membership actions', async () => {
+    const client = createClient();
+    const room = {
+      ...createRoom('invite'),
+      roomId: '!other:matrix.org',
+    };
+
+    await expect(
+      joinTandemRoom(client as never, room as never)
+    ).rejects.toThrow('Unavailable here.');
+    await expect(
+      leaveTandemRoom(client as never, room as never)
+    ).rejects.toThrow('Unavailable here.');
+  });
+
+  it('leaves supported Tandem topic rooms', async () => {
+    const client = createClient();
+    const room = withStateEvent(
+      {
+        ...createRoom('join'),
+        roomId: '!topic:matrix.org',
+      },
+      'com.tandem.room',
+      { kind: 'tandem-child-room', spaceId: '!space:matrix.org' }
+    );
+
+    await leaveTandemRoom(client as never, room as never);
+
+    expect(client.leave).toHaveBeenCalledWith('!topic:matrix.org');
   });
 });

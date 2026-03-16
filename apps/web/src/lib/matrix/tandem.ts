@@ -59,6 +59,19 @@ export interface TandemRelationshipRoomsRecoveryResult {
   failedRoomIds: string[];
 }
 
+export type TandemMembershipRoomKind =
+  | 'tandem-space'
+  | 'tandem-main-room'
+  | 'tandem-child-room'
+  | 'other-room';
+
+export interface TandemMembershipPolicy {
+  roomKind: TandemMembershipRoomKind;
+  supportsJoin: boolean;
+  supportsLeave: boolean;
+  summary: string;
+}
+
 export interface TandemRelationshipsAccountData {
   incomingInvites: TandemInviteRecord[];
   outgoingInvites: TandemInviteRecord[];
@@ -338,6 +351,93 @@ export function getTandemSpaceIdForRoom(
   ).relationships.find((entry) => entry.mainRoomId === room.roomId);
 
   return relationship?.sharedSpaceId ?? null;
+}
+
+export function getTandemMembershipPolicy(
+  client: MatrixClient,
+  room: Room | null | undefined
+): TandemMembershipPolicy {
+  if (!room) {
+    return {
+      roomKind: 'other-room',
+      supportsJoin: false,
+      supportsLeave: false,
+      summary: 'Unavailable here.',
+    };
+  }
+
+  if (room.currentState.getStateEvents(TANDEM_SPACE_EVENT_TYPE, '')) {
+    return {
+      roomKind: 'tandem-space',
+      supportsJoin: true,
+      supportsLeave: false,
+      summary: 'Leave unavailable.',
+    };
+  }
+
+  const tandemRoomContent = room.currentState
+    .getStateEvents(TANDEM_ROOM_EVENT_TYPE, '')
+    ?.getContent<{ kind?: string }>();
+
+  if (tandemRoomContent?.kind === 'tandem-main-room') {
+    return {
+      roomKind: 'tandem-main-room',
+      supportsJoin: true,
+      supportsLeave: false,
+      summary: 'Leave unavailable.',
+    };
+  }
+
+  if (
+    tandemRoomContent?.kind === 'tandem-child-room' ||
+    getTandemSpaceIdForRoom(client, room)
+  ) {
+    return {
+      roomKind: 'tandem-child-room',
+      supportsJoin: true,
+      supportsLeave: true,
+      summary: '',
+    };
+  }
+
+  return {
+    roomKind: 'other-room',
+    supportsJoin: false,
+    supportsLeave: false,
+    summary: 'Unavailable here.',
+  };
+}
+
+export async function joinTandemRoom(
+  client: MatrixClient,
+  room: Room | null | undefined
+) {
+  if (!room) {
+    throw new Error('Room not found.');
+  }
+
+  const policy = getTandemMembershipPolicy(client, room);
+  if (!policy.supportsJoin) {
+    throw new Error(policy.summary);
+  }
+
+  await client.joinRoom(room.roomId);
+}
+
+export async function leaveTandemRoom(
+  client: MatrixClient,
+  room: Room | null | undefined
+) {
+  if (!room) {
+    throw new Error('Room not found.');
+  }
+
+  const policy = getTandemMembershipPolicy(client, room);
+  if (!policy.supportsLeave) {
+    throw new Error(policy.summary);
+  }
+
+  await client.leave(room.roomId);
 }
 
 export async function saveTandemRelationships(

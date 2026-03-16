@@ -58,7 +58,7 @@ function ConversationList({
             key={chat.id}
             to={`/room/${encodeURIComponent(chat.id)}`}
             className={cn(
-              'flex items-center gap-3 rounded-[26px] px-3 py-3 transition-colors',
+              'app-hover-surface flex items-center gap-3 rounded-[26px] px-3 py-3',
               isActive ? 'bg-accent text-text-inverse' : 'hover:bg-elevated'
             )}
           >

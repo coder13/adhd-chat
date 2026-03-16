@@ -237,7 +237,7 @@ function Home() {
                 {visibleSpaces.map((space) => (
                   <Card
                     key={space.spaceId}
-                    className="cursor-pointer"
+                    className="app-hover-surface cursor-pointer"
                     onClick={() =>
                       navigate(
                         `/tandem/space/${encodeURIComponent(space.spaceId)}`

@@ -56,6 +56,9 @@ import {
 import {
   ensureTandemSpaceLinks,
   getTandemSpaceIdForRoom,
+  getTandemMembershipPolicy,
+  joinTandemRoom,
+  leaveTandemRoom,
   updateTandemRoomMeta,
   type TandemRoomMeta,
 } from '../lib/matrix/tandem';
@@ -161,6 +164,7 @@ function RoomPage() {
   const [enablingEncryption, setEnablingEncryption] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showTangentModal, setShowTangentModal] = useState(false);
   const [creatingTangent, setCreatingTangent] = useState(false);
@@ -388,7 +392,7 @@ function RoomPage() {
   };
 
   const handleSendMessage = async () => {
-    if (isPendingRoom) {
+    if (isPendingRoom || !canInteractWithTimeline) {
       return;
     }
 
@@ -513,9 +517,9 @@ function RoomPage() {
     setTangentError(null);
     setShowTangentModal(false);
 
-    if (topic.membership === 'invite') {
+    if (topic.membership !== 'join') {
       try {
-        await client.joinRoom(topic.id);
+        await joinTandemRoom(client, client.getRoom(topic.id));
         await refreshTangentTopics();
       } catch (cause) {
         console.error(cause);
@@ -545,6 +549,13 @@ function RoomPage() {
   const activeSnapshot = pendingSnapshot ?? snapshot;
   const { roomName, roomSubtitle, messages, isEncrypted, roomMeta } =
     activeSnapshot;
+  const roomMembership = currentRoom?.getMyMembership() ?? 'join';
+  const membershipPolicy =
+    !isPendingRoom && client && currentRoom
+      ? getTandemMembershipPolicy(client, currentRoom)
+      : null;
+  const canInteractWithTimeline =
+    isPendingRoom || !membershipPolicy || roomMembership === 'join';
   const visibleError =
     pendingRoom?.status === 'failed'
       ? (pendingRoom.error ?? actionError)
@@ -556,6 +567,47 @@ function RoomPage() {
     }
 
     navigate(-1);
+  };
+
+  const handleJoinCurrentRoom = async () => {
+    if (!client || !currentRoom) {
+      return;
+    }
+
+    setActionError(null);
+
+    try {
+      await joinTandemRoom(client, currentRoom);
+      await refresh();
+      await refreshTangentTopics();
+    } catch (cause) {
+      console.error(cause);
+      setActionError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const handleLeaveCurrentRoom = async () => {
+    if (!client || !currentRoom) {
+      return;
+    }
+
+    setActionError(null);
+
+    try {
+      await leaveTandemRoom(client, currentRoom);
+      await refreshTangentTopics();
+      if (tangentSpaceId) {
+        navigate(`/tandem/space/${encodeURIComponent(tangentSpaceId)}`, {
+          replace: true,
+        });
+        return;
+      }
+
+      navigate('/other', { replace: true });
+    } catch (cause) {
+      console.error(cause);
+      setActionError(cause instanceof Error ? cause.message : String(cause));
+    }
   };
 
   const conversationMenuButtons = [
@@ -588,6 +640,17 @@ function RoomPage() {
               void handleUpdateRoomMeta({
                 category: nextCategory.trim() || undefined,
               });
+            },
+          },
+        ]
+      : []),
+    ...(membershipPolicy?.supportsLeave && roomMembership === 'join'
+      ? [
+          {
+            text: 'Leave room',
+            cssClass: 'app-action-danger',
+            handler: () => {
+              setShowLeaveConfirm(true);
             },
           },
         ]
@@ -697,6 +760,18 @@ function RoomPage() {
             <div className="py-6 text-center text-sm text-danger">
               {visibleError}
             </div>
+          ) : membershipPolicy && roomMembership !== 'join' ? (
+            <div className="space-y-4">
+              <div className="rounded-[28px] border border-line bg-panel/95 px-5 py-5 shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
+                {membershipPolicy.supportsJoin ? (
+                  <Button onClick={() => void handleJoinCurrentRoom()}>
+                    {roomMembership === 'invite' ? 'Join room' : 'Rejoin room'}
+                  </Button>
+                ) : (
+                  <div className="text-sm text-text-muted">Unavailable</div>
+                )}
+              </div>
+            </div>
           ) : messages.length === 0 ? (
             <div className="py-12 text-center">
               <p className="text-base font-medium text-text">No messages yet</p>
@@ -740,7 +815,9 @@ function RoomPage() {
                 fill="clear"
                 color="medium"
                 onClick={() => attachmentInputRef.current?.click()}
-                disabled={uploadingAttachment || sending}
+                disabled={
+                  !canInteractWithTimeline || uploadingAttachment || sending
+                }
               >
                 <IonIcon slot="icon-only" icon={attachOutline} />
               </IonButton>
@@ -755,16 +832,23 @@ function RoomPage() {
             placeholder={
               isPendingRoom
                 ? 'Start typing while the room finishes setting up'
-                : 'Message'
+                : canInteractWithTimeline
+                  ? 'Message'
+                  : 'Join this room to send messages'
             }
             className="app-compose-field"
+            disabled={!canInteractWithTimeline}
           />
           <IonButton
             shape="round"
             color="primary"
             onClick={handleSendMessage}
             disabled={
-              isPendingRoom || sending || uploadingAttachment || !draft.trim()
+              !canInteractWithTimeline ||
+              isPendingRoom ||
+              sending ||
+              uploadingAttachment ||
+              !draft.trim()
             }
           >
             <IonIcon slot="icon-only" icon={send} />
@@ -807,6 +891,34 @@ function RoomPage() {
               }}
             >
               Archive room
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showLeaveConfirm}
+        onClose={() => setShowLeaveConfirm(false)}
+        title="Leave room"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-text-muted">
+            Leave <span className="font-medium text-text">{roomName}</span>?
+            You can rejoin this Tandem topic later from its space.
+          </p>
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowLeaveConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setShowLeaveConfirm(false);
+                void handleLeaveCurrentRoom();
+              }}
+            >
+              Leave room
             </Button>
           </div>
         </div>

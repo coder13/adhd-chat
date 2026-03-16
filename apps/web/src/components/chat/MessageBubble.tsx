@@ -125,7 +125,9 @@ function MessageBubble({
   if (viewMode === 'bubbles') {
     return (
       <>
-        <div className={`app-chat-bubble ${message.isOwn ? 'own' : 'other'}`}>
+        <div
+          className={`app-chat-bubble ${message.isOwn ? 'own' : 'other'}`}
+        >
           {!message.isOwn && (
             <p className="mb-1 text-xs font-medium text-text-subtle">
               {message.senderName}
@@ -194,7 +196,7 @@ function MessageBubble({
           className="h-9 w-9 shrink-0"
           textClassName="text-sm"
         />
-        <div className="min-w-0 flex-1">
+        <div className="app-message-surface min-w-0 flex-1 px-3 py-2">
           <div className="flex items-baseline gap-2">
             <p className="text-sm font-semibold text-text">
               {message.senderName}

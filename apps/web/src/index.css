@@ -77,12 +77,35 @@
     --padding-start: 14px;
     --inner-padding-end: 14px;
     --min-height: 72px;
-    border-radius: 24px;
     margin-bottom: 4px;
   }
 
-  .app-list-item.is-active {
+  .app-list-item::part(native) {
+    border-radius: 24px;
+    transition:
+      background-color 160ms ease,
+      transform 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .app-list-item.is-active::part(native) {
     --background: rgba(var(--ion-color-primary-rgb), 0.12);
+  }
+
+  .app-hover-surface {
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
+
+  .app-message-surface {
+    border-radius: 20px;
+    transition:
+      background-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
   }
 
   .app-chat-bubble {
@@ -91,6 +114,10 @@
     padding: 12px 14px;
     font-size: 14px;
     line-height: 1.5;
+    transition:
+      background-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
   }
 
   .app-chat-bubble.own {
@@ -169,5 +196,62 @@
   .app-action-sheet .action-sheet-button.action-sheet-destructive {
     color: #dc2626;
     font-weight: 600;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .app-list-item:hover::part(native) {
+      --background: color-mix(
+        in srgb,
+        var(--app-shell-background) 60%,
+        rgba(var(--ion-color-primary-rgb), 0.14)
+      );
+      transform: translateY(-1px);
+      box-shadow:
+        0 12px 28px -22px rgba(15, 23, 42, 0.35),
+        0 6px 18px -18px rgba(15, 23, 42, 0.28);
+    }
+
+    .app-hover-surface:hover {
+      background: color-mix(
+        in srgb,
+        var(--app-shell-background) 78%,
+        rgba(var(--ion-color-primary-rgb), 0.12)
+      );
+      border-color: rgba(var(--ion-color-primary-rgb), 0.18);
+      transform: translateY(-1px);
+      box-shadow:
+        0 18px 34px -26px rgba(15, 23, 42, 0.34),
+        0 10px 22px -22px rgba(15, 23, 42, 0.25);
+    }
+
+    .app-message-surface:hover {
+      background: color-mix(
+        in srgb,
+        var(--app-shell-background) 76%,
+        rgba(var(--ion-color-primary-rgb), 0.1)
+      );
+      box-shadow: 0 14px 28px -26px rgba(15, 23, 42, 0.28);
+    }
+
+    .app-chat-bubble:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 28px -24px rgba(15, 23, 42, 0.28);
+    }
+
+    .app-chat-bubble.own:hover {
+      background: color-mix(
+        in srgb,
+        var(--app-bubble-own) 90%,
+        white 10%
+      );
+    }
+
+    .app-chat-bubble.other:hover {
+      background: color-mix(
+        in srgb,
+        var(--app-bubble-other) 88%,
+        rgba(var(--ion-color-primary-rgb), 0.12)
+      );
+    }
   }
 }

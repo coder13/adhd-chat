@@ -53,7 +53,7 @@ function ChatListSection({
           button
           detail={false}
           routerLink={`/room/${encodeURIComponent(chat.id)}`}
-          className="app-list-item"
+          className="app-list-item app-hover-surface"
         >
           <AppAvatar name={chat.name} className="h-12 w-12" />
           <IonLabel className="py-1">
