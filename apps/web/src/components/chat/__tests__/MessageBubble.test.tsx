@@ -104,4 +104,32 @@ describe('MessageBubble', () => {
     expect(screen.getByText('Failed to send')).toBeInTheDocument();
     expect(onRetry).toHaveBeenCalledWith('failed-message');
   });
+
+  it('shows a media reload action when authenticated image fetch fails', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = jest.fn(async () => ({
+      ok: false,
+      status: 500,
+    } as Response)) as typeof fetch;
+
+    render(
+      <MessageBubble
+        message={{
+          id: 'image-message',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'photo.jpg',
+          timestamp: Date.UTC(2026, 2, 15, 10, 34),
+          isOwn: false,
+          msgtype: 'm.image',
+          mediaUrl: 'https://media.example/image',
+        }}
+        accessToken="token"
+      />
+    );
+
+    expect(await screen.findByText('Unable to load image')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry load' })).toBeInTheDocument();
+    globalThis.fetch = originalFetch;
+  });
 });

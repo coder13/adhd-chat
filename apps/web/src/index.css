@@ -109,6 +109,7 @@
   }
 
   .app-chat-bubble {
+    width: fit-content;
     max-width: 82%;
     border-radius: 22px;
     padding: 12px 14px;

@@ -3,16 +3,38 @@
 jest.mock('matrix-js-sdk', () => ({
   MsgType: {
     Text: 'm.text',
+    Image: 'm.image',
+    File: 'm.file',
   },
 }));
 
 import {
+  createOptimisticAttachmentMessage,
   createOptimisticTextMessage,
   mergeTimelineMessages,
   reconcileOptimisticTimeline,
 } from '../optimisticTimeline';
 
 describe('optimistic timeline helpers', () => {
+  const originalCreateObjectUrlDescriptor = Object.getOwnPropertyDescriptor(
+    URL,
+    'createObjectURL'
+  );
+
+  beforeEach(() => {
+    URL.createObjectURL = jest.fn(() => 'blob:preview') as never;
+  });
+
+  afterEach(() => {
+    if (originalCreateObjectUrlDescriptor) {
+      Object.defineProperty(URL, 'createObjectURL', originalCreateObjectUrlDescriptor);
+      return;
+    }
+
+    delete (URL as { createObjectURL?: typeof URL.createObjectURL })
+      .createObjectURL;
+  });
+
   it('creates local sending text messages', () => {
     expect(
       createOptimisticTextMessage({
@@ -29,6 +51,29 @@ describe('optimistic timeline helpers', () => {
         body: 'hello',
         senderName: 'Me',
         msgtype: 'm.text',
+      })
+    );
+  });
+
+  it('creates local sending attachment messages with retry data', () => {
+    const file = new File(['hello'], 'hello.txt', { type: 'text/plain' });
+    const message = createOptimisticAttachmentMessage({
+      file,
+      senderId: '@me:matrix.org',
+      senderName: 'Me',
+      transactionId: 'txn-file-1',
+      timestamp: 12,
+    });
+
+    expect(message).toEqual(
+      expect.objectContaining({
+        id: 'local:txn-file-1',
+        body: 'hello.txt',
+        msgtype: 'm.file',
+        deliveryStatus: 'sending',
+        retryFile: file,
+        mimeType: 'text/plain',
+        mediaUrl: 'blob:preview',
       })
     );
   });

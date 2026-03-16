@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AppAvatar, Modal } from '..';
 import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
 import type { ChatViewMode } from '../../lib/matrix/preferences';
+import { cn } from '../../lib/cn';
 import { renderLinkedMessageText } from './linkSegments';
 
 function formatMessageTimestamp(timestamp: number) {
@@ -45,6 +46,7 @@ function MessageBubble({
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState(false);
   const [isImageExpanded, setIsImageExpanded] = useState(false);
+  const [mediaRetryToken, setMediaRetryToken] = useState(0);
 
   useEffect(() => {
     if (!message.mediaUrl || !accessToken) {
@@ -92,7 +94,7 @@ function MessageBubble({
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [accessToken, message.mediaUrl]);
+  }, [accessToken, mediaRetryToken, message.mediaUrl]);
 
   if (isNotice) {
     return (
@@ -109,6 +111,20 @@ function MessageBubble({
   const linkedMessageBody = renderLinkedMessageText(message.body);
   const isSending = message.deliveryStatus === 'sending';
   const isFailed = message.deliveryStatus === 'failed';
+  const statusLabel = isSending
+    ? 'Sending…'
+    : isFailed
+      ? 'Failed to send'
+      : null;
+  const retryMediaLoadButton = mediaError ? (
+    <button
+      type="button"
+      onClick={() => setMediaRetryToken((value) => value + 1)}
+      className="text-xs font-medium text-accent underline underline-offset-2"
+    >
+      Retry load
+    </button>
+  ) : null;
   const imagePreview = resolvedMediaUrl ? (
     <button
       type="button"
@@ -123,10 +139,45 @@ function MessageBubble({
       />
     </button>
   ) : (
-    <div className="flex h-40 w-full items-center justify-center rounded-2xl border border-line bg-elevated text-sm text-text-muted">
-      {mediaError ? 'Unable to load image' : 'Loading image...'}
+    <div className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-elevated px-4 text-center text-sm text-text-muted">
+      <span>{mediaError ? 'Unable to load image' : 'Loading image...'}</span>
+      {retryMediaLoadButton}
     </div>
   );
+
+  const fileCard =
+    message.msgtype === 'm.file' ? (
+      resolvedMediaUrl ? (
+        <a
+          href={resolvedMediaUrl}
+          target="_blank"
+          rel="noreferrer"
+          download={message.body || 'attachment'}
+          className="mt-2 flex max-w-[320px] items-center justify-between gap-3 rounded-2xl border border-line bg-elevated px-3 py-3 text-text transition-colors hover:bg-panel"
+        >
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{message.body}</p>
+            <p className="mt-1 text-xs text-text-subtle">
+              {[message.mimeType, fileSize].filter(Boolean).join(' • ') || 'File'}
+            </p>
+          </div>
+          <span className="text-xs font-medium text-accent">Open</span>
+        </a>
+      ) : (
+        <div className="mt-2 flex max-w-[320px] items-center justify-between gap-3 rounded-2xl border border-line bg-elevated px-3 py-3 text-text">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{message.body}</p>
+            <p className="mt-1 text-xs text-text-subtle">
+              {[message.mimeType, fileSize].filter(Boolean).join(' • ') || 'File'}
+            </p>
+            <p className="mt-1 text-xs text-text-subtle">
+              {mediaError ? 'Unable to load file' : 'Loading file...'}
+            </p>
+          </div>
+          <div className="shrink-0">{retryMediaLoadButton}</div>
+        </div>
+      )
+    ) : null;
 
   if (viewMode === 'bubbles') {
     return (
@@ -142,42 +193,41 @@ function MessageBubble({
 
           {message.msgtype === 'm.image' ? (
             <div className="max-w-[280px]">{imagePreview}</div>
-          ) : message.msgtype === 'm.file' && resolvedMediaUrl ? (
-            <a
-              href={resolvedMediaUrl}
-              target="_blank"
-              rel="noreferrer"
-              download={message.body || 'attachment'}
-              className="mt-1 flex items-center justify-between gap-3 rounded-2xl border border-line bg-white/40 px-3 py-3 text-text transition-colors hover:bg-white/60"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{message.body}</p>
-                <p className="mt-1 text-xs text-text-subtle">
-                  {[message.mimeType, fileSize].filter(Boolean).join(' • ') ||
-                    'File'}
-                </p>
-              </div>
-              <span className="text-xs font-medium text-accent">Open</span>
-            </a>
+          ) : message.msgtype === 'm.file' ? (
+            <div className="max-w-[280px]">
+              {fileCard}
+            </div>
           ) : message.msgtype === 'm.emote' ? (
-            <p className="whitespace-pre-wrap text-sm italic leading-6">
-              * {message.senderName} {linkedMessageBody}
-            </p>
+            <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-1 text-sm italic leading-6">
+              <p className="whitespace-pre-wrap">
+                * {message.senderName} {linkedMessageBody}
+              </p>
+              <p className="shrink-0 text-[11px] not-italic text-text-subtle">
+                {formatMessageTimestamp(message.timestamp)}
+                {statusLabel ? (
+                  <span>
+                    {' · '}
+                    {statusLabel}
+                  </span>
+                ) : null}
+              </p>
+            </div>
           ) : (
-            <p className="whitespace-pre-wrap text-sm leading-6">
-              {linkedMessageBody}
-            </p>
+            <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-1 text-sm leading-6">
+              <p className="whitespace-pre-wrap">
+                {linkedMessageBody}
+              </p>
+              <p className="shrink-0 text-[11px] text-text-subtle">
+                {formatMessageTimestamp(message.timestamp)}
+                {statusLabel ? (
+                  <span>
+                    {' · '}
+                    {statusLabel}
+                  </span>
+                ) : null}
+              </p>
+            </div>
           )}
-
-          <p className="mt-2 text-right text-[11px] text-text-subtle">
-            {formatMessageTimestamp(message.timestamp)}
-            {(isSending || isFailed) && (
-              <span>
-                {' · '}
-                {isSending ? 'Sending…' : 'Failed to send'}
-              </span>
-            )}
-          </p>
           {isFailed && onRetry ? (
             <div className="mt-1 flex justify-end">
               <button
@@ -219,7 +269,12 @@ function MessageBubble({
           className="h-9 w-9 shrink-0"
           textClassName="text-sm"
         />
-        <div className="app-message-surface min-w-0 flex-1 px-3 py-2">
+        <div
+          className={cn(
+            'app-message-surface min-w-0 max-w-[min(100%,34rem)] px-3 py-2',
+            message.isOwn ? 'ml-auto w-fit' : 'w-fit'
+          )}
+        >
           <div className="flex items-baseline gap-2">
             <p className="text-sm font-semibold text-text">
               {message.senderName}
@@ -231,37 +286,29 @@ function MessageBubble({
 
           {message.msgtype === 'm.image' ? (
             <div className="mt-2 max-w-[280px]">{imagePreview}</div>
-          ) : message.msgtype === 'm.file' && resolvedMediaUrl ? (
-            <a
-              href={resolvedMediaUrl}
-              target="_blank"
-              rel="noreferrer"
-              download={message.body || 'attachment'}
-              className="mt-2 flex max-w-[320px] items-center justify-between gap-3 rounded-2xl border border-line bg-elevated px-3 py-3 text-text transition-colors hover:bg-panel"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{message.body}</p>
-                <p className="mt-1 text-xs text-text-subtle">
-                  {[message.mimeType, fileSize].filter(Boolean).join(' • ') ||
-                    'File'}
-                </p>
-              </div>
-              <span className="text-xs font-medium text-accent">Open</span>
-            </a>
+          ) : message.msgtype === 'm.file' ? (
+            fileCard
           ) : message.msgtype === 'm.emote' ? (
-            <p className="mt-1 whitespace-pre-wrap text-sm italic leading-6 text-text">
-              * {message.senderName} {linkedMessageBody}
-            </p>
+            <div className="mt-1 flex flex-wrap items-end gap-x-2 gap-y-1 text-sm italic leading-6 text-text">
+              <p className="whitespace-pre-wrap">
+                * {message.senderName} {linkedMessageBody}
+              </p>
+              <p className="shrink-0 text-[11px] not-italic text-text-subtle">
+                {formatMessageTimestamp(message.timestamp)}
+              </p>
+            </div>
           ) : (
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-text">
-              {linkedMessageBody}
-            </p>
+            <div className="mt-1 flex flex-wrap items-end gap-x-2 gap-y-1 text-sm leading-6 text-text">
+              <p className="whitespace-pre-wrap">
+                {linkedMessageBody}
+              </p>
+              <p className="shrink-0 text-[11px] text-text-subtle">
+                {formatMessageTimestamp(message.timestamp)}
+              </p>
+            </div>
           )}
           <div className="mt-2 flex items-center gap-2 text-[11px] text-text-subtle">
-            <span>{formatMessageTimestamp(message.timestamp)}</span>
-            {(isSending || isFailed) && (
-              <span>{isSending ? 'Sending…' : 'Failed to send'}</span>
-            )}
+            {statusLabel ? <span>{statusLabel}</span> : null}
             {isFailed && onRetry ? (
               <button
                 type="button"

@@ -43,6 +43,7 @@ import {
   type RoomSnapshot,
 } from '../lib/matrix/roomSnapshot';
 import {
+  createOptimisticAttachmentMessage,
   createOptimisticTextMessage,
   mergeTimelineMessages,
   reconcileOptimisticTimeline,
@@ -527,25 +528,70 @@ function RoomPage() {
       return;
     }
 
+    const transactionId = createId('txn');
+    const senderName = resolveOwnSenderName(client, roomId, user.userId);
+    const optimisticAttachmentMessage = createOptimisticAttachmentMessage({
+      file,
+      senderId: user.userId,
+      senderName,
+      transactionId,
+    });
+
+    setOptimisticMessages((currentMessages) => [
+      ...currentMessages,
+      optimisticAttachmentMessage,
+    ]);
     setUploadingAttachment(true);
     setActionError(null);
 
     try {
       const content = await buildMatrixMediaPayload(client, file);
-      await (
+      const response = (await (
         client.sendEvent as (
           nextRoomId: string,
           eventType: string,
           content: Record<string, unknown>,
           txnId?: string
         ) => Promise<unknown>
-      )(roomId, 'm.room.message', content, createId('txn'));
+      )(roomId, 'm.room.message', content, transactionId)) as
+        | { event_id?: string }
+        | string
+        | undefined;
+      const remoteEventId =
+        typeof response === 'string'
+          ? response
+          : response && typeof response === 'object' && 'event_id' in response
+            ? response.event_id ?? null
+            : null;
+      setOptimisticMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.transactionId === transactionId
+            ? {
+                ...message,
+                remoteEventId,
+              }
+            : message
+        )
+      );
       requestAnimationFrame(() => {
         void contentRef.current?.scrollToBottom(250);
       });
+      void refresh();
     } catch (cause) {
       console.error(cause);
-      setActionError(cause instanceof Error ? cause.message : String(cause));
+      const errorText = cause instanceof Error ? cause.message : String(cause);
+      setActionError(errorText);
+      setOptimisticMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.transactionId === transactionId
+            ? {
+                ...message,
+                deliveryStatus: 'failed',
+                errorText,
+              }
+            : message
+        )
+      );
     } finally {
       setUploadingAttachment(false);
     }
@@ -577,6 +623,81 @@ function RoomPage() {
       (message) => message.id === messageId && message.deliveryStatus === 'failed'
     );
     if (!failedMessage) {
+      return;
+    }
+
+    if (failedMessage.retryFile) {
+      const transactionId = createId('txn');
+      const retryFile = failedMessage.retryFile;
+      setOptimisticMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                deliveryStatus: 'sending',
+                errorText: null,
+                transactionId,
+              }
+            : message
+        )
+      );
+      setUploadingAttachment(true);
+      setActionError(null);
+      void (async () => {
+        try {
+          const content = await buildMatrixMediaPayload(client, retryFile);
+          const response = (await (
+            client.sendEvent as (
+              nextRoomId: string,
+              eventType: string,
+              content: Record<string, unknown>,
+              txnId?: string
+            ) => Promise<unknown>
+          )(roomId, 'm.room.message', content, transactionId)) as
+            | { event_id?: string }
+            | string
+            | undefined;
+          const remoteEventId =
+            typeof response === 'string'
+              ? response
+              : response &&
+                  typeof response === 'object' &&
+                  'event_id' in response
+                ? response.event_id ?? null
+                : null;
+          setOptimisticMessages((currentMessages) =>
+            currentMessages.map((message) =>
+              message.id === messageId
+                ? {
+                    ...message,
+                    transactionId,
+                    remoteEventId,
+                  }
+                : message
+            )
+          );
+          void refresh();
+        } catch (cause) {
+          console.error(cause);
+          const errorText =
+            cause instanceof Error ? cause.message : String(cause);
+          setActionError(errorText);
+          setOptimisticMessages((currentMessages) =>
+            currentMessages.map((message) =>
+              message.id === messageId
+                ? {
+                    ...message,
+                    transactionId,
+                    deliveryStatus: 'failed',
+                    errorText,
+                  }
+                : message
+            )
+          );
+        } finally {
+          setUploadingAttachment(false);
+        }
+      })();
       return;
     }
 

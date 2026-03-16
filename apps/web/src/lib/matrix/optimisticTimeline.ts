@@ -7,6 +7,7 @@ export type OptimisticTimelineMessage = TimelineMessage & {
   deliveryStatus: 'sending' | 'failed';
   errorText?: string | null;
   remoteEventId?: string | null;
+  retryFile?: File | null;
 };
 
 export function createOptimisticTextMessage(options: {
@@ -32,6 +33,37 @@ export function createOptimisticTextMessage(options: {
     errorText: null,
     remoteEventId: null,
   };
+}
+
+export function createOptimisticAttachmentMessage(options: {
+  file: File;
+  senderId: string;
+  senderName: string;
+  transactionId: string;
+  timestamp?: number;
+}) {
+  const timestamp = options.timestamp ?? Date.now();
+  const isImage = options.file.type.startsWith('image/');
+  const previewUrl = URL.createObjectURL(options.file);
+
+  return {
+    id: `local:${options.transactionId}`,
+    localId: `local:${options.transactionId}`,
+    transactionId: options.transactionId,
+    senderId: options.senderId,
+    senderName: options.senderName,
+    body: options.file.name,
+    timestamp,
+    isOwn: true,
+    msgtype: isImage ? MsgType.Image : MsgType.File,
+    deliveryStatus: 'sending' as const,
+    errorText: null,
+    remoteEventId: null,
+    retryFile: options.file,
+    mediaUrl: previewUrl,
+    mimeType: options.file.type || null,
+    fileSize: options.file.size,
+  } satisfies OptimisticTimelineMessage;
 }
 
 export function mergeTimelineMessages(
