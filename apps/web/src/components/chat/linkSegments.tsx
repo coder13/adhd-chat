@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
+import { createMentionToken } from './mentions';
 
 type LinkSegment =
   | { type: 'text'; value: string }
-  | { type: 'link'; value: string; href: string };
+  | { type: 'link'; value: string; href: string }
+  | { type: 'mention'; value: string };
 
 const URL_PATTERN = /\b((?:https?:\/\/|www\.)[^\s<]+[^\s<.,;:!?)]?)/gi;
 
@@ -45,8 +47,44 @@ export function splitMessageTextIntoSegments(message: string): LinkSegment[] {
   return segments.length > 0 ? segments : [{ type: 'text', value: message }];
 }
 
-export function renderLinkedMessageText(message: string): ReactNode[] {
-  return splitMessageTextIntoSegments(message).map((segment, index) => {
+function splitTextSegmentForMentions(
+  value: string,
+  mentionLabels: string[]
+): LinkSegment[] {
+  if (!mentionLabels.length || !value) {
+    return [{ type: 'text', value }];
+  }
+
+  const mentionPattern = new RegExp(
+    `(${mentionLabels
+      .map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('|')})`,
+    'g'
+  );
+  const parts = value.split(mentionPattern).filter(Boolean);
+
+  return parts.map((part) =>
+    mentionLabels.includes(part)
+      ? { type: 'mention', value: part }
+      : { type: 'text', value: part }
+  );
+}
+
+export function renderLinkedMessageText(
+  message: string,
+  mentionTargets: Array<{ userId: string; displayName: string }> = []
+): ReactNode[] {
+  const mentionLabels = mentionTargets.map((target) =>
+    createMentionToken(target.displayName, target.userId)
+  );
+
+  return splitMessageTextIntoSegments(message)
+    .flatMap((segment) =>
+      segment.type === 'text'
+        ? splitTextSegmentForMentions(segment.value, mentionLabels)
+        : [segment]
+    )
+    .map((segment, index) => {
     if (segment.type === 'text') {
       return (
         <span key={`text:${index}`}>
@@ -55,16 +93,27 @@ export function renderLinkedMessageText(message: string): ReactNode[] {
       );
     }
 
+    if (segment.type === 'link') {
+      return (
+        <a
+          key={`link:${index}:${segment.href}`}
+          href={segment.href}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="font-medium text-accent underline decoration-accent/40 underline-offset-2 break-all"
+        >
+          {segment.value}
+        </a>
+      );
+    }
+
     return (
-      <a
-        key={`link:${index}:${segment.href}`}
-        href={segment.href}
-        target="_blank"
-        rel="noreferrer noopener"
-        className="font-medium text-accent underline decoration-accent/40 underline-offset-2 break-all"
+      <span
+        key={`mention:${index}:${segment.value}`}
+        className="rounded-full bg-accent/12 px-1.5 py-0.5 font-medium text-accent"
       >
         {segment.value}
-      </a>
+      </span>
     );
   });
 }

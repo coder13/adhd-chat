@@ -9,9 +9,11 @@ jest.mock('matrix-js-sdk', () => ({
 }));
 
 import {
+  applyOptimisticReactionChanges,
   createOptimisticAttachmentMessage,
   createOptimisticTextMessage,
   mergeTimelineMessages,
+  reconcileOptimisticReactionChanges,
   reconcileOptimisticTimeline,
 } from '../optimisticTimeline';
 
@@ -162,6 +164,117 @@ describe('optimistic timeline helpers', () => {
         },
       ],
       [optimisticMessage]
+    );
+
+    expect(reconciled).toEqual([]);
+  });
+
+  it('applies optimistic reaction additions immediately', () => {
+    const [message] = applyOptimisticReactionChanges(
+      [
+        {
+          id: 'server-1',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'hi',
+          timestamp: 10,
+          isOwn: false,
+          msgtype: 'm.text',
+          reactions: [],
+        },
+      ],
+      [
+        {
+          targetMessageId: 'server-1',
+          key: '❤️',
+          senderName: 'Me',
+          mode: 'add',
+        },
+      ]
+    );
+
+    expect(message.reactions).toEqual([
+      expect.objectContaining({
+        key: '❤️',
+        count: 1,
+        isOwn: true,
+        senderNames: ['Me'],
+      }),
+    ]);
+  });
+
+  it('applies optimistic reaction removals immediately', () => {
+    const [message] = applyOptimisticReactionChanges(
+      [
+        {
+          id: 'server-1',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'hi',
+          timestamp: 10,
+          isOwn: false,
+          msgtype: 'm.text',
+          reactions: [
+            {
+              key: '❤️',
+              count: 2,
+              isOwn: true,
+              ownEventId: '$reaction',
+              senderNames: ['Alex', 'Me'],
+            },
+          ],
+        },
+      ],
+      [
+        {
+          targetMessageId: 'server-1',
+          key: '❤️',
+          senderName: 'Me',
+          mode: 'remove',
+        },
+      ]
+    );
+
+    expect(message.reactions).toEqual([
+      expect.objectContaining({
+        key: '❤️',
+        count: 1,
+        isOwn: false,
+        senderNames: ['Alex'],
+      }),
+    ]);
+  });
+
+  it('reconciles optimistic reaction changes once the server catches up', () => {
+    const reconciled = reconcileOptimisticReactionChanges(
+      [
+        {
+          id: 'server-1',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'hi',
+          timestamp: 10,
+          isOwn: false,
+          msgtype: 'm.text',
+          reactions: [
+            {
+              key: '❤️',
+              count: 1,
+              isOwn: true,
+              ownEventId: '$reaction',
+              senderNames: ['Me'],
+            },
+          ],
+        },
+      ],
+      [
+        {
+          targetMessageId: 'server-1',
+          key: '❤️',
+          senderName: 'Me',
+          mode: 'add',
+        },
+      ]
     );
 
     expect(reconciled).toEqual([]);

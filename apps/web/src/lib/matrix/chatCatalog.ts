@@ -1,6 +1,6 @@
 import {
-  EventStatus,
   MsgType,
+  NotificationCountType,
   type MatrixClient,
   type MatrixEvent,
   type Room,
@@ -10,6 +10,19 @@ import {
   getTandemRoomMeta,
   TANDEM_ROOM_EVENT_TYPE,
 } from './tandem';
+import {
+  buildReactionIndex,
+  buildReplacementIndex,
+  isVisibleTimelineMessage,
+  resolveTimelineEvent,
+  type TimelineReaction,
+  type TimelineReply,
+} from './timelineRelations';
+import {
+  getRoomTimelineEvents,
+  getTimelineEventContent,
+  isRenderableTimelineMessage,
+} from './timelineEvents';
 
 const ADHD_CHAT_SPACE_EVENT_TYPE = 'dev.adhd-chat.space';
 const ROOM_CREATE_EVENT_TYPE = 'm.room.create';
@@ -22,6 +35,7 @@ export type ChatSummary = {
   name: string;
   preview: string;
   timestamp: number;
+  unreadCount: number;
   isDirect: boolean;
   isEncrypted: boolean;
   memberCount: number;
@@ -62,6 +76,11 @@ export type TimelineMessage = {
   imageWidth?: number | null;
   imageHeight?: number | null;
   readByNames?: string[] | null;
+  isEdited?: boolean;
+  isDeleted?: boolean;
+  replyTo?: TimelineReply | null;
+  reactions?: TimelineReaction[];
+  mentionedUserIds?: string[] | null;
 };
 
 function asArray<T>(value: T | T[] | null | undefined): T[] {
@@ -140,27 +159,14 @@ function hasNativeSpaceMetadata(room: Room) {
 }
 
 function getLatestMessageEvent(room: Room) {
-  const events = room.getLiveTimeline().getEvents();
+  const events = getRoomTimelineEvents(room);
 
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (event.getType() !== 'm.room.message') {
+    if (!isRenderableTimelineMessage(event)) {
       continue;
     }
-
-    const content = event.getContent<{ body?: string; msgtype?: string }>();
-    if (
-      content.msgtype === MsgType.Text ||
-      content.msgtype === MsgType.Image ||
-      content.msgtype === MsgType.File ||
-      content.msgtype === MsgType.Audio ||
-      content.msgtype === MsgType.Video ||
-      content.msgtype === MsgType.Emote ||
-      content.msgtype === MsgType.Notice ||
-      !content.msgtype
-    ) {
-      return event;
-    }
+    return event;
   }
 
   return null;
@@ -172,10 +178,7 @@ function getPreviewText(room: Room) {
     return 'No messages yet';
   }
 
-  const content = latestMessageEvent.getContent<{
-    body?: string;
-    msgtype?: string;
-  }>();
+  const content = getTimelineEventContent(latestMessageEvent);
 
   switch (content.msgtype) {
     case MsgType.Image:
@@ -265,6 +268,7 @@ export async function buildChatCatalog(
         name: getRoomDisplayName(room, userId),
         preview: getPreviewText(room),
         timestamp: getLatestTimestamp(room),
+        unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
         isDirect,
         isEncrypted: Boolean(encryptionEvent),
         memberCount: room.getJoinedMemberCount(),
@@ -299,47 +303,18 @@ export function getTimelineMessages(
   room: Room,
   currentUserId: string
 ): TimelineMessage[] {
-  return room
-    .getLiveTimeline()
-    .getEvents()
-    .filter((event) => event.getType() === 'm.room.message')
+  const events = getRoomTimelineEvents(room);
+  const eventById = new Map(
+    events
+      .map((event) => [event.getId(), event] as const)
+      .filter((entry): entry is [string, MatrixEvent] => Boolean(entry[0]))
+  );
+  const replacementsByTarget = buildReplacementIndex(events);
+  const reactionsByTarget = buildReactionIndex(events, room, currentUserId);
+
+  return events
+    .filter(isVisibleTimelineMessage)
     .map((event) => {
-      const content = event.getContent<{
-        body?: string;
-        msgtype?: string;
-        url?: string;
-        info?: {
-          mimetype?: string;
-          size?: number;
-          w?: number;
-          h?: number;
-        };
-      }>();
-      const unsigned = event.getUnsigned() as
-        | { transaction_id?: string }
-        | undefined;
-      const transactionId =
-        event.getTxnId?.() ?? unsigned?.transaction_id ?? null;
-      const deliveryStatus: TimelineMessage['deliveryStatus'] =
-        event.status === EventStatus.NOT_SENT
-          ? 'failed'
-          : event.status === EventStatus.SENDING ||
-              event.status === EventStatus.QUEUED ||
-              event.status === EventStatus.ENCRYPTING
-            ? 'sending'
-            : 'sent';
-      const mediaUrl = content.url
-        ? (client.mxcUrlToHttp(
-            content.url,
-            undefined,
-            undefined,
-            undefined,
-            false,
-            true,
-            true
-          ) ?? null)
-        : null;
-      const msgtype = content.msgtype ?? MsgType.Text;
       const readByNames = event
         .getId()
         ? room
@@ -358,53 +333,35 @@ export function getTimelineMessages(
             })
             .sort((left, right) => left.localeCompare(right))
         : [];
-      const body = (() => {
-        switch (msgtype) {
-          case MsgType.Image:
-            return content.body ?? 'Image';
-          case MsgType.File:
-            return content.body ?? 'File';
-          case MsgType.Audio:
-            return content.body ?? 'Audio';
-          case MsgType.Video:
-            return content.body ?? 'Video';
-          case MsgType.Emote:
-            return content.body ?? '';
-          case MsgType.Notice:
-          case MsgType.Text:
-          default:
-            return content.body ?? '';
-        }
-      })();
+      const resolvedMessage = resolveTimelineEvent(event, {
+        currentUserId,
+        room,
+        replacementsByTarget,
+        reactionsByTarget,
+        eventById,
+      });
 
       return {
-        id: event.getId() ?? `${event.getTs()}`,
-        senderId: event.getSender() ?? 'Unknown sender',
-        senderName:
-          room.getMember(event.getSender() ?? '')?.name ||
-          room.getMember(event.getSender() ?? '')?.rawDisplayName ||
-          event.getSender() ||
-          'Unknown sender',
-        body,
-        timestamp: event.getTs(),
-        isOwn: event.getSender() === currentUserId,
-        msgtype,
-        transactionId,
-        deliveryStatus,
-        errorText:
-          event.status === EventStatus.NOT_SENT
-            ? event.error?.message ?? 'Failed to send'
-            : null,
-        mediaUrl,
-        mimeType: content.info?.mimetype ?? null,
-        fileSize: content.info?.size ?? null,
-        imageWidth: content.info?.w ?? null,
-        imageHeight: content.info?.h ?? null,
+        ...resolvedMessage,
+        mediaUrl: resolvedMessage.mediaUrl
+          ? (client.mxcUrlToHttp(
+              resolvedMessage.mediaUrl,
+              undefined,
+              undefined,
+              undefined,
+              false,
+              true,
+              true
+            ) ?? null)
+          : null,
         readByNames,
       };
     })
     .filter(
-      (message) => message.body.trim().length > 0 || Boolean(message.mediaUrl)
+      (message) =>
+        message.isDeleted ||
+        message.body.trim().length > 0 ||
+        Boolean(message.mediaUrl)
     )
     .sort((a, b) => a.timestamp - b.timestamp);
 }

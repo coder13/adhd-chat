@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppAvatar, Modal } from '..';
 import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
 import type { ChatViewMode } from '../../lib/matrix/preferences';
 import { cn } from '../../lib/cn';
 import { renderLinkedMessageText } from './linkSegments';
+import MessageLinkPreview from './MessageLinkPreview';
 
 function formatMessageTimestamp(timestamp: number) {
   return new Intl.DateTimeFormat(undefined, {
@@ -33,7 +34,13 @@ interface MessageBubbleProps {
   accessToken?: string | null;
   viewMode?: ChatViewMode;
   onRetry?: (messageId: string) => void;
+  onToggleReaction?: (message: TimelineMessage, reactionKey: string) => void;
   receiptNames?: string[] | null;
+  mentionTargets?: Array<{ userId: string; displayName: string }>;
+  onRequestActions?: (
+    message: TimelineMessage,
+    position: { x: number; y: number }
+  ) => void;
 }
 
 function MessageBubble({
@@ -41,7 +48,10 @@ function MessageBubble({
   accessToken = null,
   viewMode = 'timeline',
   onRetry,
+  onToggleReaction,
   receiptNames = null,
+  mentionTargets = [],
+  onRequestActions,
 }: MessageBubbleProps) {
   const fileSize = formatFileSize(message.fileSize);
   const isNotice = message.msgtype === 'm.notice';
@@ -49,6 +59,48 @@ function MessageBubble({
   const [mediaError, setMediaError] = useState(false);
   const [isImageExpanded, setIsImageExpanded] = useState(false);
   const [mediaRetryToken, setMediaRetryToken] = useState(0);
+  const longPressTimeoutRef = useRef<number | null>(null);
+
+  const clearLongPressTimeout = () => {
+    if (longPressTimeoutRef.current !== null) {
+      window.clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+  };
+
+  const isInteractiveTarget = (target: EventTarget | null) =>
+    target instanceof HTMLElement &&
+    Boolean(target.closest('button, a, input, textarea'));
+
+  const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!onRequestActions || isInteractiveTarget(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    onRequestActions(message, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (
+      !onRequestActions ||
+      event.pointerType !== 'touch' ||
+      isInteractiveTarget(event.target)
+    ) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = rect.left + Math.min(rect.width - 24, 48);
+    const y = rect.top + Math.min(rect.height - 24, 48);
+    longPressTimeoutRef.current = window.setTimeout(() => {
+      onRequestActions(message, { x, y });
+      clearLongPressTimeout();
+    }, 450);
+  };
 
   useEffect(() => {
     if (!message.mediaUrl || !accessToken) {
@@ -110,7 +162,7 @@ function MessageBubble({
   }
 
   const imageAltText = message.body?.trim() || 'Image';
-  const linkedMessageBody = renderLinkedMessageText(message.body);
+  const linkedMessageBody = renderLinkedMessageText(message.body, mentionTargets);
   const isSending = message.deliveryStatus === 'sending';
   const isFailed = message.deliveryStatus === 'failed';
   const mediaMeta = [message.mimeType, fileSize].filter(Boolean).join(' • ');
@@ -139,6 +191,55 @@ function MessageBubble({
       ))}
     </div>
   ) : null;
+  const replyPreview = message.replyTo ? (
+    <div className="mb-2 max-w-full rounded-2xl border border-line/80 bg-panel/70 px-3 py-2 text-left">
+      <p className="truncate text-[11px] font-semibold text-text-subtle">
+        {message.replyTo.senderName}
+      </p>
+      <p className="truncate text-xs text-text-muted">
+        {message.replyTo.isDeleted ? 'Message deleted' : message.replyTo.body}
+      </p>
+    </div>
+  ) : null;
+  const reactionBar = message.reactions?.length ? (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {message.reactions.map((reaction) => (
+        <button
+          key={`${message.id}:reaction:${reaction.key}`}
+          type="button"
+          onClick={() => onToggleReaction?.(message, reaction.key)}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-colors',
+            reaction.isOwn
+              ? 'border-accent/30 bg-accent/10 text-accent hover:bg-accent/15'
+              : 'border-line bg-panel/70 text-text-subtle hover:bg-panel'
+          )}
+          aria-label={`${reaction.key} ${reaction.count}`}
+          title={reaction.senderNames.join(', ')}
+        >
+          <span>{reaction.key}</span>
+          <span>{reaction.count}</span>
+        </button>
+      ))}
+    </div>
+  ) : null;
+  const bubbleMeta = (
+    <>
+      {formatMessageTimestamp(message.timestamp)}
+      {message.isEdited ? (
+        <span>
+          {' · '}
+          Edited
+        </span>
+      ) : null}
+      {statusLabel ? (
+        <span>
+          {' · '}
+          {statusLabel}
+        </span>
+      ) : null}
+    </>
+  );
   const retryMediaLoadButton = mediaError ? (
     <button
       type="button"
@@ -207,64 +308,70 @@ function MessageBubble({
     return (
       <>
         <div
-          className={`app-chat-bubble ${message.isOwn ? 'own' : 'other'}`}
+          className={cn('flex items-end gap-2', message.isOwn ? 'justify-end' : 'justify-start')}
         >
-          {!message.isOwn && (
-            <p className="mb-1 text-xs font-medium text-text-subtle">
-              {message.senderName}
-            </p>
-          )}
-
-          {message.msgtype === 'm.image' ? (
-            <div className="max-w-[280px]">{imagePreview}</div>
-          ) : message.msgtype === 'm.file' ? (
-            <div className="max-w-[280px]">
-              {fileCard}
-            </div>
-          ) : message.msgtype === 'm.emote' ? (
-            <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-1 text-sm italic leading-6">
-              <p className="whitespace-pre-wrap">
-                * {message.senderName} {linkedMessageBody}
+          <div
+            className={`app-chat-bubble relative ${message.isOwn ? 'own' : 'other'}`}
+            onContextMenu={handleContextMenu}
+            onPointerDown={handlePointerDown}
+            onPointerUp={clearLongPressTimeout}
+            onPointerCancel={clearLongPressTimeout}
+            onPointerMove={clearLongPressTimeout}
+          >
+            {!message.isOwn && (
+              <p className="mb-1 text-xs font-medium text-text-subtle">
+                {message.senderName}
               </p>
-              <p className="shrink-0 text-[11px] not-italic text-text-subtle">
-                {formatMessageTimestamp(message.timestamp)}
-                {statusLabel ? (
-                  <span>
-                    {' · '}
-                    {statusLabel}
-                  </span>
-                ) : null}
-              </p>
-              {receiptAvatars}
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-1 text-sm leading-6">
-              <p className="whitespace-pre-wrap">
-                {linkedMessageBody}
-              </p>
-              <p className="shrink-0 text-[11px] text-text-subtle">
-                {formatMessageTimestamp(message.timestamp)}
-                {statusLabel ? (
-                  <span>
-                    {' · '}
-                    {statusLabel}
-                  </span>
-                ) : null}
-              </p>
-              {receiptAvatars}
-            </div>
-          )}
-          {isFailed && onRetry ? (
-            <div className="mt-1 flex justify-end">
-              <button
-                type="button"
-                onClick={() => onRetry(message.id)}
-                className="text-[11px] font-medium text-accent underline underline-offset-2"
-              >
-                Retry
-              </button>
-            </div>
-          ) : null}
+            )}
+            {replyPreview}
+            {message.msgtype === 'm.image' ? (
+              <div className="max-w-[280px]">{imagePreview}</div>
+            ) : message.msgtype === 'm.file' ? (
+              <div className="max-w-[280px]">
+                {fileCard}
+              </div>
+            ) : message.msgtype === 'm.emote' ? (
+              <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-1 text-sm italic leading-6">
+                <p className="whitespace-pre-wrap">
+                  * {message.senderName} {linkedMessageBody}
+                </p>
+                <p className="shrink-0 text-[11px] not-italic text-text-subtle">
+                  {bubbleMeta}
+                </p>
+                {receiptAvatars}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-1 text-sm leading-6">
+                <p className="whitespace-pre-wrap">
+                  {linkedMessageBody}
+                </p>
+                <p className="shrink-0 text-[11px] text-text-subtle">
+                  {bubbleMeta}
+                </p>
+                {receiptAvatars}
+              </div>
+            )}
+            {message.msgtype === 'm.text' ? (
+              <MessageLinkPreview
+                messageId={message.id}
+                messageBody={message.body}
+                isOwn={message.isOwn}
+                compact
+              />
+            ) : null}
+            {reactionBar}
+            {isFailed && onRetry ? (
+              <div className="mt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => onRetry(message.id)}
+                  className="text-[11px] font-medium text-accent underline underline-offset-2"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <Modal
@@ -322,27 +429,38 @@ function MessageBubble({
 
   return (
     <>
-      <div className="flex gap-3 py-2">
-        <AppAvatar
-          name={message.senderName}
-          className="h-9 w-9 shrink-0"
-          textClassName="text-sm"
-        />
+      <div
+        className={cn(
+          'flex gap-3 rounded-2xl px-2 py-2 transition-colors',
+          message.isOwn ? 'justify-end' : '',
+          'hover:bg-elevated/70'
+        )}
+      >
+        {!message.isOwn ? (
+          <AppAvatar
+            name={message.senderName}
+            className="h-9 w-9 shrink-0"
+            textClassName="text-sm"
+          />
+        ) : null}
         <div
           className={cn(
-            'app-message-surface min-w-0 max-w-[min(100%,34rem)] px-3 py-2',
+            'app-message-surface relative min-w-0 max-w-[min(100%,34rem)] px-3 py-2',
             message.isOwn ? 'ml-auto w-fit' : 'w-fit'
           )}
+          onContextMenu={handleContextMenu}
+          onPointerDown={handlePointerDown}
+          onPointerUp={clearLongPressTimeout}
+          onPointerCancel={clearLongPressTimeout}
+          onPointerMove={clearLongPressTimeout}
         >
           <div className="flex items-baseline gap-2">
             <p className="text-sm font-semibold text-text">
               {message.senderName}
             </p>
-            <p className="text-[11px] text-text-subtle">
-              {formatMessageTimestamp(message.timestamp)}
-            </p>
           </div>
 
+          {replyPreview}
           {message.msgtype === 'm.image' ? (
             <div className="mt-2 max-w-[280px]">{imagePreview}</div>
           ) : message.msgtype === 'm.file' ? (
@@ -353,7 +471,7 @@ function MessageBubble({
                 * {message.senderName} {linkedMessageBody}
               </p>
               <p className="shrink-0 text-[11px] not-italic text-text-subtle">
-                {formatMessageTimestamp(message.timestamp)}
+                {bubbleMeta}
               </p>
             </div>
           ) : (
@@ -362,12 +480,19 @@ function MessageBubble({
                 {linkedMessageBody}
               </p>
               <p className="shrink-0 text-[11px] text-text-subtle">
-                {formatMessageTimestamp(message.timestamp)}
+                {bubbleMeta}
               </p>
             </div>
           )}
+          {message.msgtype === 'm.text' ? (
+            <MessageLinkPreview
+              messageId={message.id}
+              messageBody={message.body}
+              isOwn={message.isOwn}
+            />
+          ) : null}
+          {reactionBar}
           <div className="mt-2 flex items-center gap-2 text-[11px] text-text-subtle">
-            {statusLabel ? <span>{statusLabel}</span> : null}
             {receiptAvatars}
             {isFailed && onRetry ? (
               <button

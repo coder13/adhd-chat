@@ -1,6 +1,7 @@
 import { RoomEvent, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useEffect, useState } from 'react';
 import { useMatrixClient } from './useMatrixClient';
+import { useChatPreferences } from './useChatPreferences';
 import {
   areBrowserNotificationsSupported,
   buildMessageNotificationBody,
@@ -65,6 +66,7 @@ export function useBrowserNotificationSettings() {
 
 export function useBrowserNotifications() {
   const { client, isReady, user } = useMatrixClient();
+  const { resolveRoomNotificationMode } = useChatPreferences(client, user?.userId);
   const { isSupported, isEnabled } = useBrowserNotificationSettings();
 
   useEffect(() => {
@@ -82,6 +84,10 @@ export function useBrowserNotifications() {
       data: { liveEvent?: boolean }
     ) => {
       if (!data.liveEvent || document.visibilityState === 'visible' || !eventRoom) {
+        return;
+      }
+
+      if (resolveRoomNotificationMode(eventRoom.roomId) === 'mute') {
         return;
       }
 
@@ -125,5 +131,5 @@ export function useBrowserNotifications() {
     return () => {
       client.off(RoomEvent.Timeline, handleTimeline);
     };
-  }, [client, isEnabled, isReady, isSupported, user]);
+  }, [client, isEnabled, isReady, isSupported, resolveRoomNotificationMode, user]);
 }

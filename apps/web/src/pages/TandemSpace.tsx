@@ -24,9 +24,12 @@ import {
   Button,
   Card,
   IdentityEditorModal,
+  Modal,
+  NotificationSettingsPanel,
   TangentModal,
 } from '../components';
 import { usePersistedResource } from '../hooks/usePersistedResource';
+import { useChatPreferences } from '../hooks/useChatPreferences';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useTandem } from '../hooks/useTandem';
 import { getRoomTopic, updateRoomIdentity } from '../lib/matrix/identity';
@@ -69,6 +72,11 @@ function TandemSpacePage() {
   const spaceId = encodedSpaceId ? decodeURIComponent(encodedSpaceId) : null;
   const navigate = useNavigate();
   const { client, isReady, user } = useMatrixClient();
+  const {
+    preferences,
+    updateRoomNotificationMode,
+    resolveRoomNotificationMode,
+  } = useChatPreferences(client, user?.userId);
   const { relationships } = useTandem(client, user?.userId);
   const cacheKey =
     user?.userId && spaceId ? `space-rooms:${user.userId}:${spaceId}` : null;
@@ -90,6 +98,7 @@ function TandemSpacePage() {
   const [tangentError, setTangentError] = useState<string | null>(null);
   const [showSpaceMenu, setShowSpaceMenu] = useState(false);
   const [showHubIdentityModal, setShowHubIdentityModal] = useState(false);
+  const [showHubNotificationModal, setShowHubNotificationModal] = useState(false);
   const [savingHubIdentity, setSavingHubIdentity] = useState(false);
   const [showArchivedRooms, setShowArchivedRooms] = useState(false);
   const [spaceNotice, setSpaceNotice] = useState<string | null>(null);
@@ -294,8 +303,15 @@ function TandemSpacePage() {
             <h3 className="truncate text-[14px] font-semibold text-text">
               {room.name}
             </h3>
-            <div className="shrink-0 text-[11px] text-text-muted">
-              {formatTimestamp(room.timestamp)}
+            <div className="flex shrink-0 items-center gap-2">
+              {room.unreadCount > 0 ? (
+                <span className="rounded-full bg-accent px-2 py-1 text-[10px] font-semibold text-text-inverse">
+                  {room.unreadCount}
+                </span>
+              ) : null}
+              <div className="text-[11px] text-text-muted">
+                {formatTimestamp(room.timestamp)}
+              </div>
             </div>
           </div>
           <p className="mt-0.5 truncate text-[13px] text-text-muted">
@@ -495,6 +511,12 @@ function TandemSpacePage() {
             },
           },
           {
+            text: 'Hub notifications',
+            handler: () => {
+              setShowHubNotificationModal(true);
+            },
+          },
+          {
             text: 'Cancel',
             role: 'cancel',
           },
@@ -514,6 +536,28 @@ function TandemSpacePage() {
         error={spaceNotice}
         onSave={handleSaveHubIdentity}
       />
+
+      <Modal
+        isOpen={showHubNotificationModal}
+        onClose={() => setShowHubNotificationModal(false)}
+        title="Hub notifications"
+        size="sm"
+      >
+        <NotificationSettingsPanel
+          title={hubName ?? 'Hub notifications'}
+          body="Choose whether this hub follows your default, always notifies, or stays muted."
+          value={preferences.roomNotificationOverrides[spaceId] ?? 'default'}
+          options={[
+            { label: 'Default', value: 'default' },
+            { label: 'All', value: 'all' },
+            { label: 'Muted', value: 'mute' },
+          ]}
+          onChange={(value) => {
+            void updateRoomNotificationMode(spaceId, value);
+          }}
+          helper={`Current effective setting: ${resolveRoomNotificationMode(spaceId) === 'mute' ? 'Muted' : 'All messages'}.`}
+        />
+      </Modal>
     </IonPage>
   );
 }

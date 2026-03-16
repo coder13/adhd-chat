@@ -254,8 +254,15 @@ function Home() {
                           <h3 className="truncate text-[15px] font-semibold text-text">
                             {space.name}
                           </h3>
-                          <div className="text-xs text-text-muted">
-                            {formatTimestamp(space.timestamp)}
+                          <div className="flex items-center gap-2">
+                            {space.unreadCount > 0 ? (
+                              <span className="rounded-full bg-accent px-2 py-1 text-[10px] font-semibold text-text-inverse">
+                                {space.unreadCount}
+                              </span>
+                            ) : null}
+                            <div className="text-xs text-text-muted">
+                              {formatTimestamp(space.timestamp)}
+                            </div>
                           </div>
                         </div>
                         <p className="mt-1 truncate text-sm text-text-muted">

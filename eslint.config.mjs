@@ -30,6 +30,11 @@ const sharedTypeCheckedRules = {
   'unused-imports/no-unused-imports': 'error',
 };
 
+const reactHooksRecommendedConfig =
+  reactHooks.configs.flat?.recommended ??
+  reactHooks.configs['recommended-latest'] ??
+  reactHooks.configs.recommended;
+
 export function createCoreLintConfig(tsconfigRootDir) {
   return defineConfig([
     globalIgnores(sharedIgnores),
@@ -67,7 +72,7 @@ export function createWebLintConfig(tsconfigRootDir) {
       extends: [
         js.configs.recommended,
         ...tseslint.configs.recommendedTypeChecked,
-        reactHooks.configs.flat.recommended,
+        reactHooksRecommendedConfig,
         reactRefresh.configs.vite,
       ],
       languageOptions: {

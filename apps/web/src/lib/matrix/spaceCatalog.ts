@@ -1,5 +1,6 @@
 import {
   MsgType,
+  NotificationCountType,
   type MatrixClient,
   type MatrixEvent,
   type Room,
@@ -13,6 +14,11 @@ import {
 } from './tandem';
 import { getRoomDisplayName } from './chatCatalog';
 import { getRoomTopic } from './identity';
+import {
+  getRoomTimelineEvents,
+  getTimelineEventContent,
+  isRenderableTimelineMessage,
+} from './timelineEvents';
 
 const ROOM_CREATE_EVENT_TYPE = 'm.room.create';
 const SPACE_CHILD_EVENT_TYPE = 'm.space.child';
@@ -26,6 +32,7 @@ export interface TandemSpaceSummary {
   mainRoomId: string;
   preview: string;
   timestamp: number;
+  unreadCount: number;
   roomCount: number;
 }
 
@@ -35,6 +42,7 @@ export interface TandemSpaceRoomSummary {
   description: string | null;
   preview: string;
   timestamp: number;
+  unreadCount: number;
   memberCount: number;
   membership: string;
   isMain: boolean;
@@ -62,27 +70,14 @@ function isSpaceRoom(room: Room) {
 }
 
 function getLatestMessageEvent(room: Room) {
-  const events = room.getLiveTimeline().getEvents();
+  const events = getRoomTimelineEvents(room);
 
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (event.getType() !== 'm.room.message') {
+    if (!isRenderableTimelineMessage(event)) {
       continue;
     }
-
-    const content = event.getContent<{ body?: string; msgtype?: string }>();
-    if (
-      content.msgtype === MsgType.Text ||
-      content.msgtype === MsgType.Image ||
-      content.msgtype === MsgType.File ||
-      content.msgtype === MsgType.Audio ||
-      content.msgtype === MsgType.Video ||
-      content.msgtype === MsgType.Emote ||
-      content.msgtype === MsgType.Notice ||
-      !content.msgtype
-    ) {
-      return event;
-    }
+    return event;
   }
 
   return null;
@@ -94,10 +89,7 @@ function getPreviewText(room: Room) {
     return 'No messages yet';
   }
 
-  const content = latestMessageEvent.getContent<{
-    body?: string;
-    msgtype?: string;
-  }>();
+  const content = getTimelineEventContent(latestMessageEvent);
 
   switch (content.msgtype) {
     case MsgType.Image:
@@ -173,6 +165,11 @@ function getSpaceSummary(
       ? getPreviewText(mostRecentRoom)
       : 'No messages yet',
     timestamp: mostRecentRoom ? getLatestTimestamp(mostRecentRoom) : 0,
+    unreadCount: childRooms.reduce(
+      (count, room) =>
+        count + room.getUnreadNotificationCount(NotificationCountType.Total),
+      0
+    ),
     roomCount: childRooms.filter((room) => !getTandemRoomMeta(room).hidden)
       .length,
   };
@@ -255,6 +252,7 @@ export async function buildTandemSpaceRoomCatalog(
         description: getRoomTopic(room),
         preview: getPreviewText(room),
         timestamp: getLatestTimestamp(room),
+        unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
         memberCount: room.getJoinedMemberCount(),
         membership: room.getMyMembership(),
         isMain:

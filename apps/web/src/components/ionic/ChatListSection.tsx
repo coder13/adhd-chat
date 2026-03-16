@@ -61,9 +61,19 @@ function ChatListSection({
               <h2 className="truncate text-[15px] font-semibold text-text">
                 {chat.name}
               </h2>
-              <IonNote color="medium" className="text-xs">
-                {formatTimestamp(chat.timestamp)}
-              </IonNote>
+              <div className="flex items-center gap-2">
+                {chat.unreadCount > 0 ? (
+                  <IonBadge
+                    color="primary"
+                    className="rounded-full px-2 py-1 text-[10px]"
+                  >
+                    {chat.unreadCount}
+                  </IonBadge>
+                ) : null}
+                <IonNote color="medium" className="text-xs">
+                  {formatTimestamp(chat.timestamp)}
+                </IonNote>
+              </div>
             </div>
             <p className="mt-1 truncate text-sm text-text-muted">
               {chat.preview}

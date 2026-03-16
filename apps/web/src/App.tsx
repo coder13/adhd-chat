@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Room from './pages/Room';
+import RoomPinnedMessages from './pages/RoomPinnedMessages';
 import AuthCallback from './pages/AuthCallback';
 import Contacts from './pages/Contacts';
 import AddContactPage from './pages/AddContact';
@@ -59,6 +60,7 @@ function AppShell() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/room/:roomId" element={<Room />} />
+        <Route path="/room/:roomId/pins" element={<RoomPinnedMessages />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
       </Routes>
 

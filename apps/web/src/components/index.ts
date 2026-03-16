@@ -4,6 +4,7 @@ export { default as AppAvatar } from './AppAvatar';
 export { default as IdentityEditorModal } from './IdentityEditorModal';
 export { default as LoginCard } from './LoginCard';
 export { default as Modal } from './Modal';
+export { default as NotificationSettingsPanel } from './NotificationSettingsPanel';
 export { default as EncryptionSetupModal } from './EncryptionSetupModal';
 export { default as DeviceVerificationPanel } from './DeviceVerificationPanel';
 export { default as SecretStorageKeyModal } from './SecretStorageKeyModal';

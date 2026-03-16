@@ -65,7 +65,7 @@ describe('MessageBubble', () => {
           senderName: 'Alex',
           body: 'See https://example.com/test?x=1 and also www.openai.com today',
           timestamp: Date.UTC(2026, 2, 15, 10, 32),
-          isOwn: false,
+          isOwn: true,
           msgtype: 'm.text',
         }}
       />
@@ -79,6 +79,8 @@ describe('MessageBubble', () => {
       'href',
       'https://www.openai.com'
     );
+    expect(screen.getAllByText('example.com')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Hide link preview' })).toBeInTheDocument();
   });
 
   it('shows failed optimistic messages with a retry action', () => {
@@ -101,7 +103,7 @@ describe('MessageBubble', () => {
     );
 
     screen.getByRole('button', { name: 'Retry' }).click();
-    expect(screen.getByText('Failed to send')).toBeInTheDocument();
+    expect(screen.getByText(/Failed to send/)).toBeInTheDocument();
     expect(onRetry).toHaveBeenCalledWith('failed-message');
   });
 
