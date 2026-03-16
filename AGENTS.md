@@ -1,3 +1,9 @@
+## Product UX Guidance
+
+- Prefer functional and intuitive product behavior over explanatory UI copy.
+- Do not add roadmap, milestone, or process language to user-facing surfaces.
+- Avoid adding explanatory text unless it is strictly necessary to make a flow usable; first solve the problem through interaction design and behavior.
+
 <!-- BACKLOG.MD GUIDELINES START -->
 
 # Instructions for the usage of Backlog.md CLI Tool
