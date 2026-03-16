@@ -144,7 +144,7 @@ function TangentModal({
             <div className="rounded-2xl border border-dashed border-line bg-panel/70 px-4 py-5 text-sm text-text-muted">
               {normalizedQuery
                 ? 'No topic matches yet. Create it below.'
-                : 'Your Tandem topics will appear here once you have a few threads.'}
+                : 'Your Tandem topics will appear here once you have a few topics.'}
             </div>
           )}
         </div>

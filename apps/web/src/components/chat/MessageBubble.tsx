@@ -113,6 +113,7 @@ function MessageBubble({
   const linkedMessageBody = renderLinkedMessageText(message.body);
   const isSending = message.deliveryStatus === 'sending';
   const isFailed = message.deliveryStatus === 'failed';
+  const mediaMeta = [message.mimeType, fileSize].filter(Boolean).join(' • ');
   const statusLabel = isSending
     ? 'Sending…'
     : isFailed
@@ -157,12 +158,12 @@ function MessageBubble({
       <img
         src={resolvedMediaUrl}
         alt={imageAltText}
-        className="max-h-[360px] w-auto max-w-full object-contain"
+        className="max-h-[360px] w-full object-cover sm:w-auto sm:max-w-full sm:object-contain"
       />
     </button>
   ) : (
-    <div className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-elevated px-4 text-center text-sm text-text-muted">
-      <span>{mediaError ? 'Unable to load image' : 'Loading image...'}</span>
+    <div className="flex aspect-[4/3] w-[min(18rem,70vw)] max-w-full flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-elevated px-4 text-center text-sm text-text-muted">
+      <span>{mediaError ? 'Unable to load image' : 'Loading image…'}</span>
       {retryMediaLoadButton}
     </div>
   );
@@ -180,8 +181,9 @@ function MessageBubble({
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{message.body}</p>
             <p className="mt-1 text-xs text-text-subtle">
-              {[message.mimeType, fileSize].filter(Boolean).join(' • ') || 'File'}
+              {mediaMeta || 'File'}
             </p>
+            <p className="mt-2 text-xs font-medium text-accent">Open file</p>
           </div>
           <span className="text-xs font-medium text-accent">Open</span>
         </a>
@@ -190,10 +192,10 @@ function MessageBubble({
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{message.body}</p>
             <p className="mt-1 text-xs text-text-subtle">
-              {[message.mimeType, fileSize].filter(Boolean).join(' • ') || 'File'}
+              {mediaMeta || 'File'}
             </p>
-            <p className="mt-1 text-xs text-text-subtle">
-              {mediaError ? 'Unable to load file' : 'Loading file...'}
+            <p className="mt-2 text-xs text-text-subtle">
+              {mediaError ? 'Unable to load file' : 'Preparing file…'}
             </p>
           </div>
           <div className="shrink-0">{retryMediaLoadButton}</div>
@@ -271,14 +273,47 @@ function MessageBubble({
           title="Image preview"
           size="lg"
         >
-          <div className="flex justify-center">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-line bg-elevated px-4 py-3">
+              <p className="truncate text-sm font-semibold text-text">
+                {message.body || 'Image'}
+              </p>
+              <p className="mt-1 text-xs text-text-subtle">
+                {mediaMeta ||
+                  [message.imageWidth, message.imageHeight]
+                    .filter(Boolean)
+                    .join(' × ') ||
+                  'Image'}
+              </p>
+            </div>
+            <div className="flex justify-center rounded-[28px] border border-line bg-panel/70 p-2 sm:p-4">
+              {resolvedMediaUrl ? (
+                <img
+                  src={resolvedMediaUrl}
+                  alt={imageAltText}
+                  className="max-h-[75vh] w-full max-w-full rounded-2xl object-contain"
+                />
+              ) : (
+                <div className="flex min-h-48 w-full items-center justify-center text-sm text-text-muted">
+                  {mediaError ? 'Unable to load image' : 'Loading image…'}
+                </div>
+              )}
+            </div>
             {resolvedMediaUrl ? (
-              <img
-                src={resolvedMediaUrl}
-                alt={imageAltText}
-                className="max-h-[75vh] w-auto max-w-full rounded-2xl object-contain"
-              />
-            ) : null}
+              <div className="flex justify-end">
+                <a
+                  href={resolvedMediaUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  download={message.body || 'image'}
+                  className="text-sm font-medium text-accent underline underline-offset-2"
+                >
+                  Open full size
+                </a>
+              </div>
+            ) : (
+              <div className="flex justify-end">{retryMediaLoadButton}</div>
+            )}
           </div>
         </Modal>
       </>
@@ -353,14 +388,47 @@ function MessageBubble({
         title="Image preview"
         size="lg"
       >
-        <div className="flex justify-center">
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-line bg-elevated px-4 py-3">
+            <p className="truncate text-sm font-semibold text-text">
+              {message.body || 'Image'}
+            </p>
+            <p className="mt-1 text-xs text-text-subtle">
+              {mediaMeta ||
+                [message.imageWidth, message.imageHeight]
+                  .filter(Boolean)
+                  .join(' × ') ||
+                'Image'}
+            </p>
+          </div>
+          <div className="flex justify-center rounded-[28px] border border-line bg-panel/70 p-2 sm:p-4">
+            {resolvedMediaUrl ? (
+              <img
+                src={resolvedMediaUrl}
+                alt={imageAltText}
+                className="max-h-[75vh] w-full max-w-full rounded-2xl object-contain"
+              />
+            ) : (
+              <div className="flex min-h-48 w-full items-center justify-center text-sm text-text-muted">
+                {mediaError ? 'Unable to load image' : 'Loading image…'}
+              </div>
+            )}
+          </div>
           {resolvedMediaUrl ? (
-            <img
-              src={resolvedMediaUrl}
-              alt={imageAltText}
-              className="max-h-[75vh] w-auto max-w-full rounded-2xl object-contain"
-            />
-          ) : null}
+            <div className="flex justify-end">
+              <a
+                href={resolvedMediaUrl}
+                target="_blank"
+                rel="noreferrer"
+                download={message.body || 'image'}
+                className="text-sm font-medium text-accent underline underline-offset-2"
+              >
+                Open full size
+              </a>
+            </div>
+          ) : (
+            <div className="flex justify-end">{retryMediaLoadButton}</div>
+          )}
         </div>
       </Modal>
     </>

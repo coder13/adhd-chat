@@ -14,7 +14,7 @@ jest.mock('../..', () => ({
   }) => (isOpen ? <div>{children}</div> : null),
 }));
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import MessageBubble from '../MessageBubble';
 
 describe('MessageBubble', () => {
@@ -151,5 +151,53 @@ describe('MessageBubble', () => {
     expect(await screen.findByText('Unable to load image')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry load' })).toBeInTheDocument();
     globalThis.fetch = originalFetch;
+  });
+
+  it('shows an expanded image view with a full-size action', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'expanded-image',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'photo.jpg',
+          timestamp: Date.UTC(2026, 2, 15, 10, 35),
+          isOwn: false,
+          msgtype: 'm.image',
+          mediaUrl: 'https://media.example/photo.jpg',
+          mimeType: 'image/jpeg',
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand image' }));
+
+    expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open full size' })).toHaveAttribute(
+      'href',
+      'https://media.example/photo.jpg'
+    );
+  });
+
+  it('shows clearer file action copy', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'file-message',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'notes.pdf',
+          timestamp: Date.UTC(2026, 2, 15, 10, 36),
+          isOwn: false,
+          msgtype: 'm.file',
+          mediaUrl: 'https://media.example/notes.pdf',
+          mimeType: 'application/pdf',
+          fileSize: 4096,
+        }}
+      />
+    );
+
+    expect(screen.getByText('Open file')).toBeInTheDocument();
+    expect(screen.getByText('application/pdf • 4 KB')).toBeInTheDocument();
   });
 });

@@ -12,6 +12,7 @@ import {
   type TandemRelationshipRecord,
 } from './tandem';
 import { getRoomDisplayName } from './chatCatalog';
+import { getRoomTopic } from './identity';
 
 const ROOM_CREATE_EVENT_TYPE = 'm.room.create';
 const SPACE_CHILD_EVENT_TYPE = 'm.space.child';
@@ -20,6 +21,7 @@ const SPACE_ROOM_TYPE = 'm.space';
 export interface TandemSpaceSummary {
   spaceId: string;
   name: string;
+  description: string | null;
   partnerUserId: string;
   mainRoomId: string;
   preview: string;
@@ -30,6 +32,7 @@ export interface TandemSpaceSummary {
 export interface TandemSpaceRoomSummary {
   id: string;
   name: string;
+  description: string | null;
   preview: string;
   timestamp: number;
   memberCount: number;
@@ -163,6 +166,7 @@ function getSpaceSummary(
   return {
     spaceId: spaceRoom.roomId,
     name: getRoomDisplayName(spaceRoom, userId),
+    description: getRoomTopic(spaceRoom),
     partnerUserId: relationship.partnerUserId,
     mainRoomId: relationship.mainRoomId,
     preview: mostRecentRoom
@@ -248,6 +252,7 @@ export async function buildTandemSpaceRoomCatalog(
       return {
         id: room.roomId,
         name: getRoomDisplayName(room, userId),
+        description: getRoomTopic(room),
         preview: getPreviewText(room),
         timestamp: getLatestTimestamp(room),
         memberCount: room.getJoinedMemberCount(),

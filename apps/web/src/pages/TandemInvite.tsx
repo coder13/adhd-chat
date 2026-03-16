@@ -122,7 +122,7 @@ function TandemInvitePage() {
               <p className="mt-2 text-sm leading-6 text-text-muted">
                 {linkPayload.inviter} created a Tandem home for you. Sign in or
                 create an account with your Matrix homeserver, then come back to
-                join the private space.
+                join the private hub.
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link to={`/login?redirect=${redirectTarget}`}>

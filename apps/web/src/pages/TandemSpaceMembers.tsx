@@ -27,7 +27,7 @@ async function buildTandemSpaceMembers(
 ) {
   const room = client.getRoom(spaceId);
   if (!room) {
-    throw new Error('Tandem space not found.');
+    throw new Error('Tandem hub not found.');
   }
 
   await room.loadMembersIfNeeded();
@@ -95,7 +95,7 @@ function TandemSpaceMembersPage() {
       <IonPage className="app-shell">
         <IonContent className="app-list-page">
           <div className="flex min-h-screen items-center justify-center text-text">
-            No Tandem space selected.
+            No Tandem hub selected.
           </div>
         </IonContent>
       </IonPage>
@@ -112,7 +112,7 @@ function TandemSpaceMembersPage() {
               <Link to="/login" className="text-accent">
                 log in
               </Link>{' '}
-              to view space members.
+              to view hub members.
             </p>
           </div>
         </IonContent>
@@ -144,7 +144,7 @@ function TandemSpaceMembersPage() {
         <div className="space-y-4 px-4 py-4">
           <Card tone="accent">
             <h2 className="text-lg font-semibold text-text">
-              People in this Tandem space
+              People in this Tandem hub
             </h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">
               These are the current members and invitees for this shared Tandem

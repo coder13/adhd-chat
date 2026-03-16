@@ -124,7 +124,7 @@ function Home() {
             <Link to="/login" className="font-medium text-accent">
               log in
             </Link>{' '}
-            to open your Tandem spaces.
+            to open your Tandem hubs.
           </p>
         </div>
       </div>
@@ -139,7 +139,7 @@ function Home() {
           <IonSearchbar
             value={search}
             onIonInput={(event) => setSearch(event.detail.value ?? '')}
-            placeholder="Search spaces"
+            placeholder="Search hubs"
             className="app-searchbar"
           />
         }
@@ -150,7 +150,7 @@ function Home() {
               <div>
                 <h2 className="text-lg font-semibold text-text">Invites</h2>
                 <p className="mt-1 text-sm text-text-muted">
-                  Join incoming Tandem spaces before they appear in your main
+                  Join incoming Tandem hubs before they appear in your main
                   feed.
                 </p>
               </div>
@@ -160,7 +160,7 @@ function Home() {
                     {invite.inviterMatrixId}
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-text-muted">
-                    Invited you into a private Tandem space.
+                    Invited you into a private Tandem hub.
                   </p>
                   {invite.message && (
                     <p className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-sm text-text">
@@ -174,7 +174,7 @@ function Home() {
                     >
                       {busyInviteId === invite.inviteId
                         ? 'Joining...'
-                        : 'Join space'}
+                        : 'Join hub'}
                     </Button>
                     <Button
                       variant="outline"
@@ -199,20 +199,20 @@ function Home() {
             !catalogError ? (
               <Card tone="accent">
                 <h3 className="text-base font-semibold text-text">
-                  Restoring your Tandem spaces
+                  Restoring your Tandem hubs
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-text-muted">
-                  Tandem is reconnecting your accepted rooms so they appear in
+                  Tandem is reconnecting your accepted topics so they appear in
                   the main feed after refreshes or delayed sync.
                 </p>
               </Card>
             ) : visibleSpaces.length === 0 && !isLoadingSpaces ? (
               <Card tone="accent">
                 <h3 className="text-base font-semibold text-text">
-                  Start your first Tandem space
+                  Start your first Tandem hub
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-text-muted">
-                  Invite someone you trust and your shared space will show up
+                  Invite someone you trust and your shared hub will show up
                   here once they join.
                 </p>
                 <div className="mt-4 flex items-center gap-4">
@@ -230,7 +230,7 @@ function Home() {
               </Card>
             ) : isLoadingSpaces && visibleSpaces.length === 0 ? (
               <div className="py-12 text-center text-sm text-text-muted">
-                Loading spaces...
+                Loading hubs...
               </div>
             ) : (
               <div className="space-y-3">
@@ -259,11 +259,11 @@ function Home() {
                           </div>
                         </div>
                         <p className="mt-1 truncate text-sm text-text-muted">
-                          {space.preview}
+                          {space.description || space.preview}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
                           <span>{space.partnerUserId}</span>
-                          <span>{space.roomCount} threads</span>
+                          <span>{space.roomCount} topics</span>
                         </div>
                       </div>
                     </div>

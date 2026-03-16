@@ -57,7 +57,7 @@ function TandemCreateRoomPage() {
 
   const handleCreate = async () => {
     if (!client || !user || !relationship) {
-      setError('Open a Tandem space first, then create a room inside it.');
+      setError('Open a Tandem hub first, then create a topic inside it.');
       return;
     }
 
@@ -85,7 +85,7 @@ function TandemCreateRoomPage() {
             </IonButton>
           </IonButtons>
           <IonTitle className="text-[28px] font-semibold">
-            New Tandem Room
+            New Topic
           </IonTitle>
         </IonToolbar>
       </IonHeader>
@@ -93,21 +93,21 @@ function TandemCreateRoomPage() {
         <div className="space-y-4 px-4 py-4">
           <Card tone="accent">
             <h2 className="text-lg font-semibold text-text">
-              Create inside your Tandem space
+              Create inside your hub
             </h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">
-              This creates a private room, invites your partner, and attaches it
-              to your shared Tandem space automatically.
+              This creates a private topic, invites your partner, and attaches
+              it to your shared hub automatically.
             </p>
             {relationship && (
               <p className="mt-3 text-sm text-text-muted">
-                Creating in space with {relationship.partnerUserId}
+                Creating in hub with {relationship.partnerUserId}
               </p>
             )}
           </Card>
 
           <Card>
-            <h3 className="text-base font-semibold text-text">Starter rooms</h3>
+            <h3 className="text-base font-semibold text-text">Starter topics</h3>
             <div className="mt-3 flex flex-wrap gap-2">
               {starterRooms.map((starter) => (
                 <Button
@@ -125,7 +125,7 @@ function TandemCreateRoomPage() {
           <Card>
             <div className="space-y-3">
               <Input
-                label="Room name"
+                label="Topic name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Plans"
@@ -134,7 +134,7 @@ function TandemCreateRoomPage() {
                 label="Topic"
                 value={topic}
                 onChange={(event) => setTopic(event.target.value)}
-                placeholder="What this room is for"
+                placeholder="What this topic is for"
               />
               <Input
                 label="Category"
@@ -146,7 +146,7 @@ function TandemCreateRoomPage() {
 
             {!relationship && (
               <p className="mt-4 text-sm text-danger">
-                No Tandem space is selected. Open a space from the Chats feed
+                No Tandem hub is selected. Open a hub from the Chats feed
                 first.
               </p>
             )}
@@ -158,7 +158,7 @@ function TandemCreateRoomPage() {
                 onClick={handleCreate}
                 disabled={creating || !name.trim() || !relationship}
               >
-                {creating ? 'Creating room...' : 'Create room'}
+                {creating ? 'Creating topic...' : 'Create topic'}
               </Button>
               <Button variant="outline" onClick={() => navigate(-1)}>
                 Cancel

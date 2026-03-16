@@ -34,10 +34,17 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { usePersistedResource } from '../hooks/usePersistedResource';
 import { useChatPreferences } from '../hooks/useChatPreferences';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
-import { AppAvatar, Button, Modal, TangentModal } from '../components';
+import {
+  AppAvatar,
+  Button,
+  IdentityEditorModal,
+  Modal,
+  TangentModal,
+} from '../components';
 import { MessageBubble } from '../components/chat';
 import { shouldSubmitComposerOnEnter } from '../components/chat/composerBehavior';
 import { createId } from '../lib/id';
+import { updateRoomIdentity } from '../lib/matrix/identity';
 import { buildMatrixMediaPayload } from '../lib/matrix/media';
 import {
   buildRoomSnapshot,
@@ -99,7 +106,7 @@ function buildPendingRoomMessages(pendingRoom: PendingTandemRoomRecord) {
       id: `${pendingRoom.pendingRoomId}:start`,
       senderId: 'Tandem',
       senderName: 'Tandem',
-      body: `Creating "${pendingRoom.roomName}" in your Tandem space.`,
+      body: `Creating "${pendingRoom.roomName}" in your Tandem hub.`,
       timestamp: pendingRoom.createdAt,
       isOwn: false,
       msgtype: MsgType.Notice,
@@ -108,7 +115,7 @@ function buildPendingRoomMessages(pendingRoom: PendingTandemRoomRecord) {
       id: `${pendingRoom.pendingRoomId}:invite`,
       senderId: 'Tandem',
       senderName: 'Tandem',
-      body: `Inviting ${pendingRoom.partnerUserId} and linking the room to the space.`,
+      body: `Inviting ${pendingRoom.partnerUserId} and linking the topic to the hub.`,
       timestamp: pendingRoom.createdAt + 1,
       isOwn: false,
       msgtype: MsgType.Notice,
@@ -132,7 +139,7 @@ function buildPendingRoomMessages(pendingRoom: PendingTandemRoomRecord) {
       id: `${pendingRoom.pendingRoomId}:ready`,
       senderId: 'Tandem',
       senderName: 'Tandem',
-      body: 'Room created. Opening your thread now.',
+      body: 'Topic created. Opening it now.',
       timestamp: pendingRoom.createdAt + 2,
       isOwn: false,
       msgtype: MsgType.Notice,
@@ -164,6 +171,7 @@ function RoomPage() {
     enabled: Boolean(client && user && roomId && !isPendingRoom),
     initialValue: {
       roomName: 'Conversation',
+      roomDescription: null,
       roomSubtitle: 'Connecting...',
       messages: [],
       isEncrypted: false,
@@ -184,6 +192,8 @@ function RoomPage() {
   const [showMenu, setShowMenu] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showIdentityModal, setShowIdentityModal] = useState(false);
+  const [savingIdentity, setSavingIdentity] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showTangentModal, setShowTangentModal] = useState(false);
   const [creatingTangent, setCreatingTangent] = useState(false);
@@ -938,9 +948,36 @@ function RoomPage() {
     }
   };
 
+  const handleSaveTopicIdentity = async (values: {
+    name: string;
+    description: string;
+  }) => {
+    if (!client || !currentRoom) {
+      return;
+    }
+
+    setSavingIdentity(true);
+    setActionError(null);
+
+    try {
+      await updateRoomIdentity(client, currentRoom, {
+        name: values.name,
+        topic: values.description,
+      });
+      setShowIdentityModal(false);
+      await refresh();
+      await refreshTangentTopics();
+    } catch (cause) {
+      console.error(cause);
+      setActionError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSavingIdentity(false);
+    }
+  };
+
   const handleCreateTangent = async (name: string) => {
     if (!client || !user || !tangentRelationship) {
-      setTangentError('This room is not inside a Tandem space.');
+      setTangentError('This topic is not inside a Tandem hub.');
       return;
     }
 
@@ -985,10 +1022,11 @@ function RoomPage() {
   const pendingSnapshot = pendingRoom
     ? {
         roomName: pendingRoom.roomName,
+        roomDescription: pendingRoom.topic ?? null,
         roomSubtitle:
           pendingRoom.status === 'failed'
-            ? 'Room setup ran into a problem'
-            : 'Setting up your new room...',
+            ? 'Topic setup ran into a problem'
+            : 'Setting up your new topic...',
         messages: buildPendingRoomMessages(pendingRoom),
         isEncrypted: false,
         roomMeta: {
@@ -997,7 +1035,7 @@ function RoomPage() {
       }
     : null;
   const activeSnapshot = pendingSnapshot ?? snapshot;
-  const { roomName, roomSubtitle, messages, isEncrypted, roomMeta } =
+  const { roomName, roomDescription, roomSubtitle, messages, isEncrypted, roomMeta } =
     activeSnapshot;
   const reconciledOptimisticMessages = reconcileOptimisticTimeline(
     messages,
@@ -1086,7 +1124,7 @@ function RoomPage() {
             text: 'Set category',
             handler: () => {
               const nextCategory = window.prompt(
-                'Category label for this room',
+                'Category label for this topic',
                 roomMeta.category ?? ''
               );
               if (nextCategory === null) {
@@ -1099,10 +1137,20 @@ function RoomPage() {
           },
         ]
       : []),
+    ...(!isPendingRoom
+      ? [
+          {
+            text: 'Edit topic details',
+            handler: () => {
+              setShowIdentityModal(true);
+            },
+          },
+        ]
+      : []),
     ...(membershipPolicy?.supportsLeave && roomMembership === 'join'
       ? [
           {
-            text: 'Leave room',
+            text: 'Leave topic',
             cssClass: 'app-action-danger',
             handler: () => {
               setShowLeaveConfirm(true);
@@ -1111,7 +1159,7 @@ function RoomPage() {
         ]
       : []),
     {
-      text: roomMeta.archived ? 'Unarchive room' : 'Archive room',
+      text: roomMeta.archived ? 'Unarchive topic' : 'Archive topic',
       cssClass: 'app-action-danger',
       handler: () => {
         if (roomMeta.archived) {
@@ -1143,15 +1191,32 @@ function RoomPage() {
               className="h-10 w-10"
               textClassName="text-sm"
             />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[15px] font-semibold text-text">
-                {roomName}
+            {isPendingRoom ? (
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15px] font-semibold text-text">
+                  {roomName}
+                </div>
+                <div className="truncate text-xs text-text-muted">
+                  {typingIndicator ?? roomDescription ?? roomSubtitle}
+                  {isEncrypted ? ' • encrypted' : ''}
+                </div>
               </div>
-              <div className="truncate text-xs text-text-muted">
-                {typingIndicator ?? roomSubtitle}
-                {isEncrypted ? ' • encrypted' : ''}
-              </div>
-            </div>
+            ) : (
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left"
+                onClick={() => setShowIdentityModal(true)}
+                aria-label="Edit topic details"
+              >
+                <div className="truncate text-[15px] font-semibold text-text">
+                  {roomName}
+                </div>
+                <div className="truncate text-xs text-text-muted">
+                  {typingIndicator ?? roomDescription ?? roomSubtitle}
+                  {isEncrypted ? ' • encrypted' : ''}
+                </div>
+              </button>
+            )}
           </div>
           <IonButtons slot="end">
             {!isPendingRoom && (
@@ -1161,7 +1226,7 @@ function RoomPage() {
                 onClick={() => {
                   void handleUpdateRoomMeta({ pinned: !roomMeta.pinned });
                 }}
-                aria-label={roomMeta.pinned ? 'Unpin room' : 'Pin room'}
+                aria-label={roomMeta.pinned ? 'Unpin topic' : 'Pin topic'}
               >
                 <IonIcon
                   slot="icon-only"
@@ -1220,7 +1285,7 @@ function RoomPage() {
               <div className="rounded-[28px] border border-line bg-panel/95 px-5 py-5 shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
                 {membershipPolicy.supportsJoin ? (
                   <Button onClick={() => void handleJoinCurrentRoom()}>
-                    {roomMembership === 'invite' ? 'Join room' : 'Rejoin room'}
+                    {roomMembership === 'invite' ? 'Join topic' : 'Rejoin topic'}
                   </Button>
                 ) : (
                   <div className="text-sm text-text-muted">Unavailable</div>
@@ -1231,7 +1296,7 @@ function RoomPage() {
             <div className="py-12 text-center">
               <p className="text-base font-medium text-text">No messages yet</p>
               <p className="mt-2 text-sm text-text-muted">
-                Start the conversation below.
+                Start the topic below.
               </p>
             </div>
           ) : (
@@ -1291,10 +1356,10 @@ function RoomPage() {
             rows={1}
             placeholder={
               isPendingRoom
-                ? 'Start typing while the room finishes setting up'
+                ? 'Start typing while the topic finishes setting up'
                 : canInteractWithTimeline
                   ? 'Message'
-                  : 'Join this room to send messages'
+                  : 'Join this topic to send messages'
             }
             className="app-compose-field min-h-[52px] rounded-[24px] px-4 py-3 text-[15px] leading-6"
             disabled={!canInteractWithTimeline}
@@ -1319,21 +1384,35 @@ function RoomPage() {
       <IonActionSheet
         isOpen={showMenu}
         onDidDismiss={() => setShowMenu(false)}
-        header="Conversation"
+        header="Topic"
         cssClass="app-action-sheet"
         buttons={conversationMenuButtons}
+      />
+
+      <IdentityEditorModal
+        isOpen={showIdentityModal}
+        onClose={() => setShowIdentityModal(false)}
+        title="Edit Topic"
+        nameLabel="Topic name"
+        descriptionLabel="Description"
+        nameValue={roomName}
+        descriptionValue={roomDescription}
+        saveLabel="Save topic"
+        isSaving={savingIdentity}
+        error={actionError}
+        onSave={handleSaveTopicIdentity}
       />
 
       <Modal
         isOpen={showArchiveConfirm}
         onClose={() => setShowArchiveConfirm(false)}
-        title="Archive room"
+        title="Archive topic"
         size="sm"
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-text-muted">
             Archive <span className="font-medium text-text">{roomName}</span>?
-            The room will stay in your Tandem space, but it will be treated as
+            The topic will stay in your hub, but it will be treated as
             archived in the app.
           </p>
           <div className="flex flex-wrap justify-end gap-3">
@@ -1350,7 +1429,7 @@ function RoomPage() {
                 void handleUpdateRoomMeta({ archived: true });
               }}
             >
-              Archive room
+              Archive topic
             </Button>
           </div>
         </div>
@@ -1359,13 +1438,13 @@ function RoomPage() {
       <Modal
         isOpen={showLeaveConfirm}
         onClose={() => setShowLeaveConfirm(false)}
-        title="Leave room"
+        title="Leave topic"
         size="sm"
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-text-muted">
             Leave <span className="font-medium text-text">{roomName}</span>?
-            You can rejoin this Tandem topic later from its space.
+            You can rejoin this Tandem topic later from its hub.
           </p>
           <div className="flex flex-wrap justify-end gap-3">
             <Button variant="outline" onClick={() => setShowLeaveConfirm(false)}>
@@ -1378,7 +1457,7 @@ function RoomPage() {
                 void handleLeaveCurrentRoom();
               }}
             >
-              Leave room
+              Leave topic
             </Button>
           </div>
         </div>

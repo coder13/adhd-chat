@@ -19,14 +19,22 @@ import {
 import { ClientEvent } from 'matrix-js-sdk';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AppAvatar, Button, Card, TangentModal } from '../components';
+import {
+  AppAvatar,
+  Button,
+  Card,
+  IdentityEditorModal,
+  TangentModal,
+} from '../components';
 import { usePersistedResource } from '../hooks/usePersistedResource';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useTandem } from '../hooks/useTandem';
+import { getRoomTopic, updateRoomIdentity } from '../lib/matrix/identity';
 import {
   buildTandemSpaceRoomCatalog,
   type TandemSpaceRoomSummary,
 } from '../lib/matrix/spaceCatalog';
+import { getRoomDisplayName } from '../lib/matrix/chatCatalog';
 import { startPendingTandemRoomCreation } from '../lib/matrix/pendingTandemRoom';
 import {
   ensureTandemSpaceLinks,
@@ -81,8 +89,14 @@ function TandemSpacePage() {
   const [creatingTangent, setCreatingTangent] = useState(false);
   const [tangentError, setTangentError] = useState<string | null>(null);
   const [showSpaceMenu, setShowSpaceMenu] = useState(false);
+  const [showHubIdentityModal, setShowHubIdentityModal] = useState(false);
+  const [savingHubIdentity, setSavingHubIdentity] = useState(false);
   const [showArchivedRooms, setShowArchivedRooms] = useState(false);
   const [spaceNotice, setSpaceNotice] = useState<string | null>(null);
+  const currentHub = client?.getRoom(spaceId ?? undefined) ?? null;
+  const hubName =
+    currentHub && user ? getRoomDisplayName(currentHub, user.userId) : null;
+  const hubDescription = currentHub ? getRoomTopic(currentHub) : null;
 
   const relationship = useMemo(
     () =>
@@ -131,7 +145,7 @@ function TandemSpacePage() {
       roomIds,
       userIds: [user.userId, relationship.partnerUserId],
     }).catch((cause) => {
-      console.error('Failed to repair Tandem space links', cause);
+      console.error('Failed to repair Tandem hub links', cause);
     });
   }, [client, relationship, rooms, user]);
 
@@ -140,7 +154,7 @@ function TandemSpacePage() {
       <IonPage className="app-shell">
         <IonContent className="app-list-page">
           <div className="flex items-center justify-center min-h-screen text-text">
-            No Tandem space selected.
+            No Tandem hub selected.
           </div>
         </IonContent>
       </IonPage>
@@ -157,7 +171,7 @@ function TandemSpacePage() {
               <Link to="/login" className="text-accent">
                 log in
               </Link>{' '}
-              to view this space.
+              to view this hub.
             </p>
           </div>
         </IonContent>
@@ -196,7 +210,7 @@ function TandemSpacePage() {
 
   const handleCreateTangent = async (name: string) => {
     if (!client || !user || !relationship) {
-      setTangentError('Open a Tandem space first, then start a tangent.');
+      setTangentError('Open a Tandem hub first, then start a tangent.');
       return;
     }
 
@@ -215,6 +229,32 @@ function TandemSpacePage() {
     navigate(`/room/${encodeURIComponent(pendingRoom.pendingRoomId)}`);
   };
 
+  const handleSaveHubIdentity = async (values: {
+    name: string;
+    description: string;
+  }) => {
+    if (!client || !currentHub) {
+      return;
+    }
+
+    setSavingHubIdentity(true);
+    setSpaceNotice(null);
+
+    try {
+      await updateRoomIdentity(client, currentHub, {
+        name: values.name,
+        topic: values.description,
+      });
+      setShowHubIdentityModal(false);
+      await refresh();
+    } catch (cause) {
+      console.error(cause);
+      setSpaceNotice(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSavingHubIdentity(false);
+    }
+  };
+
   const handleSelectTopic = async (topicId: string) => {
     const topic = rooms.find((room) => room.id === topicId);
     if (!topic) {
@@ -229,10 +269,10 @@ function TandemSpacePage() {
   const renderRoomCard = (room: TandemSpaceRoomSummary) => {
     const joinLabel =
       room.membership === 'invite'
-        ? 'Join room'
+        ? 'Join topic'
         : room.membership === 'leave'
-          ? 'Rejoin room'
-          : 'Open room';
+          ? 'Rejoin topic'
+          : 'Open topic';
 
     return (
       <button
@@ -259,7 +299,7 @@ function TandemSpacePage() {
             </div>
           </div>
           <p className="mt-0.5 truncate text-[13px] text-text-muted">
-            {room.preview}
+            {room.description || room.preview}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-2 text-[11px] text-text-muted">
             {room.isMain && <span>Main</span>}
@@ -298,18 +338,19 @@ function TandemSpacePage() {
           </IonButtons>
           <div className="flex items-center gap-3 px-2">
             <AppAvatar
-              name={relationship?.partnerUserId ?? 'Tandem'}
+              name={hubName ?? relationship?.partnerUserId ?? 'Hub'}
               className="w-10 h-10"
               textClassName="text-sm"
             />
             <div className="flex-1 min-w-0">
               <div className="truncate text-[15px] font-semibold text-text">
-                {relationship
-                  ? `Tandem with ${relationship.partnerUserId}`
-                  : 'Tandem Space'}
+                {hubName ??
+                  (relationship
+                    ? `Hub with ${relationship.partnerUserId}`
+                    : 'Tandem Hub')}
               </div>
               <div className="text-xs truncate text-text-muted">
-                {rooms.length} threads
+                {hubDescription || `${rooms.length} topics`}
               </div>
             </div>
           </div>
@@ -326,7 +367,7 @@ function TandemSpacePage() {
               fill="clear"
               color="medium"
               onClick={() => setShowSpaceMenu(true)}
-              aria-label="Space options"
+              aria-label="Hub options"
             >
               <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
             </IonButton>
@@ -344,17 +385,17 @@ function TandemSpacePage() {
 
           {loading ? (
             <div className="py-12 text-sm text-center text-text-muted">
-              Loading rooms...
+              Loading topics...
             </div>
           ) : error ? (
             <div className="py-6 text-sm text-center text-danger">{error}</div>
           ) : rooms.length === 0 ? (
             <Card>
               <h3 className="text-base font-semibold text-text">
-                No rooms yet
+                No topics yet
               </h3>
               <p className="mt-2 text-sm leading-6 text-text-muted">
-                Create the first thread in this Tandem space.
+                Create the first topic in this hub.
               </p>
               <div className="mt-4">
                 <Button onClick={() => setShowTangentModal(true)}>
@@ -436,9 +477,15 @@ function TandemSpacePage() {
       <IonActionSheet
         isOpen={showSpaceMenu}
         onDidDismiss={() => setShowSpaceMenu(false)}
-        header="Tandem space"
+        header="Hub"
         cssClass="app-action-sheet"
         buttons={[
+          {
+            text: 'Edit hub details',
+            handler: () => {
+              setShowHubIdentityModal(true);
+            },
+          },
           {
             text: 'View members',
             icon: peopleOutline,
@@ -452,6 +499,20 @@ function TandemSpacePage() {
             role: 'cancel',
           },
         ]}
+      />
+
+      <IdentityEditorModal
+        isOpen={showHubIdentityModal}
+        onClose={() => setShowHubIdentityModal(false)}
+        title="Edit Hub"
+        nameLabel="Hub name"
+        descriptionLabel="Description"
+        nameValue={hubName ?? ''}
+        descriptionValue={hubDescription}
+        saveLabel="Save hub"
+        isSaving={savingHubIdentity}
+        error={spaceNotice}
+        onSave={handleSaveHubIdentity}
       />
     </IonPage>
   );
