@@ -120,9 +120,9 @@ export async function performInteractiveAuth(
     }
 
     throw new Error(
-      `Unsupported interactive authentication stages for encryption setup: ${stages.join(
-        ', '
-      ) || 'unknown'}`
+      `Unsupported interactive authentication stages for encryption setup: ${
+        stages.join(', ') || 'unknown'
+      }`
     );
   }
 }

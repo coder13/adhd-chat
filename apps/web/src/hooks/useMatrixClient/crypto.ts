@@ -16,14 +16,12 @@ export type EncryptionDiagnostics = {
   secretStorageReady: boolean;
   keyBackupEnabled: boolean;
   backupKeyCached: boolean;
-  deviceTrust:
-    | {
-        signedByOwner: boolean;
-        crossSigningVerified: boolean;
-        localVerified: boolean;
-        tofu: boolean;
-      }
-    | null;
+  deviceTrust: {
+    signedByOwner: boolean;
+    crossSigningVerified: boolean;
+    localVerified: boolean;
+    tofu: boolean;
+  } | null;
   crossSigningStatus: {
     publicKeysOnDevice: boolean;
     privateKeysInSecretStorage: boolean;
@@ -113,14 +111,13 @@ export async function getEncryptionSetupInfo(client: MatrixClient) {
     crossSigningStatus,
     backupVersion,
     backupKey,
-  ] =
-    await Promise.all([
-      cryptoApi.isCrossSigningReady(),
-      cryptoApi.isSecretStorageReady(),
-      cryptoApi.getCrossSigningStatus(),
-      cryptoApi.getActiveSessionBackupVersion(),
-      cryptoApi.getSessionBackupPrivateKey(),
-    ]);
+  ] = await Promise.all([
+    cryptoApi.isCrossSigningReady(),
+    cryptoApi.isSecretStorageReady(),
+    cryptoApi.getCrossSigningStatus(),
+    cryptoApi.getActiveSessionBackupVersion(),
+    cryptoApi.getSessionBackupPrivateKey(),
+  ]);
 
   const keyBackupEnabled = backupVersion !== null;
 

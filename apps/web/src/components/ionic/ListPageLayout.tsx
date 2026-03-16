@@ -29,13 +29,15 @@ function ListPageLayout({
 }: ListPageLayoutProps) {
   const navigate = useNavigate();
   const { client, user } = useMatrixClient();
-  const currentUserProfile = user ? client?.getUser(user.userId) ?? null : null;
+  const currentUserProfile = user
+    ? (client?.getUser(user.userId) ?? null)
+    : null;
   const currentUserName =
     currentUserProfile?.displayName || user?.userId || 'User';
-  const currentUserAvatarUrl =
-    currentUserProfile?.avatarUrl
-      ? client?.mxcUrlToHttp(currentUserProfile.avatarUrl, 80, 80, 'crop') ?? null
-      : null;
+  const currentUserAvatarUrl = currentUserProfile?.avatarUrl
+    ? (client?.mxcUrlToHttp(currentUserProfile.avatarUrl, 80, 80, 'crop') ??
+      null)
+    : null;
 
   return (
     <IonPage className="app-shell">
@@ -43,7 +45,11 @@ function ListPageLayout({
         <IonToolbar className="app-toolbar px-1">
           <IonButtons slot="start">
             {startSlot ?? (
-              <IonButton fill="clear" color="medium" onClick={() => navigate('/menu')}>
+              <IonButton
+                fill="clear"
+                color="medium"
+                onClick={() => navigate('/menu')}
+              >
                 <AppAvatar
                   name={currentUserName}
                   avatarUrl={currentUserAvatarUrl}

@@ -127,7 +127,9 @@ function MessageBubble({
       <>
         <div className={`app-chat-bubble ${message.isOwn ? 'own' : 'other'}`}>
           {!message.isOwn && (
-            <p className="mb-1 text-xs font-medium text-text-subtle">{message.senderName}</p>
+            <p className="mb-1 text-xs font-medium text-text-subtle">
+              {message.senderName}
+            </p>
           )}
 
           {message.msgtype === 'm.image' ? (
@@ -143,7 +145,8 @@ function MessageBubble({
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{message.body}</p>
                 <p className="mt-1 text-xs text-text-subtle">
-                  {[message.mimeType, fileSize].filter(Boolean).join(' • ') || 'File'}
+                  {[message.mimeType, fileSize].filter(Boolean).join(' • ') ||
+                    'File'}
                 </p>
               </div>
               <span className="text-xs font-medium text-accent">Open</span>
@@ -153,7 +156,9 @@ function MessageBubble({
               * {message.senderName} {message.body}
             </p>
           ) : (
-            <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
+            <p className="whitespace-pre-wrap text-sm leading-6">
+              {message.body}
+            </p>
           )}
 
           <p className="mt-2 text-right text-[11px] text-text-subtle">
@@ -191,7 +196,9 @@ function MessageBubble({
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <p className="text-sm font-semibold text-text">{message.senderName}</p>
+            <p className="text-sm font-semibold text-text">
+              {message.senderName}
+            </p>
             <p className="text-[11px] text-text-subtle">
               {formatMessageTimestamp(message.timestamp)}
             </p>
@@ -210,7 +217,8 @@ function MessageBubble({
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{message.body}</p>
                 <p className="mt-1 text-xs text-text-subtle">
-                  {[message.mimeType, fileSize].filter(Boolean).join(' • ') || 'File'}
+                  {[message.mimeType, fileSize].filter(Boolean).join(' • ') ||
+                    'File'}
                 </p>
               </div>
               <span className="text-xs font-medium text-accent">Open</span>

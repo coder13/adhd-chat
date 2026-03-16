@@ -44,13 +44,15 @@ const menuItems = [
 function UserMenuPage() {
   const navigate = useNavigate();
   const { client, user } = useMatrixClient();
-  const currentUserProfile = user ? client?.getUser(user.userId) ?? null : null;
+  const currentUserProfile = user
+    ? (client?.getUser(user.userId) ?? null)
+    : null;
   const currentUserName =
     currentUserProfile?.displayName || user?.userId || 'User';
-  const currentUserAvatarUrl =
-    currentUserProfile?.avatarUrl
-      ? client?.mxcUrlToHttp(currentUserProfile.avatarUrl, 96, 96, 'crop') ?? null
-      : null;
+  const currentUserAvatarUrl = currentUserProfile?.avatarUrl
+    ? (client?.mxcUrlToHttp(currentUserProfile.avatarUrl, 96, 96, 'crop') ??
+      null)
+    : null;
 
   return (
     <IonPage className="app-shell">
@@ -75,16 +77,24 @@ function UserMenuPage() {
                 textClassName="text-lg"
               />
               <div className="min-w-0">
-                <h2 className="truncate text-lg font-semibold text-text">{currentUserName}</h2>
-                {user && <p className="truncate text-sm text-text-muted">{user.userId}</p>}
+                <h2 className="truncate text-lg font-semibold text-text">
+                  {currentUserName}
+                </h2>
+                {user && (
+                  <p className="truncate text-sm text-text-muted">
+                    {user.userId}
+                  </p>
+                )}
               </div>
             </div>
             <div className="mt-4">
-            <h2 className="text-lg font-semibold text-text">Account and app controls</h2>
-            <p className="mt-2 text-sm leading-6 text-text-muted">
-              These sections are stubbed for now so the app has a stable settings
-              navigation path.
-            </p>
+              <h2 className="text-lg font-semibold text-text">
+                Account and app controls
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-text-muted">
+                These sections are stubbed for now so the app has a stable
+                settings navigation path.
+              </p>
             </div>
           </Card>
 
@@ -97,10 +107,15 @@ function UserMenuPage() {
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-base font-semibold text-text">{item.title}</h3>
+                    <h3 className="text-base font-semibold text-text">
+                      {item.title}
+                    </h3>
                     <p className="mt-1 text-sm text-text-muted">{item.body}</p>
                   </div>
-                  <IonIcon icon={chevronForwardOutline} className="text-xl text-text-muted" />
+                  <IonIcon
+                    icon={chevronForwardOutline}
+                    className="text-xl text-text-muted"
+                  />
                 </div>
               </Card>
             ))}

@@ -1,4 +1,8 @@
-import { ClientEvent, type MatrixClient, type MatrixEvent } from 'matrix-js-sdk';
+import {
+  ClientEvent,
+  type MatrixClient,
+  type MatrixEvent,
+} from 'matrix-js-sdk';
 
 export const TANDEM_PREFERENCES_EVENT_TYPE = 'com.tandem.preferences';
 
@@ -20,7 +24,8 @@ function normalizePreferences(content: unknown): TandemPreferences {
   const candidate = content as Partial<TandemPreferences>;
   return {
     chatViewMode:
-      candidate.chatViewMode === 'bubbles' || candidate.chatViewMode === 'timeline'
+      candidate.chatViewMode === 'bubbles' ||
+      candidate.chatViewMode === 'timeline'
         ? candidate.chatViewMode
         : DEFAULT_PREFERENCES.chatViewMode,
   };

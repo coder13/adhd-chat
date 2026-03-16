@@ -5,7 +5,9 @@ export function useMatrixClient() {
   const value = useContext(MatrixClientContext);
 
   if (!value) {
-    throw new Error('useMatrixClient must be used within MatrixClientProvider.');
+    throw new Error(
+      'useMatrixClient must be used within MatrixClientProvider.'
+    );
   }
 
   return value;

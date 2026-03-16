@@ -36,16 +36,9 @@ function formatTimestamp(timestamp: number) {
 }
 
 function Home() {
-  const {
-    client,
-    isReady,
-    user,
-    error,
-  } = useMatrixClient();
-  const { incomingInvites, busyInviteId, acceptInvite, declineInvite } = useTandem(
-    client,
-    user?.userId
-  );
+  const { client, isReady, user, error } = useMatrixClient();
+  const { incomingInvites, busyInviteId, acceptInvite, declineInvite } =
+    useTandem(client, user?.userId);
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const cacheKey = user?.userId ? `tandem-spaces:${user.userId}` : null;
@@ -87,7 +80,9 @@ function Home() {
     });
   }, [search, spaces]);
 
-  const pendingIncomingInvites = incomingInvites.filter((invite) => invite.status === 'pending');
+  const pendingIncomingInvites = incomingInvites.filter(
+    (invite) => invite.status === 'pending'
+  );
 
   if (!isReady || !user) {
     return (
@@ -125,12 +120,15 @@ function Home() {
               <div>
                 <h2 className="text-lg font-semibold text-text">Invites</h2>
                 <p className="mt-1 text-sm text-text-muted">
-                  Join incoming Tandem spaces before they appear in your main feed.
+                  Join incoming Tandem spaces before they appear in your main
+                  feed.
                 </p>
               </div>
               {pendingIncomingInvites.map((invite) => (
                 <Card key={invite.inviteId} tone="accent">
-                  <h3 className="text-base font-semibold text-text">{invite.inviterMatrixId}</h3>
+                  <h3 className="text-base font-semibold text-text">
+                    {invite.inviterMatrixId}
+                  </h3>
                   <p className="mt-2 text-sm leading-6 text-text-muted">
                     Invited you into a private Tandem space.
                   </p>
@@ -144,7 +142,9 @@ function Home() {
                       onClick={() => void acceptInvite(invite)}
                       disabled={busyInviteId === invite.inviteId}
                     >
-                      {busyInviteId === invite.inviteId ? 'Joining...' : 'Join space'}
+                      {busyInviteId === invite.inviteId
+                        ? 'Joining...'
+                        : 'Join space'}
                     </Button>
                     <Button
                       variant="outline"
@@ -170,11 +170,13 @@ function Home() {
                   Start your first Tandem space
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-text-muted">
-                  Invite someone you trust and your shared space will show up here
-                  once they join.
+                  Invite someone you trust and your shared space will show up
+                  here once they join.
                 </p>
                 <div className="mt-4 flex items-center gap-4">
-                  <Button onClick={() => navigate('/contacts/new')}>Invite a partner</Button>
+                  <Button onClick={() => navigate('/contacts/new')}>
+                    Invite a partner
+                  </Button>
                   <button
                     type="button"
                     onClick={() => navigate('/contacts/new')}
@@ -185,7 +187,9 @@ function Home() {
                 </div>
               </Card>
             ) : isLoadingSpaces && visibleSpaces.length === 0 ? (
-              <div className="py-12 text-center text-sm text-text-muted">Loading spaces...</div>
+              <div className="py-12 text-center text-sm text-text-muted">
+                Loading spaces...
+              </div>
             ) : (
               <div className="space-y-3">
                 {visibleSpaces.map((space) => (
@@ -193,7 +197,9 @@ function Home() {
                     key={space.spaceId}
                     className="cursor-pointer"
                     onClick={() =>
-                      navigate(`/tandem/space/${encodeURIComponent(space.spaceId)}`)
+                      navigate(
+                        `/tandem/space/${encodeURIComponent(space.spaceId)}`
+                      )
                     }
                   >
                     <div className="flex items-start gap-4">

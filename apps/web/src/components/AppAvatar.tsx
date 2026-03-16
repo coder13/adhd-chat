@@ -15,9 +15,8 @@ function getInitial(name: string) {
     return '?';
   }
 
-  const firstVisibleChar = trimmed.startsWith('@') && trimmed.length > 1
-    ? trimmed.slice(1)
-    : trimmed;
+  const firstVisibleChar =
+    trimmed.startsWith('@') && trimmed.length > 1 ? trimmed.slice(1) : trimmed;
 
   return firstVisibleChar.charAt(0).toUpperCase();
 }
@@ -32,7 +31,11 @@ function AppAvatar({
   return (
     <IonAvatar className={cn('bg-accent-soft', className)}>
       {avatarUrl ? (
-        <img src={avatarUrl} alt={alt ?? name} className="h-full w-full object-cover" />
+        <img
+          src={avatarUrl}
+          alt={alt ?? name}
+          className="h-full w-full object-cover"
+        />
       ) : (
         <div
           className={cn(

@@ -1,4 +1,11 @@
-import { IonButton, IonContent, IonHeader, IonPage, IonTitle, IonToolbar } from '@ionic/react';
+import {
+  IonButton,
+  IonContent,
+  IonHeader,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from '@ionic/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppAvatar, Button, Card } from '../components';
@@ -10,8 +17,14 @@ function TandemInvitePage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { client, isReady, user } = useMatrixClient();
-  const { incomingInvites, acceptInvite, declineInvite, ensureInviteFromLink, busyInviteId, error } =
-    useTandem(client, user?.userId);
+  const {
+    incomingInvites,
+    acceptInvite,
+    declineInvite,
+    ensureInviteFromLink,
+    busyInviteId,
+    error,
+  } = useTandem(client, user?.userId);
   const [pageError, setPageError] = useState<string | null>(null);
 
   const linkPayload = useMemo(
@@ -25,7 +38,9 @@ function TandemInvitePage() {
     }
 
     return (
-      incomingInvites.find((entry) => entry.inviteId === linkPayload.inviteId) ?? null
+      incomingInvites.find(
+        (entry) => entry.inviteId === linkPayload.inviteId
+      ) ?? null
     );
   }, [incomingInvites, linkPayload]);
 
@@ -65,13 +80,17 @@ function TandemInvitePage() {
       <IonPage className="app-shell">
         <IonHeader className="ion-no-border">
           <IonToolbar className="app-toolbar px-1">
-            <IonTitle className="text-[28px] font-semibold">Tandem Invite</IonTitle>
+            <IonTitle className="text-[28px] font-semibold">
+              Tandem Invite
+            </IonTitle>
           </IonToolbar>
         </IonHeader>
         <IonContent fullscreen className="app-list-page">
           <div className="px-4 py-6">
             <Card>
-              <h2 className="text-xl font-semibold text-text">Invite link is invalid</h2>
+              <h2 className="text-xl font-semibold text-text">
+                Invite link is invalid
+              </h2>
               <p className="mt-2 text-sm leading-6 text-text-muted">
                 This link is missing required Tandem invite information.
               </p>
@@ -87,17 +106,21 @@ function TandemInvitePage() {
       <IonPage className="app-shell">
         <IonHeader className="ion-no-border">
           <IonToolbar className="app-toolbar px-1">
-            <IonTitle className="text-[28px] font-semibold">Tandem Invite</IonTitle>
+            <IonTitle className="text-[28px] font-semibold">
+              Tandem Invite
+            </IonTitle>
           </IonToolbar>
         </IonHeader>
         <IonContent fullscreen className="app-list-page">
           <div className="px-4 py-6">
             <Card tone="accent">
-              <h2 className="text-xl font-semibold text-text">Sign in to join Tandem</h2>
+              <h2 className="text-xl font-semibold text-text">
+                Sign in to join Tandem
+              </h2>
               <p className="mt-2 text-sm leading-6 text-text-muted">
-                {linkPayload.inviter} created a Tandem home for you. Sign in or create an
-                account with your Matrix homeserver, then come back to join the private
-                space.
+                {linkPayload.inviter} created a Tandem home for you. Sign in or
+                create an account with your Matrix homeserver, then come back to
+                join the private space.
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link to={`/login?redirect=${redirectTarget}`}>
@@ -124,7 +147,9 @@ function TandemInvitePage() {
     <IonPage className="app-shell">
       <IonHeader className="ion-no-border">
         <IonToolbar className="app-toolbar px-1">
-          <IonTitle className="text-[28px] font-semibold">Tandem Invite</IonTitle>
+          <IonTitle className="text-[28px] font-semibold">
+            Tandem Invite
+          </IonTitle>
         </IonToolbar>
       </IonHeader>
       <IonContent fullscreen className="app-list-page">
@@ -137,7 +162,9 @@ function TandemInvitePage() {
                 textClassName="text-lg"
               />
               <div>
-                <h2 className="text-xl font-semibold text-text">Join your Tandem home</h2>
+                <h2 className="text-xl font-semibold text-text">
+                  Join your Tandem home
+                </h2>
                 <p className="mt-1 text-sm text-text-muted">
                   Invited by {invite?.inviterMatrixId ?? linkPayload.inviter}
                 </p>
@@ -157,39 +184,49 @@ function TandemInvitePage() {
 
             {isWrongUser && (
               <p className="mt-4 text-sm text-danger">
-                This invite was addressed to {linkPayload.invitee}. You are signed in as{' '}
-                {user.userId}.
+                This invite was addressed to {linkPayload.invitee}. You are
+                signed in as {user.userId}.
               </p>
             )}
 
-            {inviteError && <p className="mt-4 text-sm text-danger">{inviteError}</p>}
+            {inviteError && (
+              <p className="mt-4 text-sm text-danger">{inviteError}</p>
+            )}
             {isAccepted && (
               <p className="mt-4 text-sm text-success">
                 You already joined this Tandem home.
               </p>
             )}
             {isDeclined && (
-              <p className="mt-4 text-sm text-medium">You declined this invite.</p>
+              <p className="mt-4 text-sm text-medium">
+                You declined this invite.
+              </p>
             )}
 
             <div className="mt-5 flex flex-wrap gap-3">
               <Button
                 onClick={handleAccept}
-                disabled={!invite || isWrongUser || isBusy || isAccepted || isDeclined}
+                disabled={
+                  !invite || isWrongUser || isBusy || isAccepted || isDeclined
+                }
               >
                 {isBusy ? 'Joining...' : isAccepted ? 'Joined' : 'Join Tandem'}
               </Button>
               <Button
                 variant="outline"
                 onClick={handleDecline}
-                disabled={!invite || isWrongUser || isBusy || isAccepted || isDeclined}
+                disabled={
+                  !invite || isWrongUser || isBusy || isAccepted || isDeclined
+                }
               >
                 Decline
               </Button>
               {isAccepted && invite && (
                 <IonButton
                   fill="clear"
-                  onClick={() => navigate(`/room/${encodeURIComponent(invite.mainRoomId)}`)}
+                  onClick={() =>
+                    navigate(`/room/${encodeURIComponent(invite.mainRoomId)}`)
+                  }
                 >
                   Open main chat
                 </IonButton>

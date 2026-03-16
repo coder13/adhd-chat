@@ -1,4 +1,13 @@
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from '@ionic/react';
+import {
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from '@ionic/react';
 import { arrowBack, closeOutline, copyOutline } from 'ionicons/icons';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -11,12 +20,17 @@ import type { TandemDiscoveredUser } from '../lib/matrix/tandem';
 function AddContactPage() {
   const navigate = useNavigate();
   const { client, user, isReady } = useMatrixClient();
-  const { discoverUser, sendInvite, error: tandemError } = useTandem(client, user?.userId);
+  const {
+    discoverUser,
+    sendInvite,
+    error: tandemError,
+  } = useTandem(client, user?.userId);
   const [matrixId, setMatrixId] = useState('');
   const [inviteMessage, setInviteMessage] = useState('');
   const [discovering, setDiscovering] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
-  const [discoveredUser, setDiscoveredUser] = useState<TandemDiscoveredUser | null>(null);
+  const [discoveredUser, setDiscoveredUser] =
+    useState<TandemDiscoveredUser | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -99,8 +113,10 @@ function AddContactPage() {
         document.body.removeChild(input);
       }
       setCopyMessage('Link copied.');
-    } catch (cause) {
-      setCopyMessage('Unable to copy automatically. Long-press the link to copy it.');
+    } catch {
+      setCopyMessage(
+        'Unable to copy automatically. Long-press the link to copy it.'
+      );
     }
   };
 
@@ -119,10 +135,12 @@ function AddContactPage() {
       <IonContent fullscreen className="app-list-page">
         <div className="space-y-4 px-4 py-4">
           <Card tone="accent">
-            <h2 className="text-lg font-semibold text-text">Invite by Matrix ID</h2>
+            <h2 className="text-lg font-semibold text-text">
+              Invite by Matrix ID
+            </h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">
-              Look up a Matrix user, confirm their profile, then send both a native
-              Tandem invite and an external join link.
+              Look up a Matrix user, confirm their profile, then send both a
+              native Tandem invite and an external join link.
             </p>
           </Card>
 
@@ -159,7 +177,9 @@ function AddContactPage() {
               </p>
             )}
             {message && (
-              <p className="mt-4 whitespace-pre-wrap text-sm text-success">{message}</p>
+              <p className="mt-4 whitespace-pre-wrap text-sm text-success">
+                {message}
+              </p>
             )}
 
             {discoveredUser && (
@@ -176,10 +196,16 @@ function AddContactPage() {
                       <h3 className="text-base font-semibold text-text">
                         {discoveredUser.displayName ?? 'Matrix user found'}
                       </h3>
-                      <p className="mt-1 text-sm text-text-muted">{discoveredUser.userId}</p>
+                      <p className="mt-1 text-sm text-text-muted">
+                        {discoveredUser.userId}
+                      </p>
                     </div>
                   </div>
-                  <IonButton fill="clear" color="medium" onClick={handleCloseInvite}>
+                  <IonButton
+                    fill="clear"
+                    color="medium"
+                    onClick={handleCloseInvite}
+                  >
                     <IonIcon slot="icon-only" icon={closeOutline} />
                   </IonButton>
                 </div>
@@ -193,12 +219,18 @@ function AddContactPage() {
                 </div>
                 {inviteUrl && (
                   <div className="mt-4 space-y-2">
-                    <label className="block text-sm font-medium text-text">Share link</label>
+                    <label className="block text-sm font-medium text-text">
+                      Share link
+                    </label>
                     <div className="rounded-2xl border border-line bg-elevated px-4 py-3 text-sm text-text">
                       <p className="break-all">{inviteUrl}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Button type="button" variant="outline" onClick={handleCopyInviteLink}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCopyInviteLink}
+                      >
                         <IonIcon icon={copyOutline} />
                         Copy link
                       </Button>
@@ -212,7 +244,11 @@ function AddContactPage() {
                   <Button onClick={handleSendInvite} disabled={sendingInvite}>
                     {sendingInvite ? 'Creating Tandem home...' : 'Submit'}
                   </Button>
-                  <Button type="button" variant="outline" onClick={handleCloseInvite}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCloseInvite}
+                  >
                     Close
                   </Button>
                 </div>

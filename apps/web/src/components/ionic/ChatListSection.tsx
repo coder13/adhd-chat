@@ -55,10 +55,7 @@ function ChatListSection({
           routerLink={`/room/${encodeURIComponent(chat.id)}`}
           className="app-list-item"
         >
-          <AppAvatar
-            name={chat.name}
-            className="h-12 w-12"
-          />
+          <AppAvatar name={chat.name} className="h-12 w-12" />
           <IonLabel className="py-1">
             <div className="flex items-center justify-between gap-3">
               <h2 className="truncate text-[15px] font-semibold text-text">
@@ -68,30 +65,47 @@ function ChatListSection({
                 {formatTimestamp(chat.timestamp)}
               </IonNote>
             </div>
-            <p className="mt-1 truncate text-sm text-text-muted">{chat.preview}</p>
+            <p className="mt-1 truncate text-sm text-text-muted">
+              {chat.preview}
+            </p>
             <div className="mt-2 flex items-center gap-2">
               {chat.nativeSpaceName && (
-                <IonBadge color="primary" className="rounded-full px-2 py-1 text-[10px]">
+                <IonBadge
+                  color="primary"
+                  className="rounded-full px-2 py-1 text-[10px]"
+                >
                   {chat.nativeSpaceName}
                 </IonBadge>
               )}
               {chat.isTandemMain && (
-                <IonBadge color="warning" className="rounded-full px-2 py-1 text-[10px]">
+                <IonBadge
+                  color="warning"
+                  className="rounded-full px-2 py-1 text-[10px]"
+                >
                   Tandem
                 </IonBadge>
               )}
               {chat.isPinned && (
-                <IonBadge color="medium" className="rounded-full px-2 py-1 text-[10px]">
+                <IonBadge
+                  color="medium"
+                  className="rounded-full px-2 py-1 text-[10px]"
+                >
                   Pinned
                 </IonBadge>
               )}
               {chat.category && (
-                <IonBadge color="tertiary" className="rounded-full px-2 py-1 text-[10px]">
+                <IonBadge
+                  color="tertiary"
+                  className="rounded-full px-2 py-1 text-[10px]"
+                >
                   {chat.category}
                 </IonBadge>
               )}
               {chat.isEncrypted && (
-                <IonBadge color="success" className="rounded-full px-2 py-1 text-[10px]">
+                <IonBadge
+                  color="success"
+                  className="rounded-full px-2 py-1 text-[10px]"
+                >
                   Encrypted
                 </IonBadge>
               )}

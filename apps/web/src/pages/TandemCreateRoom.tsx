@@ -84,16 +84,20 @@ function TandemCreateRoomPage() {
               <IonIcon slot="icon-only" icon={arrowBack} />
             </IonButton>
           </IonButtons>
-          <IonTitle className="text-[28px] font-semibold">New Tandem Room</IonTitle>
+          <IonTitle className="text-[28px] font-semibold">
+            New Tandem Room
+          </IonTitle>
         </IonToolbar>
       </IonHeader>
       <IonContent fullscreen className="app-list-page">
         <div className="space-y-4 px-4 py-4">
           <Card tone="accent">
-            <h2 className="text-lg font-semibold text-text">Create inside your Tandem space</h2>
+            <h2 className="text-lg font-semibold text-text">
+              Create inside your Tandem space
+            </h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">
-              This creates a private room, invites your partner, and attaches it to your
-              shared Tandem space automatically.
+              This creates a private room, invites your partner, and attaches it
+              to your shared Tandem space automatically.
             </p>
             {relationship && (
               <p className="mt-3 text-sm text-text-muted">
@@ -142,14 +146,18 @@ function TandemCreateRoomPage() {
 
             {!relationship && (
               <p className="mt-4 text-sm text-danger">
-                No Tandem space is selected. Open a space from the Chats feed first.
+                No Tandem space is selected. Open a space from the Chats feed
+                first.
               </p>
             )}
 
             {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
             <div className="mt-5 flex gap-3">
-              <Button onClick={handleCreate} disabled={creating || !name.trim() || !relationship}>
+              <Button
+                onClick={handleCreate}
+                disabled={creating || !name.trim() || !relationship}
+              >
                 {creating ? 'Creating room...' : 'Create room'}
               </Button>
               <Button variant="outline" onClick={() => navigate(-1)}>

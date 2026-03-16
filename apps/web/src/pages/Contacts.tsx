@@ -7,7 +7,10 @@ import { EmptyState } from '../components';
 import { ContactsList, ListPageLayout } from '../components/ionic';
 import { usePersistedResource } from '../hooks/usePersistedResource';
 import { useMatrixClient } from '../hooks/useMatrixClient';
-import { buildContactCatalog, type ContactSummary } from '../lib/matrix/chatCatalog';
+import {
+  buildContactCatalog,
+  type ContactSummary,
+} from '../lib/matrix/chatCatalog';
 
 function Contacts() {
   const { client, isReady, user, error } = useMatrixClient();
@@ -65,10 +68,12 @@ function Contacts() {
     >
       <div className="space-y-4 px-4 pb-24 pt-4">
         <div>
-          <h2 className="text-lg font-semibold text-text">People you already know</h2>
+          <h2 className="text-lg font-semibold text-text">
+            People you already know
+          </h2>
           <p className="mt-1 text-sm text-text-muted">
-            Contacts come from your active direct chats. Use the add button to look up
-            someone by Matrix ID and invite them into Tandem.
+            Contacts come from your active direct chats. Use the add button to
+            look up someone by Matrix ID and invite them into Tandem.
           </p>
         </div>
 
@@ -82,7 +87,9 @@ function Contacts() {
             body="People from your direct conversations will show up here once you have chatted."
           />
         ) : isLoading && visibleContacts.length === 0 ? (
-          <div className="py-12 text-center text-sm text-text-muted">Loading contacts...</div>
+          <div className="py-12 text-center text-sm text-text-muted">
+            Loading contacts...
+          </div>
         ) : (
           <ContactsList contacts={visibleContacts} />
         )}

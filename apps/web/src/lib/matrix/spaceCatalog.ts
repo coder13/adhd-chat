@@ -1,4 +1,9 @@
-import { MsgType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
+import {
+  MsgType,
+  type MatrixClient,
+  type MatrixEvent,
+  type Room,
+} from 'matrix-js-sdk';
 import {
   getResolvedTandemRelationships,
   getTandemRoomMeta,
@@ -113,9 +118,10 @@ function getLatestTimestamp(room: Room) {
 
 function getChildRoomIds(spaceRoom: Room) {
   return asArray(
-    spaceRoom.currentState.getStateEvents(
-      SPACE_CHILD_EVENT_TYPE
-    ) as MatrixEvent | MatrixEvent[] | null
+    spaceRoom.currentState.getStateEvents(SPACE_CHILD_EVENT_TYPE) as
+      | MatrixEvent
+      | MatrixEvent[]
+      | null
   )
     .map((event) => event.getStateKey())
     .filter((roomId): roomId is string => Boolean(roomId));
@@ -150,16 +156,21 @@ function getSpaceSummary(
     .filter((room): room is Room => room !== null);
 
   const mostRecentRoom =
-    childRooms.sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a))[0] ?? null;
+    childRooms.sort(
+      (a, b) => getLatestTimestamp(b) - getLatestTimestamp(a)
+    )[0] ?? null;
 
   return {
     spaceId: spaceRoom.roomId,
     name: getRoomDisplayName(spaceRoom, userId),
     partnerUserId: relationship.partnerUserId,
     mainRoomId: relationship.mainRoomId,
-    preview: mostRecentRoom ? getPreviewText(mostRecentRoom) : 'No messages yet',
+    preview: mostRecentRoom
+      ? getPreviewText(mostRecentRoom)
+      : 'No messages yet',
     timestamp: mostRecentRoom ? getLatestTimestamp(mostRecentRoom) : 0,
-    roomCount: childRooms.filter((room) => !getTandemRoomMeta(room).hidden).length,
+    roomCount: childRooms.filter((room) => !getTandemRoomMeta(room).hidden)
+      .length,
   };
 }
 
@@ -186,7 +197,9 @@ export async function buildTandemSpaceCatalog(
 
   return joinedRooms
     .filter((room) => isSpaceRoom(room))
-    .filter((room) => room.currentState.getStateEvents(TANDEM_SPACE_EVENT_TYPE, ''))
+    .filter((room) =>
+      room.currentState.getStateEvents(TANDEM_SPACE_EVENT_TYPE, '')
+    )
     .map((spaceRoom) => {
       const relationship = relationships.get(spaceRoom.roomId);
       if (!relationship) {
@@ -239,9 +252,9 @@ export async function buildTandemSpaceRoomCatalog(
         timestamp: getLatestTimestamp(room),
         memberCount: room.getJoinedMemberCount(),
         membership: room.getMyMembership(),
-        isMain: relationship?.mainRoomId === room.roomId || Boolean(
-          room.currentState.getStateEvents(TANDEM_ROOM_EVENT_TYPE, '')
-        ),
+        isMain:
+          relationship?.mainRoomId === room.roomId ||
+          Boolean(room.currentState.getStateEvents(TANDEM_ROOM_EVENT_TYPE, '')),
         isPinned: Boolean(meta.pinned),
         isArchived: Boolean(meta.archived),
         category: meta.category ?? null,

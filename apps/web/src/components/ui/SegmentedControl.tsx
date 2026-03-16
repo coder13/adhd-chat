@@ -39,7 +39,9 @@ function SegmentedControl<T extends string>({
               <span
                 className={cn(
                   'rounded-full px-2 py-0.5 text-xs',
-                  isActive ? 'bg-white/20 text-text-inverse' : 'bg-elevated text-text'
+                  isActive
+                    ? 'bg-white/20 text-text-inverse'
+                    : 'bg-elevated text-text'
                 )}
               >
                 {option.count}

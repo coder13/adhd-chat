@@ -4,9 +4,9 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "check:type": "tsc --noEmit",
-    "lint": "eslint src",
-    "test": "jest"
+    "lint": "eslint src --max-warnings 0",
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "matrix-js-sdk": "^34.13.0",

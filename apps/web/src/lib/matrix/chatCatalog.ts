@@ -1,4 +1,9 @@
-import { MsgType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
+import {
+  MsgType,
+  type MatrixClient,
+  type MatrixEvent,
+  type Room,
+} from 'matrix-js-sdk';
 import {
   getResolvedTandemRelationships,
   getTandemRoomMeta,
@@ -93,7 +98,10 @@ export function getRoomDisplayName(room: Room, userId: string) {
 
 function getStateEvents(room: Room, eventType: string) {
   return asArray(
-    room.currentState.getStateEvents(eventType) as MatrixEvent | MatrixEvent[] | null
+    room.currentState.getStateEvents(eventType) as
+      | MatrixEvent
+      | MatrixEvent[]
+      | null
   );
 }
 
@@ -121,7 +129,9 @@ function hasNativeSpaceMetadata(room: Room) {
     .getStateEvents(ADHD_CHAT_SPACE_EVENT_TYPE, '')
     ?.getContent<{ kind?: string; version?: number }>();
 
-  return content?.kind === 'adhd-chat-space' && typeof content.version === 'number';
+  return (
+    content?.kind === 'adhd-chat-space' && typeof content.version === 'number'
+  );
 }
 
 function getLatestMessageEvent(room: Room) {
@@ -213,29 +223,32 @@ export async function buildChatCatalog(
   const directRoomIds = getDirectRoomIds(client);
   const tandemRelationships = getResolvedTandemRelationships(client);
   const tandemMainRoomIds = new Set(
-    tandemRelationships.relationships.map((relationship) => relationship.mainRoomId)
+    tandemRelationships.relationships.map(
+      (relationship) => relationship.mainRoomId
+    )
   );
   const spaces = joinedRooms.filter(isSpaceRoom);
   const nativeSpaceNamesByRoomId = new Map<string, string>();
 
-  spaces
-    .filter(hasNativeSpaceMetadata)
-    .forEach((spaceRoom) => {
-      const spaceName = getRoomDisplayName(spaceRoom, userId);
-      getStateEvents(spaceRoom, SPACE_CHILD_EVENT_TYPE).forEach((event) => {
-        const childRoomId = event.getStateKey();
-        if (childRoomId) {
-          nativeSpaceNamesByRoomId.set(childRoomId, spaceName);
-        }
-      });
+  spaces.filter(hasNativeSpaceMetadata).forEach((spaceRoom) => {
+    const spaceName = getRoomDisplayName(spaceRoom, userId);
+    getStateEvents(spaceRoom, SPACE_CHILD_EVENT_TYPE).forEach((event) => {
+      const childRoomId = event.getStateKey();
+      if (childRoomId) {
+        nativeSpaceNamesByRoomId.set(childRoomId, spaceName);
+      }
     });
+  });
 
   const chats = joinedRooms
     .filter((room) => !isSpaceRoom(room))
     .map((room) => {
       const isDirect = directRoomIds.has(room.roomId);
       const nativeSpaceName = nativeSpaceNamesByRoomId.get(room.roomId) ?? null;
-      const encryptionEvent = room.currentState.getStateEvents('m.room.encryption', '');
+      const encryptionEvent = room.currentState.getStateEvents(
+        'm.room.encryption',
+        ''
+      );
       const tandemRoomMeta = getTandemRoomMeta(room);
       const isTandemMain = Boolean(
         tandemMainRoomIds.has(room.roomId) ||
@@ -267,8 +280,12 @@ export async function buildChatCatalog(
     .sort(compareChats);
 
   return {
-    primaryChats: chats.filter((chat) => chat.source === 'primary' && !chat.isArchived),
-    otherChats: chats.filter((chat) => chat.source === 'other' || chat.isArchived),
+    primaryChats: chats.filter(
+      (chat) => chat.source === 'primary' && !chat.isArchived
+    ),
+    otherChats: chats.filter(
+      (chat) => chat.source === 'other' || chat.isArchived
+    ),
   };
 }
 
@@ -294,7 +311,7 @@ export function getTimelineMessages(
         };
       }>();
       const mediaUrl = content.url
-        ? client.mxcUrlToHttp(
+        ? (client.mxcUrlToHttp(
             content.url,
             undefined,
             undefined,
@@ -302,7 +319,7 @@ export function getTimelineMessages(
             false,
             true,
             true
-          ) ?? null
+          ) ?? null)
         : null;
       const msgtype = content.msgtype ?? MsgType.Text;
       const body = (() => {
@@ -343,7 +360,9 @@ export function getTimelineMessages(
         imageHeight: content.info?.h ?? null,
       };
     })
-    .filter((message) => message.body.trim().length > 0 || Boolean(message.mediaUrl))
+    .filter(
+      (message) => message.body.trim().length > 0 || Boolean(message.mediaUrl)
+    )
     .sort((a, b) => a.timestamp - b.timestamp);
 }
 
@@ -394,6 +413,9 @@ export async function buildContactCatalog(
     });
 
   return [...contactsByUserId.values()].sort((a, b) => {
-    return b.lastMessageTs - a.lastMessageTs || a.displayName.localeCompare(b.displayName);
+    return (
+      b.lastMessageTs - a.lastMessageTs ||
+      a.displayName.localeCompare(b.displayName)
+    );
   });
 }

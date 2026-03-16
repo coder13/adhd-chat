@@ -13,7 +13,11 @@ function Register() {
           account with the homeserver provider, then come back here to sign in.
         </p>
         <Link
-          to={redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login'}
+          to={
+            redirect
+              ? `/login?redirect=${encodeURIComponent(redirect)}`
+              : '/login'
+          }
           className="text-primary-600 hover:text-primary-700 underline"
         >
           Go to login

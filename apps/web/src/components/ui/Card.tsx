@@ -11,12 +11,7 @@ const toneStyles = {
   accent: 'bg-accent-soft/70 border-accent/20',
 };
 
-function Card({
-  tone = 'default',
-  className,
-  children,
-  ...props
-}: CardProps) {
+function Card({ tone = 'default', className, children, ...props }: CardProps) {
   return (
     <div
       className={cn(

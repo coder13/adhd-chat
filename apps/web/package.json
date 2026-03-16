@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite --port 5175 --host",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "preview": "vite preview",
-    "test": "jest"
+    "test": "jest",
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@adhd-chat/core": "*",

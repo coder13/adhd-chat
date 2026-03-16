@@ -26,7 +26,8 @@ export async function completeSsoCallback(): Promise<MatrixSession> {
     throw new Error('Missing login token in callback URL.');
   }
 
-  const baseUrl = sessionStorage.getItem(REDIRECT_KEY) ?? window.location.origin;
+  const baseUrl =
+    sessionStorage.getItem(REDIRECT_KEY) ?? window.location.origin;
   const existingSession = loadSession();
   const deviceId = existingSession?.deviceId ?? createId('device');
 

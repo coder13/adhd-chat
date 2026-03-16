@@ -28,8 +28,8 @@ function DeviceVerificationPanel({
           Unlock with another device
         </h4>
         <p className="text-sm text-gray-600 mt-1">
-          Use an already verified Matrix device to approve this browser instead of
-          typing your recovery key.
+          Use an already verified Matrix device to approve this browser instead
+          of typing your recovery key.
         </p>
       </div>
 
@@ -59,7 +59,8 @@ function DeviceVerificationPanel({
       {verification.status === 'ready' && (
         <div className="space-y-3">
           <p className="text-sm text-gray-600">
-            Your other device accepted. Start emoji verification on this browser.
+            Your other device accepted. Start emoji verification on this
+            browser.
           </p>
           <div className="flex justify-end space-x-3">
             <Button variant="outline" onClick={onCancel}>
@@ -82,7 +83,8 @@ function DeviceVerificationPanel({
       {verification.status === 'showing_sas' && (
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Compare these emojis with the other device, then confirm if they match.
+            Compare these emojis with the other device, then confirm if they
+            match.
           </p>
           {verification.emojis && verification.emojis.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -113,11 +115,13 @@ function DeviceVerificationPanel({
 
       {verification.status === 'done' && (
         <p className="text-sm text-green-700">
-          Verification complete. This device can now restore encrypted message keys.
+          Verification complete. This device can now restore encrypted message
+          keys.
         </p>
       )}
 
-      {(verification.status === 'cancelled' || verification.status === 'error') && (
+      {(verification.status === 'cancelled' ||
+        verification.status === 'error') && (
         <div className="space-y-3">
           <p className="text-sm text-red-600">
             {verification.error ?? 'Verification did not complete.'}

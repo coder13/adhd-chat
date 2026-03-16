@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ClientEvent,
-  SyncState,
-  type MatrixClient,
-} from 'matrix-js-sdk';
+import { ClientEvent, type MatrixClient, type SyncState } from 'matrix-js-sdk';
 import type { GeneratedSecretStorageKey } from 'matrix-js-sdk/lib/crypto-api';
 import {
   VerificationPhase,
@@ -27,7 +23,11 @@ import {
   resetAuthedClient,
   saveSession,
 } from './helpers';
-import { clearSsoCallbackUrl, completeSsoCallback, startSsoRedirect } from './auth';
+import {
+  clearSsoCallbackUrl,
+  completeSsoCallback,
+  startSsoRedirect,
+} from './auth';
 import {
   finishEncryptionSetup,
   finishDeviceVerificationUnlock,
@@ -54,7 +54,9 @@ export function useMatrixClientState() {
   const verifierRef = useRef<Verifier | null>(null);
   const sasCallbacksRef = useRef<ShowSasCallbacks | null>(null);
   const verifyPromiseRef = useRef<Promise<void> | null>(null);
-  const verificationRequestListenerCleanupRef = useRef<(() => void) | null>(null);
+  const verificationRequestListenerCleanupRef = useRef<(() => void) | null>(
+    null
+  );
   const verifierListenerCleanupRef = useRef<(() => void) | null>(null);
   const [deviceVerification, setDeviceVerification] =
     useState<DeviceVerificationState>({ status: 'idle' });
@@ -73,7 +75,10 @@ export function useMatrixClientState() {
   }, []);
 
   const clearVerificationRequestListeners = useCallback(() => {
-    if (verificationRequestRef.current && verificationRequestListenerCleanupRef.current) {
+    if (
+      verificationRequestRef.current &&
+      verificationRequestListenerCleanupRef.current
+    ) {
       verificationRequestListenerCleanupRef.current();
     }
 
@@ -157,11 +162,13 @@ export function useMatrixClientState() {
         updateDeviceVerificationState();
       };
 
-      const handleCancel = (cause: Error | { getContent?: () => { reason?: string } }) => {
+      const handleCancel = (
+        cause: Error | { getContent?: () => { reason?: string } }
+      ) => {
         const message =
           cause instanceof Error
             ? cause.message
-            : cause.getContent?.().reason ?? 'Verification was cancelled.';
+            : (cause.getContent?.().reason ?? 'Verification was cancelled.');
 
         setDeviceVerification({
           status: 'cancelled',
@@ -281,11 +288,14 @@ export function useMatrixClientState() {
     };
   }, [client]);
 
-  const loginWithSso = useCallback(async (baseUrl: string, returnPath?: string) => {
-    setError(null);
-    setAuthState('redirecting');
-    startSsoRedirect(baseUrl, returnPath);
-  }, []);
+  const loginWithSso = useCallback(
+    async (baseUrl: string, returnPath?: string) => {
+      setError(null);
+      setAuthState('redirecting');
+      startSsoRedirect(baseUrl, returnPath);
+    },
+    []
+  );
 
   const completeSsoLogin = useCallback(async () => {
     if (loggingIn || authState === 'authenticating') {
@@ -355,22 +365,21 @@ export function useMatrixClientState() {
     return recoveryKey.encodedPrivateKey!;
   }, [client]);
 
-  const loadEncryptionSetupInfo = useCallback(async (): Promise<EncryptionSetupInfo> => {
-    if (!client) {
-      throw new Error('Client not initialized.');
-    }
-    return getEncryptionSetupInfo(client);
-  }, [client]);
+  const loadEncryptionSetupInfo =
+    useCallback(async (): Promise<EncryptionSetupInfo> => {
+      if (!client) {
+        throw new Error('Client not initialized.');
+      }
+      return getEncryptionSetupInfo(client);
+    }, [client]);
 
-  const loadEncryptionDiagnostics = useCallback(
-    async (): Promise<EncryptionDiagnostics> => {
+  const loadEncryptionDiagnostics =
+    useCallback(async (): Promise<EncryptionDiagnostics> => {
       if (!client || !user) {
         throw new Error('Client not initialized.');
       }
       return getEncryptionDiagnostics(client, user);
-    },
-    [client, user]
-  );
+    }, [client, user]);
 
   const handleFinishEncryptionSetup = useCallback(
     async (encodedRecoveryKey: string) => {
@@ -449,13 +458,18 @@ export function useMatrixClientState() {
           });
         })
         .catch((cause: unknown) => {
-          if (verificationRequestRef.current?.phase === VerificationPhase.Cancelled) {
+          if (
+            verificationRequestRef.current?.phase ===
+            VerificationPhase.Cancelled
+          ) {
             setDeviceVerification({
               status: 'cancelled',
               transactionId: verificationRequestRef.current?.transactionId,
               otherDeviceId: verificationRequestRef.current?.otherDeviceId,
               error:
-                cause instanceof Error ? cause.message : 'Verification was cancelled.',
+                cause instanceof Error
+                  ? cause.message
+                  : 'Verification was cancelled.',
             });
             return;
           }

@@ -14,17 +14,16 @@ export function useChatPreferences(
   currentUserId: string | null | undefined
 ) {
   const cacheKey = currentUserId ? `tandem-preferences:${currentUserId}` : null;
-  const {
-    data: preferences,
-    refresh,
-  } = usePersistedResource<TandemPreferences>({
-    cacheKey,
-    enabled: Boolean(client && currentUserId),
-    initialValue: {
-      chatViewMode: 'timeline',
-    },
-    load: async () => (client ? getTandemPreferences(client) : { chatViewMode: 'timeline' }),
-  });
+  const { data: preferences, refresh } =
+    usePersistedResource<TandemPreferences>({
+      cacheKey,
+      enabled: Boolean(client && currentUserId),
+      initialValue: {
+        chatViewMode: 'timeline',
+      },
+      load: async () =>
+        client ? getTandemPreferences(client) : { chatViewMode: 'timeline' },
+    });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

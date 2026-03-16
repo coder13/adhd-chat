@@ -1,8 +1,5 @@
 import { createId } from '../id';
-import {
-  createTandemChildRoom,
-  type TandemRelationshipRecord,
-} from './tandem';
+import { createTandemChildRoom, type TandemRelationshipRecord } from './tandem';
 import type { MatrixClient } from 'matrix-js-sdk';
 
 const STORAGE_KEY = 'tandem.pending_rooms';
@@ -32,7 +29,10 @@ function emitChange() {
 }
 
 function canUseStorage() {
-  return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.sessionStorage !== 'undefined'
+  );
 }
 
 function readPendingRooms() {

@@ -20,7 +20,13 @@ import {
   star,
   starOutline,
 } from 'ionicons/icons';
-import { ClientEvent, MsgType, RoomEvent, type MatrixEvent, type Room as MatrixRoom } from 'matrix-js-sdk';
+import {
+  ClientEvent,
+  MsgType,
+  RoomEvent,
+  type MatrixEvent,
+  type Room as MatrixRoom,
+} from 'matrix-js-sdk';
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -31,7 +37,10 @@ import { AppAvatar, Button, Modal, TangentModal } from '../components';
 import { MessageBubble } from '../components/chat';
 import { createId } from '../lib/id';
 import { buildMatrixMediaPayload } from '../lib/matrix/media';
-import { buildRoomSnapshot, type RoomSnapshot } from '../lib/matrix/roomSnapshot';
+import {
+  buildRoomSnapshot,
+  type RoomSnapshot,
+} from '../lib/matrix/roomSnapshot';
 import {
   clearPendingTandemRoom,
   getPendingTandemRoom,
@@ -119,7 +128,9 @@ function RoomPage() {
   const { preferences } = useChatPreferences(client, user?.userId);
   const { relationships } = useTandem(client, user?.userId);
   const cacheKey =
-    !isPendingRoom && user?.userId && roomId ? `room:${user.userId}:${roomId}` : null;
+    !isPendingRoom && user?.userId && roomId
+      ? `room:${user.userId}:${roomId}`
+      : null;
   const {
     data: snapshot,
     error,
@@ -154,32 +165,32 @@ function RoomPage() {
   const [showTangentModal, setShowTangentModal] = useState(false);
   const [creatingTangent, setCreatingTangent] = useState(false);
   const [tangentError, setTangentError] = useState<string | null>(null);
-  const [pendingRoom, setPendingRoom] = useState<PendingTandemRoomRecord | null>(
-    () => getPendingTandemRoom(roomId)
-  );
+  const [pendingRoom, setPendingRoom] =
+    useState<PendingTandemRoomRecord | null>(() =>
+      getPendingTandemRoom(roomId)
+    );
   const contentRef = useRef<HTMLIonContentElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const currentRoom = client?.getRoom(roomId ?? undefined) ?? null;
   const tangentSpaceId = isPendingRoom
-    ? pendingRoom?.sharedSpaceId ?? null
+    ? (pendingRoom?.sharedSpaceId ?? null)
     : client
       ? getTandemSpaceIdForRoom(client, currentRoom)
       : null;
   const tangentRelationship =
-    relationships.find((entry) => entry.sharedSpaceId === tangentSpaceId) ?? null;
-  const {
-    data: tangentTopics,
-    refresh: refreshTangentTopics,
-  } = usePersistedResource<TandemSpaceRoomSummary[]>({
-    cacheKey:
-      user?.userId && tangentSpaceId
-        ? `space-rooms:${user.userId}:${tangentSpaceId}`
-        : null,
-    enabled: Boolean(client && user && isReady && tangentSpaceId),
-    initialValue: [],
-    load: async () =>
-      buildTandemSpaceRoomCatalog(client!, user!.userId, tangentSpaceId!),
-  });
+    relationships.find((entry) => entry.sharedSpaceId === tangentSpaceId) ??
+    null;
+  const { data: tangentTopics, refresh: refreshTangentTopics } =
+    usePersistedResource<TandemSpaceRoomSummary[]>({
+      cacheKey:
+        user?.userId && tangentSpaceId
+          ? `space-rooms:${user.userId}:${tangentSpaceId}`
+          : null,
+      enabled: Boolean(client && user && isReady && tangentSpaceId),
+      initialValue: [],
+      load: async () =>
+        buildTandemSpaceRoomCatalog(client!, user!.userId, tangentSpaceId!),
+    });
 
   useEffect(() => {
     if (isPendingRoom || !client || !user || !roomId) {
@@ -196,7 +207,10 @@ function RoomPage() {
       if (roomLoadTimeoutId !== null) {
         window.clearTimeout(roomLoadTimeoutId);
       }
-      roomLoadTimeoutId = window.setTimeout(resolveMissingRoom, ROOM_LOAD_TIMEOUT_MS);
+      roomLoadTimeoutId = window.setTimeout(
+        resolveMissingRoom,
+        ROOM_LOAD_TIMEOUT_MS
+      );
     };
 
     const updateRoomState = async () => {
@@ -267,7 +281,7 @@ function RoomPage() {
     requestAnimationFrame(() => {
       void contentRef.current?.scrollToBottom(250);
     });
-  }, [isPendingRoom ? pendingRoom?.status : snapshot.messages]);
+  }, [pendingRoom?.status, isPendingRoom, snapshot.messages]);
 
   useEffect(() => {
     if (!roomId || !isPendingRoom) {
@@ -289,7 +303,9 @@ function RoomPage() {
     }
 
     clearPendingTandemRoom(pendingRoom.pendingRoomId);
-    navigate(`/room/${encodeURIComponent(pendingRoom.roomId)}`, { replace: true });
+    navigate(`/room/${encodeURIComponent(pendingRoom.roomId)}`, {
+      replace: true,
+    });
   }, [isPendingRoom, navigate, pendingRoom]);
 
   useEffect(() => {
@@ -337,7 +353,11 @@ function RoomPage() {
         <IonContent className="app-list-page">
           <div className="flex min-h-screen items-center justify-center px-6 text-center">
             <p className="text-text">
-              Please <Link to="/login" className="text-accent">log in</Link> to view this chat.
+              Please{' '}
+              <Link to="/login" className="text-accent">
+                log in
+              </Link>{' '}
+              to view this chat.
             </p>
           </div>
         </IonContent>
@@ -439,7 +459,9 @@ function RoomPage() {
     }
   };
 
-  const handleComposerKeyDown = (event: KeyboardEvent<HTMLIonTextareaElement>) => {
+  const handleComposerKeyDown = (
+    event: KeyboardEvent<HTMLIonTextareaElement>
+  ) => {
     if (event.key !== 'Enter' || event.shiftKey) {
       return;
     }
@@ -521,8 +543,12 @@ function RoomPage() {
       }
     : null;
   const activeSnapshot = pendingSnapshot ?? snapshot;
-  const { roomName, roomSubtitle, messages, isEncrypted, roomMeta } = activeSnapshot;
-  const visibleError = pendingRoom?.status === 'failed' ? pendingRoom.error ?? actionError : actionError ?? error;
+  const { roomName, roomSubtitle, messages, isEncrypted, roomMeta } =
+    activeSnapshot;
+  const visibleError =
+    pendingRoom?.status === 'failed'
+      ? (pendingRoom.error ?? actionError)
+      : (actionError ?? error);
   const handleBackNavigation = () => {
     if (tangentSpaceId) {
       navigate(`/tandem/space/${encodeURIComponent(tangentSpaceId)}`);
@@ -536,31 +562,35 @@ function RoomPage() {
     ...(!isEncrypted
       ? [
           {
-            text: enablingEncryption ? 'Enabling encryption...' : 'Enable encryption',
+            text: enablingEncryption
+              ? 'Enabling encryption...'
+              : 'Enable encryption',
             icon: lockClosedOutline,
             cssClass: 'app-action-primary',
             handler: () => {
               void handleEnableEncryption();
             },
-        },
-      ]
+          },
+        ]
       : []),
     ...(!roomMeta.category
-      ? [{
-          text: 'Set category',
-          handler: () => {
-            const nextCategory = window.prompt(
-              'Category label for this room',
-              roomMeta.category ?? ''
-            );
-            if (nextCategory === null) {
-              return;
-            }
-            void handleUpdateRoomMeta({
-              category: nextCategory.trim() || undefined,
-            });
+      ? [
+          {
+            text: 'Set category',
+            handler: () => {
+              const nextCategory = window.prompt(
+                'Category label for this room',
+                roomMeta.category ?? ''
+              );
+              if (nextCategory === null) {
+                return;
+              }
+              void handleUpdateRoomMeta({
+                category: nextCategory.trim() || undefined,
+              });
+            },
           },
-        }]
+        ]
       : []),
     {
       text: roomMeta.archived ? 'Unarchive room' : 'Archive room',
@@ -596,7 +626,9 @@ function RoomPage() {
               textClassName="text-sm"
             />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[15px] font-semibold text-text">{roomName}</div>
+              <div className="truncate text-[15px] font-semibold text-text">
+                {roomName}
+              </div>
               <div className="truncate text-xs text-text-muted">
                 {roomSubtitle}
                 {isEncrypted ? ' • encrypted' : ''}
@@ -613,7 +645,10 @@ function RoomPage() {
                 }}
                 aria-label={roomMeta.pinned ? 'Unpin room' : 'Pin room'}
               >
-                <IonIcon slot="icon-only" icon={roomMeta.pinned ? star : starOutline} />
+                <IonIcon
+                  slot="icon-only"
+                  icon={roomMeta.pinned ? star : starOutline}
+                />
               </IonButton>
             )}
             {tangentSpaceId && !isPendingRoom && (
@@ -626,7 +661,12 @@ function RoomPage() {
                 <IonIcon slot="icon-only" icon={gitBranchOutline} />
               </IonButton>
             )}
-            <IonButton fill="clear" color="medium" onClick={() => setShowMenu(true)} disabled={isPendingRoom}>
+            <IonButton
+              fill="clear"
+              color="medium"
+              onClick={() => setShowMenu(true)}
+              disabled={isPendingRoom}
+            >
               <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
             </IonButton>
           </IonButtons>
@@ -650,18 +690,26 @@ function RoomPage() {
               ))}
             </div>
           ) : loading ? (
-            <div className="py-12 text-center text-sm text-text-muted">Loading messages...</div>
+            <div className="py-12 text-center text-sm text-text-muted">
+              Loading messages...
+            </div>
           ) : visibleError && messages.length === 0 ? (
-            <div className="py-6 text-center text-sm text-danger">{visibleError}</div>
+            <div className="py-6 text-center text-sm text-danger">
+              {visibleError}
+            </div>
           ) : messages.length === 0 ? (
             <div className="py-12 text-center">
               <p className="text-base font-medium text-text">No messages yet</p>
-              <p className="mt-2 text-sm text-text-muted">Start the conversation below.</p>
+              <p className="mt-2 text-sm text-text-muted">
+                Start the conversation below.
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
               {visibleError && (
-                <div className="py-2 text-center text-sm text-danger">{visibleError}</div>
+                <div className="py-2 text-center text-sm text-danger">
+                  {visibleError}
+                </div>
               )}
               {messages.map((message) => (
                 <MessageBubble
@@ -704,14 +752,20 @@ function RoomPage() {
             onKeyDown={handleComposerKeyDown}
             autoGrow
             rows={1}
-            placeholder={isPendingRoom ? 'Start typing while the room finishes setting up' : 'Message'}
+            placeholder={
+              isPendingRoom
+                ? 'Start typing while the room finishes setting up'
+                : 'Message'
+            }
             className="app-compose-field"
           />
           <IonButton
             shape="round"
             color="primary"
             onClick={handleSendMessage}
-            disabled={isPendingRoom || sending || uploadingAttachment || !draft.trim()}
+            disabled={
+              isPendingRoom || sending || uploadingAttachment || !draft.trim()
+            }
           >
             <IonIcon slot="icon-only" icon={send} />
           </IonButton>
@@ -734,8 +788,9 @@ function RoomPage() {
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-text-muted">
-            Archive <span className="font-medium text-text">{roomName}</span>? The room
-            will stay in your Tandem space, but it will be treated as archived in the app.
+            Archive <span className="font-medium text-text">{roomName}</span>?
+            The room will stay in your Tandem space, but it will be treated as
+            archived in the app.
           </p>
           <div className="flex flex-wrap justify-end gap-3">
             <Button

@@ -55,8 +55,9 @@ function TangentModal({
 
   const exactMatch = useMemo(
     () =>
-      topics.find((topic) => normalizeTopicName(topic.name) === normalizedQuery) ??
-      null,
+      topics.find(
+        (topic) => normalizeTopicName(topic.name) === normalizedQuery
+      ) ?? null,
     [normalizedQuery, topics]
   );
 
@@ -73,8 +74,8 @@ function TangentModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Start a tangent" size="sm">
       <div className="space-y-4">
         <p className="text-sm leading-6 text-text-muted">
-          Start typing to jump into an existing topic, or create a new tangent in
-          one tap.
+          Start typing to jump into an existing topic, or create a new tangent
+          in one tap.
         </p>
         <Input
           label="Topic"
@@ -129,7 +130,7 @@ function TangentModal({
                       <div className="mt-1 text-xs text-text-muted">
                         {topic.membership === 'invite'
                           ? 'Tap to join'
-                          : topic.category ?? 'Existing topic'}
+                          : (topic.category ?? 'Existing topic')}
                       </div>
                     </div>
                     <div className="shrink-0 text-xs font-medium text-accent">

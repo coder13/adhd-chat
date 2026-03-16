@@ -2,6 +2,16 @@
 
 A chat application built with Matrix protocol, using a Yarn workspace and Turborepo monorepo structure.
 
+## Documentation
+
+- [Documentation Index](docs/README.md)
+- [Architecture](docs/architecture/monorepo.md)
+- [Development Setup](docs/development/setup.md)
+- [Authentication](docs/features/authentication.md)
+- [End-to-End Encryption](docs/features/e2ee-encryption.md)
+- [Tandem Spaces](docs/features/tandem-spaces.md)
+- [Chat Experience](docs/features/chat-experience.md)
+
 ## Project Structure
 
 ```

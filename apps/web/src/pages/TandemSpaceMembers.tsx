@@ -1,4 +1,12 @@
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonToolbar } from '@ionic/react';
+import {
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonPage,
+  IonToolbar,
+} from '@ionic/react';
 import { arrowBack } from 'ionicons/icons';
 import { ClientEvent, type RoomMember } from 'matrix-js-sdk';
 import { useEffect } from 'react';
@@ -13,7 +21,10 @@ interface TandemSpaceMemberSummary {
   membership: string;
 }
 
-async function buildTandemSpaceMembers(spaceId: string, client: NonNullable<ReturnType<typeof useMatrixClient>['client']>) {
+async function buildTandemSpaceMembers(
+  spaceId: string,
+  client: NonNullable<ReturnType<typeof useMatrixClient>['client']>
+) {
   const room = client.getRoom(spaceId);
   if (!room) {
     throw new Error('Tandem space not found.');
@@ -23,7 +34,9 @@ async function buildTandemSpaceMembers(spaceId: string, client: NonNullable<Retu
 
   return room
     .getMembers()
-    .filter((member) => member.membership !== 'leave' && member.membership !== 'ban')
+    .filter(
+      (member) => member.membership !== 'leave' && member.membership !== 'ban'
+    )
     .map((member: RoomMember) => ({
       userId: member.userId,
       displayName: member.name || member.userId,
@@ -57,7 +70,9 @@ function TandemSpaceMembersPage() {
     refresh,
   } = usePersistedResource<TandemSpaceMemberSummary[]>({
     cacheKey:
-      user?.userId && spaceId ? `space-members:${user.userId}:${spaceId}` : null,
+      user?.userId && spaceId
+        ? `space-members:${user.userId}:${spaceId}`
+        : null,
     enabled: Boolean(client && user && isReady && spaceId),
     initialValue: [],
     load: async () => buildTandemSpaceMembers(spaceId!, client!),
@@ -93,7 +108,11 @@ function TandemSpaceMembersPage() {
         <IonContent className="app-list-page">
           <div className="flex min-h-screen items-center justify-center px-6 text-center">
             <p className="text-text">
-              Please <Link to="/login" className="text-accent">log in</Link> to view space members.
+              Please{' '}
+              <Link to="/login" className="text-accent">
+                log in
+              </Link>{' '}
+              to view space members.
             </p>
           </div>
         </IonContent>
@@ -106,25 +125,37 @@ function TandemSpaceMembersPage() {
       <IonHeader className="ion-no-border">
         <IonToolbar className="app-toolbar">
           <IonButtons slot="start">
-            <IonButton fill="clear" onClick={() => navigate(`/tandem/space/${encodeURIComponent(spaceId)}`)}>
+            <IonButton
+              fill="clear"
+              onClick={() =>
+                navigate(`/tandem/space/${encodeURIComponent(spaceId)}`)
+              }
+            >
               <IonIcon slot="icon-only" icon={arrowBack} />
             </IonButton>
           </IonButtons>
-          <div className="px-2 text-[15px] font-semibold text-text">Members</div>
+          <div className="px-2 text-[15px] font-semibold text-text">
+            Members
+          </div>
         </IonToolbar>
       </IonHeader>
 
       <IonContent fullscreen className="app-list-page">
         <div className="space-y-4 px-4 py-4">
           <Card tone="accent">
-            <h2 className="text-lg font-semibold text-text">People in this Tandem space</h2>
+            <h2 className="text-lg font-semibold text-text">
+              People in this Tandem space
+            </h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">
-              These are the current members and invitees for this shared Tandem home.
+              These are the current members and invitees for this shared Tandem
+              home.
             </p>
           </Card>
 
           {isLoading ? (
-            <div className="py-12 text-center text-sm text-text-muted">Loading members...</div>
+            <div className="py-12 text-center text-sm text-text-muted">
+              Loading members...
+            </div>
           ) : error ? (
             <div className="py-6 text-center text-sm text-danger">{error}</div>
           ) : (
@@ -141,7 +172,9 @@ function TandemSpaceMembersPage() {
                       <div className="truncate text-sm font-semibold text-text">
                         {member.displayName}
                       </div>
-                      <div className="truncate text-xs text-text-muted">{member.userId}</div>
+                      <div className="truncate text-xs text-text-muted">
+                        {member.userId}
+                      </div>
                     </div>
                     <div className="shrink-0 text-xs font-medium text-text-muted">
                       {getMemberStatusLabel(member.membership)}

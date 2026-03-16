@@ -1,4 +1,8 @@
-import { ClientEvent, type MatrixClient, type MatrixEvent } from 'matrix-js-sdk';
+import {
+  ClientEvent,
+  type MatrixClient,
+  type MatrixEvent,
+} from 'matrix-js-sdk';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePersistedResource } from './usePersistedResource';
 import {
@@ -49,7 +53,11 @@ export function useTandem(
   } = usePersistedResource<UseTandemState>({
     cacheKey,
     enabled: Boolean(client && currentUserId),
-    initialValue: { incomingInvites: [], outgoingInvites: [], relationships: [] },
+    initialValue: {
+      incomingInvites: [],
+      outgoingInvites: [],
+      relationships: [],
+    },
     load: async () => readState(client),
   });
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +84,12 @@ export function useTandem(
       const response = inviteResponseFromToDeviceEvent(event);
       if (response && response.inviterMatrixId === currentUserId) {
         try {
-          await updateInviteStatus(client, response.inviteId, 'outgoing', response.status);
+          await updateInviteStatus(
+            client,
+            response.inviteId,
+            'outgoing',
+            response.status
+          );
 
           if (response.status === 'accepted') {
             await addTandemRelationship(client, {

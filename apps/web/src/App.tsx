@@ -50,7 +50,10 @@ function App() {
           <Route path="/menu/:section" element={<UserMenuStubPage />} />
           <Route path="/tandem/invite" element={<TandemInvitePage />} />
           <Route path="/tandem/space/:spaceId" element={<TandemSpacePage />} />
-          <Route path="/tandem/space/:spaceId/members" element={<TandemSpaceMembersPage />} />
+          <Route
+            path="/tandem/space/:spaceId/members"
+            element={<TandemSpaceMembersPage />}
+          />
           <Route path="/tandem/rooms/new" element={<TandemCreateRoomPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -70,7 +73,9 @@ function App() {
         />
         <BrowserInteractiveAuthModal
           isOpen={browserInteractiveAuthPayload !== null}
-          title={browserInteractiveAuthPayload?.title ?? 'Complete Authentication'}
+          title={
+            browserInteractiveAuthPayload?.title ?? 'Complete Authentication'
+          }
           description={browserInteractiveAuthPayload?.description ?? ''}
           url={browserInteractiveAuthPayload?.url ?? ''}
           onContinue={handleContinueBrowserInteractiveAuth}

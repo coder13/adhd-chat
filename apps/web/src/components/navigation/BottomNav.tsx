@@ -1,4 +1,10 @@
-import { IonButton, IonFooter, IonIcon, IonLabel, IonToolbar } from '@ionic/react';
+import {
+  IonButton,
+  IonFooter,
+  IonIcon,
+  IonLabel,
+  IonToolbar,
+} from '@ionic/react';
 import { chatbubbleEllipsesOutline, peopleOutline } from 'ionicons/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -18,7 +24,8 @@ function BottomNav() {
           {navItems.map((item) => {
             const isActive =
               location.pathname === item.path ||
-              (item.path === '/contacts' && location.pathname.startsWith('/contacts'));
+              (item.path === '/contacts' &&
+                location.pathname.startsWith('/contacts'));
 
             return (
               <IonButton

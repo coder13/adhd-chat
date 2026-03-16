@@ -1,14 +1,3 @@
-import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
-import { defineConfig, globalIgnores } from 'eslint/config';
+import { createCoreLintConfig } from '../../eslint.config.mjs';
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['src/**/*.ts'],
-    extends: [js.configs.recommended, tseslint.configs.recommended],
-    languageOptions: {
-      ecmaVersion: 2020,
-    },
-  },
-]);
+export default createCoreLintConfig(import.meta.dirname);

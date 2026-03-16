@@ -177,7 +177,9 @@ function EncryptionSetupModal({
 
       {step === 'status' && (
         <div className="space-y-4">
-          <p className="text-sm leading-6 text-text-muted">{error || message}</p>
+          <p className="text-sm leading-6 text-text-muted">
+            {error || message}
+          </p>
           <div className="flex justify-end">
             <Button onClick={handleClose}>
               {mode === 'ready' ? 'Done' : 'Close'}

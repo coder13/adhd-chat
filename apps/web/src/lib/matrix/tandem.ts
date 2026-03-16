@@ -27,7 +27,8 @@ export const TANDEM_ROOM_META_EVENT_TYPE = 'com.tandem.room_meta';
 export const TANDEM_SPACE_EVENT_TYPE = 'com.tandem.space';
 export const TANDEM_ROOM_EVENT_TYPE = 'com.tandem.room';
 export const TANDEM_INVITE_TO_DEVICE_EVENT_TYPE = 'com.tandem.invite';
-export const TANDEM_INVITE_RESPONSE_TO_DEVICE_EVENT_TYPE = 'com.tandem.invite_response';
+export const TANDEM_INVITE_RESPONSE_TO_DEVICE_EVENT_TYPE =
+  'com.tandem.invite_response';
 
 export type TandemInviteStatus = 'pending' | 'accepted' | 'declined';
 
@@ -116,7 +117,11 @@ function hasRequiredViaServers(content: unknown, viaServers: string[]) {
   return viaServers.every((server) => existingVia.includes(server));
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+) {
   return await Promise.race<T>([
     promise,
     new Promise<T>((_, reject) => {
@@ -139,8 +144,12 @@ function normalizeRelationshipsContent(
   const next = content as Partial<TandemRelationshipsAccountData>;
 
   return {
-    incomingInvites: Array.isArray(next.incomingInvites) ? next.incomingInvites : [],
-    outgoingInvites: Array.isArray(next.outgoingInvites) ? next.outgoingInvites : [],
+    incomingInvites: Array.isArray(next.incomingInvites)
+      ? next.incomingInvites
+      : [],
+    outgoingInvites: Array.isArray(next.outgoingInvites)
+      ? next.outgoingInvites
+      : [],
     relationships: Array.isArray(next.relationships) ? next.relationships : [],
   };
 }
@@ -154,7 +163,9 @@ function dedupeInvites(invites: TandemInviteRecord[]) {
     }
   });
 
-  return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return [...byId.values()].sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt)
+  );
 }
 
 function dedupeRelationships(relationships: TandemRelationshipRecord[]) {
@@ -166,7 +177,9 @@ function dedupeRelationships(relationships: TandemRelationshipRecord[]) {
     }
   });
 
-  return [...bySpaceId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return [...bySpaceId.values()].sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt)
+  );
 }
 
 export function getTandemRelationships(
@@ -181,12 +194,16 @@ function getOtherMemberUserId(room: Room, currentUserId: string) {
   return (
     room
       .getMembers()
-      .find((member) => member.userId !== currentUserId && member.membership !== 'leave')
-      ?.userId ?? null
+      .find(
+        (member) =>
+          member.userId !== currentUserId && member.membership !== 'leave'
+      )?.userId ?? null
   );
 }
 
-function inferRelationshipsFromRooms(client: MatrixClient): TandemRelationshipRecord[] {
+function inferRelationshipsFromRooms(
+  client: MatrixClient
+): TandemRelationshipRecord[] {
   const currentUserId = client.getUserId();
   if (!currentUserId) {
     return [];
@@ -195,7 +212,9 @@ function inferRelationshipsFromRooms(client: MatrixClient): TandemRelationshipRe
   const rooms = client.getRooms();
 
   return rooms
-    .filter((room) => room.currentState.getStateEvents(TANDEM_SPACE_EVENT_TYPE, ''))
+    .filter((room) =>
+      room.currentState.getStateEvents(TANDEM_SPACE_EVENT_TYPE, '')
+    )
     .map((spaceRoom) => {
       const spaceContent = spaceRoom.currentState
         .getStateEvents(TANDEM_SPACE_EVENT_TYPE, '')
@@ -205,7 +224,8 @@ function inferRelationshipsFromRooms(client: MatrixClient): TandemRelationshipRe
           inviteeMatrixId?: string;
         }>();
 
-      const childEvents = spaceRoom.currentState.getStateEvents('m.space.child');
+      const childEvents =
+        spaceRoom.currentState.getStateEvents('m.space.child');
       const childList = Array.isArray(childEvents)
         ? childEvents
         : childEvents
@@ -222,7 +242,9 @@ function inferRelationshipsFromRooms(client: MatrixClient): TandemRelationshipRe
             .getStateEvents(TANDEM_ROOM_EVENT_TYPE, '')
             ?.getContent<{ kind?: string }>();
           return tandemRoomContent?.kind === 'tandem-main-room';
-        }) ?? childRooms[0] ?? null;
+        }) ??
+        childRooms[0] ??
+        null;
 
       if (!mainRoom) {
         return null;
@@ -249,7 +271,10 @@ function inferRelationshipsFromRooms(client: MatrixClient): TandemRelationshipRe
         status: 'active' as const,
       };
     })
-    .filter((relationship): relationship is TandemRelationshipRecord => relationship !== null);
+    .filter(
+      (relationship): relationship is TandemRelationshipRecord =>
+        relationship !== null
+    );
 }
 
 export function getResolvedTandemRelationships(
@@ -267,12 +292,16 @@ export function getResolvedTandemRelationships(
   };
 }
 
-export function getTandemRoomMeta(room: Room | null | undefined): TandemRoomMeta {
+export function getTandemRoomMeta(
+  room: Room | null | undefined
+): TandemRoomMeta {
   if (!room) {
     return {};
   }
 
-  const content = room.getAccountData(TANDEM_ROOM_META_EVENT_TYPE)?.getContent();
+  const content = room
+    .getAccountData(TANDEM_ROOM_META_EVENT_TYPE)
+    ?.getContent();
   if (!content || typeof content !== 'object') {
     return {};
   }
@@ -292,13 +321,16 @@ export function getTandemSpaceIdForRoom(
     .getStateEvents(TANDEM_ROOM_EVENT_TYPE, '')
     ?.getContent<{ spaceId?: string }>();
 
-  if (typeof tandemRoomContent?.spaceId === 'string' && tandemRoomContent.spaceId) {
+  if (
+    typeof tandemRoomContent?.spaceId === 'string' &&
+    tandemRoomContent.spaceId
+  ) {
     return tandemRoomContent.spaceId;
   }
 
-  const relationship = getResolvedTandemRelationships(client).relationships.find(
-    (entry) => entry.mainRoomId === room.roomId
-  );
+  const relationship = getResolvedTandemRelationships(
+    client
+  ).relationships.find((entry) => entry.mainRoomId === room.roomId);
 
   return relationship?.sharedSpaceId ?? null;
 }
@@ -323,7 +355,9 @@ export async function upsertIncomingInvite(
   await saveTandemRelationships(client, {
     ...data,
     incomingInvites: [
-      ...data.incomingInvites.filter((entry) => entry.inviteId !== invite.inviteId),
+      ...data.incomingInvites.filter(
+        (entry) => entry.inviteId !== invite.inviteId
+      ),
       invite,
     ],
   });
@@ -338,7 +372,9 @@ export async function upsertOutgoingInvite(
   await saveTandemRelationships(client, {
     ...data,
     outgoingInvites: [
-      ...data.outgoingInvites.filter((entry) => entry.inviteId !== invite.inviteId),
+      ...data.outgoingInvites.filter(
+        (entry) => entry.inviteId !== invite.inviteId
+      ),
       invite,
     ],
   });
@@ -400,19 +436,24 @@ export async function discoverMatrixUser(
       10000,
       'User lookup timed out. Please try again.'
     );
-    const exactMatch = directory.results.find((entry) => entry.user_id === candidate);
+    const exactMatch = directory.results.find(
+      (entry) => entry.user_id === candidate
+    );
 
     if (exactMatch) {
       return {
         userId: exactMatch.user_id,
         displayName: exactMatch.display_name ?? null,
         avatarUrl: exactMatch.avatar_url
-          ? client.mxcUrlToHttp(exactMatch.avatar_url, 96, 96, 'crop') ?? null
+          ? (client.mxcUrlToHttp(exactMatch.avatar_url, 96, 96, 'crop') ?? null)
           : null,
       };
     }
   } catch (error) {
-    console.warn('User directory lookup failed, falling back to profile lookup.', error);
+    console.warn(
+      'User directory lookup failed, falling back to profile lookup.',
+      error
+    );
   }
 
   try {
@@ -425,10 +466,10 @@ export async function discoverMatrixUser(
       userId: candidate,
       displayName: profile.displayname ?? null,
       avatarUrl: profile.avatar_url
-        ? client.mxcUrlToHttp(profile.avatar_url, 96, 96, 'crop') ?? null
+        ? (client.mxcUrlToHttp(profile.avatar_url, 96, 96, 'crop') ?? null)
         : null,
     };
-  } catch (error) {
+  } catch {
     throw new Error('That Matrix user could not be found.');
   }
 }
@@ -446,7 +487,11 @@ export async function updateTandemRoomMeta(
     updatedAt: nowIso(),
   };
 
-  await client.setRoomAccountData(roomId, TANDEM_ROOM_META_EVENT_TYPE, nextMeta);
+  await client.setRoomAccountData(
+    roomId,
+    TANDEM_ROOM_META_EVENT_TYPE,
+    nextMeta
+  );
 }
 
 export async function createTandemInvite(params: {
@@ -513,22 +558,27 @@ export async function createTandemInvite(params: {
     ],
   });
 
-  await (
-    ensureTandemSpaceLinks({
-      client,
-      spaceId,
-      roomIds: [mainRoomId],
-      userIds: [inviterMatrixId, inviteeMatrixId],
-    })
-  );
-  await updateTandemRoomMeta(client, mainRoomId, { pinned: true, category: 'Tandem' });
+  await ensureTandemSpaceLinks({
+    client,
+    spaceId,
+    roomIds: [mainRoomId],
+    userIds: [inviterMatrixId, inviteeMatrixId],
+  });
+  await updateTandemRoomMeta(client, mainRoomId, {
+    pinned: true,
+    category: 'Tandem',
+  });
 
-  const directAccountData = client.getAccountData('m.direct')?.getContent<Record<string, string[]>>();
+  const directAccountData = client
+    .getAccountData('m.direct')
+    ?.getContent<Record<string, string[]>>();
   const directRooms = Array.isArray(directAccountData?.[inviteeMatrixId])
     ? directAccountData?.[inviteeMatrixId]
     : [];
   await client.setAccountData('m.direct', {
-    ...(directAccountData && typeof directAccountData === 'object' ? directAccountData : {}),
+    ...(directAccountData && typeof directAccountData === 'object'
+      ? directAccountData
+      : {}),
     [inviteeMatrixId]: Array.from(new Set([...directRooms, mainRoomId])),
   });
 
@@ -600,9 +650,13 @@ export async function ensureTandemSpaceLinks({
       const parentEvent = client
         .getRoom(roomId)
         ?.currentState.getStateEvents('m.space.parent', spaceId);
-      const parentContent = parentEvent?.getContent<{ via?: string[]; canonical?: boolean }>();
+      const parentContent = parentEvent?.getContent<{
+        via?: string[];
+        canonical?: boolean;
+      }>();
       const hasCanonicalParent =
-        Boolean(parentContent?.canonical) && hasRequiredViaServers(parentContent, via);
+        Boolean(parentContent?.canonical) &&
+        hasRequiredViaServers(parentContent, via);
 
       if (!hasCanonicalParent) {
         await (

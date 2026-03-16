@@ -1,7 +1,9 @@
 import type { HTMLAttributes, PropsWithChildren } from 'react';
 import { cn } from '../../lib/cn';
 
-interface BadgeProps extends HTMLAttributes<HTMLSpanElement>, PropsWithChildren {
+interface BadgeProps
+  extends HTMLAttributes<HTMLSpanElement>,
+    PropsWithChildren {
   tone?: 'neutral' | 'accent' | 'success' | 'warning';
 }
 

@@ -5,7 +5,10 @@ function toHex(value: number) {
 function randomBytes(length: number) {
   const bytes = new Uint8Array(length);
 
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.getRandomValues === 'function'
+  ) {
     crypto.getRandomValues(bytes);
     return bytes;
   }
@@ -18,7 +21,10 @@ function randomBytes(length: number) {
 }
 
 export function createId(prefix = 'id') {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID();
   }
 

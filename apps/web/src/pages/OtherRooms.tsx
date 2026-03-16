@@ -45,7 +45,9 @@ function OtherRooms() {
         }
       } catch (cause) {
         if (!cancelled) {
-          setCatalogError(cause instanceof Error ? cause.message : String(cause));
+          setCatalogError(
+            cause instanceof Error ? cause.message : String(cause)
+          );
         }
       }
     };
@@ -78,7 +80,11 @@ function OtherRooms() {
       <ListPageLayout
         title="Other"
         endSlot={
-          <IonButton fill="clear" color="medium" onClick={() => setShowMenu(true)}>
+          <IonButton
+            fill="clear"
+            color="medium"
+            onClick={() => setShowMenu(true)}
+          >
             <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
           </IonButton>
         }
@@ -92,7 +98,9 @@ function OtherRooms() {
           />
         </div>
         {(error || catalogError) && (
-          <div className="px-4 pb-2 text-sm text-danger">{error || catalogError}</div>
+          <div className="px-4 pb-2 text-sm text-danger">
+            {error || catalogError}
+          </div>
         )}
         <ChatListSection
           chats={visibleChats}

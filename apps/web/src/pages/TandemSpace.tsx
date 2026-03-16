@@ -28,9 +28,7 @@ import {
   type TandemSpaceRoomSummary,
 } from '../lib/matrix/spaceCatalog';
 import { startPendingTandemRoomCreation } from '../lib/matrix/pendingTandemRoom';
-import {
-  ensureTandemSpaceLinks,
-} from '../lib/matrix/tandem';
+import { ensureTandemSpaceLinks } from '../lib/matrix/tandem';
 
 function formatTimestamp(timestamp: number) {
   if (!timestamp) {
@@ -72,7 +70,8 @@ function TandemSpacePage() {
     cacheKey,
     enabled: Boolean(client && user && isReady && spaceId),
     initialValue: [],
-    load: async () => buildTandemSpaceRoomCatalog(client!, user!.userId, spaceId!),
+    load: async () =>
+      buildTandemSpaceRoomCatalog(client!, user!.userId, spaceId!),
   });
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
   const [showTangentModal, setShowTangentModal] = useState(false);
@@ -82,7 +81,8 @@ function TandemSpacePage() {
   const [showArchivedRooms, setShowArchivedRooms] = useState(false);
 
   const relationship = useMemo(
-    () => relationships.find((entry) => entry.sharedSpaceId === spaceId) ?? null,
+    () =>
+      relationships.find((entry) => entry.sharedSpaceId === spaceId) ?? null,
     [relationships, spaceId]
   );
   const archivedRooms = useMemo(
@@ -114,7 +114,9 @@ function TandemSpacePage() {
       return;
     }
 
-    const roomIds = Array.from(new Set([relationship.mainRoomId, ...rooms.map((room) => room.id)]));
+    const roomIds = Array.from(
+      new Set([relationship.mainRoomId, ...rooms.map((room) => room.id)])
+    );
     if (roomIds.length === 0) {
       return;
     }
@@ -147,7 +149,11 @@ function TandemSpacePage() {
         <IonContent className="app-list-page">
           <div className="flex min-h-screen items-center justify-center px-6 text-center">
             <p className="text-text">
-              Please <Link to="/login" className="text-accent">log in</Link> to view this space.
+              Please{' '}
+              <Link to="/login" className="text-accent">
+                log in
+              </Link>{' '}
+              to view this space.
             </p>
           </div>
         </IonContent>
@@ -229,12 +235,16 @@ function TandemSpacePage() {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="truncate text-[14px] font-semibold text-text">{room.name}</h3>
+          <h3 className="truncate text-[14px] font-semibold text-text">
+            {room.name}
+          </h3>
           <div className="shrink-0 text-[11px] text-text-muted">
             {formatTimestamp(room.timestamp)}
           </div>
         </div>
-        <p className="mt-0.5 truncate text-[13px] text-text-muted">{room.preview}</p>
+        <p className="mt-0.5 truncate text-[13px] text-text-muted">
+          {room.preview}
+        </p>
         <div className="mt-1.5 flex flex-wrap gap-2 text-[11px] text-text-muted">
           {room.isMain && <span>Main</span>}
           {room.category && <span>{room.category}</span>}
@@ -276,7 +286,9 @@ function TandemSpacePage() {
             />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[15px] font-semibold text-text">
-                {relationship ? `Tandem with ${relationship.partnerUserId}` : 'Tandem Space'}
+                {relationship
+                  ? `Tandem with ${relationship.partnerUserId}`
+                  : 'Tandem Space'}
               </div>
               <div className="truncate text-xs text-text-muted">
                 {rooms.length} threads
@@ -307,19 +319,21 @@ function TandemSpacePage() {
       <IonContent fullscreen className="app-list-page">
         <div className="space-y-4 px-4 py-4">
           {loading ? (
-            <div className="py-12 text-center text-sm text-text-muted">Loading rooms...</div>
+            <div className="py-12 text-center text-sm text-text-muted">
+              Loading rooms...
+            </div>
           ) : error ? (
             <div className="py-6 text-center text-sm text-danger">{error}</div>
           ) : rooms.length === 0 ? (
             <Card>
-              <h3 className="text-base font-semibold text-text">No rooms yet</h3>
+              <h3 className="text-base font-semibold text-text">
+                No rooms yet
+              </h3>
               <p className="mt-2 text-sm leading-6 text-text-muted">
                 Create the first thread in this Tandem space.
               </p>
               <div className="mt-4">
-                <Button
-                  onClick={() => setShowTangentModal(true)}
-                >
+                <Button onClick={() => setShowTangentModal(true)}>
                   Start a tangent
                 </Button>
               </div>
@@ -327,9 +341,7 @@ function TandemSpacePage() {
           ) : (
             <div className="space-y-4">
               {pinnedRooms.length > 0 && (
-                <section>
-                  {pinnedRooms.map(renderRoomCard)}
-                </section>
+                <section>{pinnedRooms.map(renderRoomCard)}</section>
               )}
 
               {pinnedRooms.length > 0 && unpinnedRooms.length > 0 && (
@@ -343,9 +355,7 @@ function TandemSpacePage() {
               )}
 
               {unpinnedRooms.length > 0 && (
-                <section>
-                  {unpinnedRooms.map(renderRoomCard)}
-                </section>
+                <section>{unpinnedRooms.map(renderRoomCard)}</section>
               )}
 
               {archivedRooms.length > 0 && (
@@ -368,9 +378,7 @@ function TandemSpacePage() {
                         </span>
                         <div className="h-px flex-1 bg-line" />
                       </div>
-                      <div>
-                        {archivedRooms.map(renderRoomCard)}
-                      </div>
+                      <div>{archivedRooms.map(renderRoomCard)}</div>
                     </div>
                   )}
                 </section>

@@ -42,10 +42,8 @@ function UserMenuStubPage() {
   const navigate = useNavigate();
   const { section = '' } = useParams<{ section: string }>();
   const { client, user } = useMatrixClient();
-  const { preferences, updateChatViewMode, isSaving, error } = useChatPreferences(
-    client,
-    user?.userId
-  );
+  const { preferences, updateChatViewMode, isSaving, error } =
+    useChatPreferences(client, user?.userId);
 
   const content = useMemo(() => {
     return (
@@ -65,21 +63,28 @@ function UserMenuStubPage() {
               <IonIcon slot="icon-only" icon={arrowBack} />
             </IonButton>
           </IonButtons>
-          <IonTitle className="text-[28px] font-semibold">{content.title}</IonTitle>
+          <IonTitle className="text-[28px] font-semibold">
+            {content.title}
+          </IonTitle>
         </IonToolbar>
       </IonHeader>
       <IonContent fullscreen className="app-list-page">
         <div className="space-y-4 px-4 py-4">
           <Card tone="accent">
             <h2 className="text-lg font-semibold text-text">{content.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-text-muted">{content.body}</p>
+            <p className="mt-2 text-sm leading-6 text-text-muted">
+              {content.body}
+            </p>
           </Card>
 
           {section === 'chat-appearance' && (
             <Card>
-              <h3 className="text-base font-semibold text-text">Message layout</h3>
+              <h3 className="text-base font-semibold text-text">
+                Message layout
+              </h3>
               <p className="mt-2 text-sm leading-6 text-text-muted">
-                Timeline keeps everything left-aligned. Bubbles separates your messages visually.
+                Timeline keeps everything left-aligned. Bubbles separates your
+                messages visually.
               </p>
               <div className="mt-4">
                 <SegmentedControl
@@ -94,7 +99,11 @@ function UserMenuStubPage() {
                 />
               </div>
               {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-              {isSaving && <p className="mt-3 text-sm text-text-muted">Saving preference...</p>}
+              {isSaving && (
+                <p className="mt-3 text-sm text-text-muted">
+                  Saving preference...
+                </p>
+              )}
             </Card>
           )}
         </div>

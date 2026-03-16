@@ -1,4 +1,5 @@
-export const MATRIX_USER_ID_PATTERN = /^@[A-Za-z0-9._=\/+-]+:[A-Za-z0-9.-]+(?::\d+)?$/;
+export const MATRIX_USER_ID_PATTERN =
+  /^@[A-Za-z0-9._=/+-]+:[A-Za-z0-9.-]+(?::\d+)?$/;
 
 export interface TandemInviteLinkPayload {
   inviteId: string;
