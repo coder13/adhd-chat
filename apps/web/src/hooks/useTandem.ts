@@ -17,6 +17,7 @@ import {
   getTandemRelationships,
   inviteFromToDeviceEvent,
   inviteResponseFromToDeviceEvent,
+  recoverTandemRelationshipRooms,
   sendInviteResponseToDevice,
   TANDEM_RELATIONSHIPS_EVENT_TYPE,
   toIncomingInviteFromLinkPayload,
@@ -62,6 +63,32 @@ export function useTandem(
   });
   const [error, setError] = useState<string | null>(null);
   const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
+  const [isRecoveringRelationships, setIsRecoveringRelationships] =
+    useState(false);
+
+  const recoverRelationships = useCallback(async () => {
+    if (!client || !currentUserId) {
+      return {
+        recoveredRoomIds: [],
+        failedRoomIds: [],
+      };
+    }
+
+    setIsRecoveringRelationships(true);
+
+    try {
+      const result = await recoverTandemRelationshipRooms(client);
+      if (
+        result.recoveredRoomIds.length > 0 ||
+        result.failedRoomIds.length > 0
+      ) {
+        await refresh();
+      }
+      return result;
+    } finally {
+      setIsRecoveringRelationships(false);
+    }
+  }, [client, currentUserId, refresh]);
 
   useEffect(() => {
     if (!client || !currentUserId) {
@@ -100,6 +127,7 @@ export function useTandem(
               createdAt: response.updatedAt,
               status: 'active',
             });
+            await recoverRelationships();
           }
         } catch (cause) {
           console.error(cause);
@@ -113,7 +141,11 @@ export function useTandem(
       detachAccountData();
       client.off(ClientEvent.ToDeviceEvent, handleToDeviceEvent);
     };
-  }, [client, currentUserId, refresh]);
+  }, [client, currentUserId, recoverRelationships, refresh]);
+
+  useEffect(() => {
+    void recoverRelationships();
+  }, [recoverRelationships]);
 
   const discoverUser = useCallback(
     async (matrixUserId: string): Promise<TandemDiscoveredUser> => {
@@ -161,6 +193,7 @@ export function useTandem(
 
       try {
         await acceptTandemInvite(client, invite);
+        await recoverRelationships();
         await sendInviteResponseToDevice(client, {
           inviteId: invite.inviteId,
           inviterMatrixId: invite.inviterMatrixId,
@@ -177,7 +210,7 @@ export function useTandem(
         setBusyInviteId(null);
       }
     },
-    [client, currentUserId]
+    [client, currentUserId, recoverRelationships]
   );
 
   const declineInvite = useCallback(
@@ -248,7 +281,9 @@ export function useTandem(
     activeRelationship,
     busyInviteId,
     error: error ?? persistedStateError,
+    isRecoveringRelationships,
     refresh,
+    recoverRelationships,
     discoverUser,
     sendInvite,
     acceptInvite,

@@ -54,6 +54,11 @@ export interface TandemRelationshipRecord {
   status: 'active';
 }
 
+export interface TandemRelationshipRoomsRecoveryResult {
+  recoveredRoomIds: string[];
+  failedRoomIds: string[];
+}
+
 export interface TandemRelationshipsAccountData {
   incomingInvites: TandemInviteRecord[];
   outgoingInvites: TandemInviteRecord[];
@@ -395,6 +400,65 @@ export async function addTandemRelationship(
       relationship,
     ],
   });
+}
+
+function getRoomIdsNeedingRecovery(
+  client: MatrixClient,
+  relationship: Pick<TandemRelationshipRecord, 'sharedSpaceId' | 'mainRoomId'>
+) {
+  return [relationship.sharedSpaceId, relationship.mainRoomId].filter(
+    (roomId, index, roomIds) => {
+      if (!roomId || roomIds.indexOf(roomId) !== index) {
+        return false;
+      }
+
+      return client.getRoom(roomId)?.getMyMembership() !== 'join';
+    }
+  );
+}
+
+export async function ensureTandemRelationshipRooms(
+  client: MatrixClient,
+  relationship: Pick<TandemRelationshipRecord, 'sharedSpaceId' | 'mainRoomId'>
+) {
+  const recoveredRoomIds: string[] = [];
+  const failedRoomIds: string[] = [];
+
+  for (const roomId of getRoomIdsNeedingRecovery(client, relationship)) {
+    try {
+      await client.joinRoom(roomId);
+      recoveredRoomIds.push(roomId);
+    } catch (error) {
+      console.error(`Failed to recover Tandem room ${roomId}`, error);
+      failedRoomIds.push(roomId);
+    }
+  }
+
+  return {
+    recoveredRoomIds,
+    failedRoomIds,
+  } satisfies TandemRelationshipRoomsRecoveryResult;
+}
+
+export async function recoverTandemRelationshipRooms(client: MatrixClient) {
+  const relationships = getResolvedTandemRelationships(client).relationships;
+  const recoveredRoomIds = new Set<string>();
+  const failedRoomIds = new Set<string>();
+
+  for (const relationship of relationships) {
+    const result = await ensureTandemRelationshipRooms(client, relationship);
+    result.recoveredRoomIds.forEach((roomId) => {
+      recoveredRoomIds.add(roomId);
+    });
+    result.failedRoomIds.forEach((roomId) => {
+      failedRoomIds.add(roomId);
+    });
+  }
+
+  return {
+    recoveredRoomIds: [...recoveredRoomIds],
+    failedRoomIds: [...failedRoomIds],
+  } satisfies TandemRelationshipRoomsRecoveryResult;
 }
 
 export async function updateInviteStatus(
@@ -741,8 +805,10 @@ export async function acceptTandemInvite(
   client: MatrixClient,
   invite: TandemInviteRecord
 ) {
-  await client.joinRoom(invite.spaceId);
-  await client.joinRoom(invite.mainRoomId);
+  await ensureTandemRelationshipRooms(client, {
+    sharedSpaceId: invite.spaceId,
+    mainRoomId: invite.mainRoomId,
+  });
   await updateInviteStatus(client, invite.inviteId, 'incoming', 'accepted');
   await addTandemRelationship(client, {
     inviteId: invite.inviteId,

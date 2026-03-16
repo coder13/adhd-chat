@@ -1,5 +1,5 @@
 import { IonSearchbar } from '@ionic/react';
-import { ClientEvent } from 'matrix-js-sdk';
+import { ClientEvent, RoomEvent } from 'matrix-js-sdk';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppAvatar, Button, Card } from '../components';
@@ -37,8 +37,14 @@ function formatTimestamp(timestamp: number) {
 
 function Home() {
   const { client, isReady, user, error } = useMatrixClient();
-  const { incomingInvites, busyInviteId, acceptInvite, declineInvite } =
-    useTandem(client, user?.userId);
+  const {
+    incomingInvites,
+    relationships,
+    busyInviteId,
+    acceptInvite,
+    declineInvite,
+    isRecoveringRelationships,
+  } = useTandem(client, user?.userId);
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const cacheKey = user?.userId ? `tandem-spaces:${user.userId}` : null;
@@ -64,6 +70,30 @@ function Home() {
       client.off(ClientEvent.Sync, refreshSpaces);
     };
   }, [client, refreshSpaces, user, incomingInvites]);
+
+  useEffect(() => {
+    if (!client || !user) {
+      return;
+    }
+
+    const handleMembershipChange = () => {
+      void refreshSpaces();
+    };
+
+    client.on(RoomEvent.MyMembership, handleMembershipChange);
+
+    return () => {
+      client.off(RoomEvent.MyMembership, handleMembershipChange);
+    };
+  }, [client, refreshSpaces, user]);
+
+  useEffect(() => {
+    if (!client || !user || relationships.length === 0) {
+      return;
+    }
+
+    void refreshSpaces();
+  }, [client, refreshSpaces, relationships, isRecoveringRelationships, user]);
 
   const visibleSpaces = useMemo(() => {
     const searchValue = search.trim().toLowerCase();
@@ -164,7 +194,19 @@ function Home() {
               <div className="text-sm text-danger">{error || catalogError}</div>
             )}
 
-            {visibleSpaces.length === 0 && !isLoadingSpaces ? (
+            {visibleSpaces.length === 0 &&
+            (isRecoveringRelationships || relationships.length > 0) &&
+            !catalogError ? (
+              <Card tone="accent">
+                <h3 className="text-base font-semibold text-text">
+                  Restoring your Tandem spaces
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-text-muted">
+                  Tandem is reconnecting your accepted rooms so they appear in
+                  the main feed after refreshes or delayed sync.
+                </p>
+              </Card>
+            ) : visibleSpaces.length === 0 && !isLoadingSpaces ? (
               <Card tone="accent">
                 <h3 className="text-base font-semibold text-text">
                   Start your first Tandem space

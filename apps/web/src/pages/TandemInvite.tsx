@@ -22,6 +22,7 @@ function TandemInvitePage() {
     acceptInvite,
     declineInvite,
     ensureInviteFromLink,
+    recoverRelationships,
     busyInviteId,
     error,
   } = useTandem(client, user?.userId);
@@ -60,6 +61,7 @@ function TandemInvitePage() {
     }
 
     await acceptInvite(invite);
+    await recoverRelationships();
     navigate(`/room/${encodeURIComponent(invite.mainRoomId)}`);
   };
 
