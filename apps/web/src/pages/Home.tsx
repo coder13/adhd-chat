@@ -1,11 +1,39 @@
-import { IonButton, IonIcon, IonSearchbar } from '@ionic/react';
-import { ellipsisHorizontal } from 'ionicons/icons';
+import { IonSearchbar } from '@ionic/react';
+import { ClientEvent } from 'matrix-js-sdk';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { AppMenu, EncryptionSetupModal } from '../components';
+import { Link, useNavigate } from 'react-router-dom';
+import { AppAvatar, Button, Card } from '../components';
+import { ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
-import { buildChatCatalog, type ChatCatalog } from '../lib/matrix/chatCatalog';
-import { ChatListSection, ListPageLayout } from '../components/ionic';
+import { usePersistedResource } from '../hooks/usePersistedResource';
+import { useTandem } from '../hooks/useTandem';
+import {
+  buildTandemSpaceCatalog,
+  type TandemSpaceSummary,
+} from '../lib/matrix/spaceCatalog';
+
+function formatTimestamp(timestamp: number) {
+  if (!timestamp) {
+    return '';
+  }
+
+  const date = new Date(timestamp);
+  const now = new Date();
+  const isSameDay =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  return isSameDay
+    ? new Intl.DateTimeFormat(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(date)
+    : new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+      }).format(date);
+}
 
 function Home() {
   const {
@@ -13,68 +41,53 @@ function Home() {
     isReady,
     user,
     error,
-    handleGenerateRecoveryKey,
-    getEncryptionSetupInfo,
-    handleFinishEncryptionSetup,
-    deviceVerification,
-    startDeviceVerificationUnlock,
-    startSasDeviceVerification,
-    confirmSasDeviceVerification,
-    cancelDeviceVerification,
-    logout,
   } = useMatrixClient();
-  const [catalog, setCatalog] = useState<ChatCatalog | null>(null);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const { incomingInvites, busyInviteId, acceptInvite, declineInvite } = useTandem(
+    client,
+    user?.userId
+  );
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const [showEncryptionModal, setShowEncryptionModal] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const cacheKey = user?.userId ? `tandem-spaces:${user.userId}` : null;
+  const {
+    data: spaces,
+    error: catalogError,
+    refresh: refreshSpaces,
+    isLoading: isLoadingSpaces,
+  } = usePersistedResource<TandemSpaceSummary[]>({
+    cacheKey,
+    enabled: Boolean(client && user),
+    initialValue: [],
+    load: async () => buildTandemSpaceCatalog(client!, user!.userId),
+  });
 
   useEffect(() => {
     if (!client || !user) {
-      setCatalog(null);
-      setCatalogError(null);
       return;
     }
-
-    let cancelled = false;
-
-    const loadCatalog = async () => {
-      try {
-        const nextCatalog = await buildChatCatalog(client, user.userId);
-        if (!cancelled) {
-          setCatalog(nextCatalog);
-          setCatalogError(null);
-        }
-      } catch (cause) {
-        if (!cancelled) {
-          setCatalogError(cause instanceof Error ? cause.message : String(cause));
-        }
-      }
-    };
-
-    void loadCatalog();
+    client.on(ClientEvent.Sync, refreshSpaces);
 
     return () => {
-      cancelled = true;
+      client.off(ClientEvent.Sync, refreshSpaces);
     };
-  }, [client, user]);
+  }, [client, refreshSpaces, user, incomingInvites]);
 
-  const visibleChats = useMemo(() => {
+  const visibleSpaces = useMemo(() => {
     const searchValue = search.trim().toLowerCase();
-    const chats = catalog?.primaryChats ?? [];
-
     if (!searchValue) {
-      return chats;
+      return spaces;
     }
 
-    return chats.filter((chat) => {
+    return spaces.filter((space) => {
       return (
-        chat.name.toLowerCase().includes(searchValue) ||
-        chat.preview.toLowerCase().includes(searchValue) ||
-        chat.nativeSpaceName?.toLowerCase().includes(searchValue)
+        space.name.toLowerCase().includes(searchValue) ||
+        space.partnerUserId.toLowerCase().includes(searchValue) ||
+        space.preview.toLowerCase().includes(searchValue)
       );
     });
-  }, [catalog, search]);
+  }, [search, spaces]);
+
+  const pendingIncomingInvites = incomingInvites.filter((invite) => invite.status === 'pending');
 
   if (!isReady || !user) {
     return (
@@ -86,7 +99,7 @@ function Home() {
             <Link to="/login" className="font-medium text-accent">
               log in
             </Link>{' '}
-            to open your chats.
+            to open your Tandem spaces.
           </p>
         </div>
       </div>
@@ -97,53 +110,122 @@ function Home() {
     <>
       <ListPageLayout
         title="Chats"
-        endSlot={
-          <IonButton fill="clear" color="medium" onClick={() => setShowMenu(true)}>
-            <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
-          </IonButton>
-        }
-      >
-        <div className="px-4 pb-2 pt-2">
+        headerContent={
           <IonSearchbar
             value={search}
             onIonInput={(event) => setSearch(event.detail.value ?? '')}
-            placeholder="Search"
+            placeholder="Search spaces"
             className="app-searchbar"
           />
+        }
+      >
+        <div className="space-y-4 px-4 pb-24 pt-4">
+          {pendingIncomingInvites.length > 0 && (
+            <section className="space-y-3">
+              <div>
+                <h2 className="text-lg font-semibold text-text">Invites</h2>
+                <p className="mt-1 text-sm text-text-muted">
+                  Join incoming Tandem spaces before they appear in your main feed.
+                </p>
+              </div>
+              {pendingIncomingInvites.map((invite) => (
+                <Card key={invite.inviteId} tone="accent">
+                  <h3 className="text-base font-semibold text-text">{invite.inviterMatrixId}</h3>
+                  <p className="mt-2 text-sm leading-6 text-text-muted">
+                    Invited you into a private Tandem space.
+                  </p>
+                  {invite.message && (
+                    <p className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-sm text-text">
+                      {invite.message}
+                    </p>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Button
+                      onClick={() => void acceptInvite(invite)}
+                      disabled={busyInviteId === invite.inviteId}
+                    >
+                      {busyInviteId === invite.inviteId ? 'Joining...' : 'Join space'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => void declineInvite(invite)}
+                      disabled={busyInviteId === invite.inviteId}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </section>
+          )}
+
+          <section className="space-y-3">
+            {(error || catalogError) && (
+              <div className="text-sm text-danger">{error || catalogError}</div>
+            )}
+
+            {visibleSpaces.length === 0 && !isLoadingSpaces ? (
+              <Card tone="accent">
+                <h3 className="text-base font-semibold text-text">
+                  Start your first Tandem space
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-text-muted">
+                  Invite someone you trust and your shared space will show up here
+                  once they join.
+                </p>
+                <div className="mt-4 flex items-center gap-4">
+                  <Button onClick={() => navigate('/contacts/new')}>Invite a partner</Button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/contacts/new')}
+                    className="text-sm font-medium text-accent"
+                  >
+                    How Tandem invites work
+                  </button>
+                </div>
+              </Card>
+            ) : isLoadingSpaces && visibleSpaces.length === 0 ? (
+              <div className="py-12 text-center text-sm text-text-muted">Loading spaces...</div>
+            ) : (
+              <div className="space-y-3">
+                {visibleSpaces.map((space) => (
+                  <Card
+                    key={space.spaceId}
+                    className="cursor-pointer"
+                    onClick={() =>
+                      navigate(`/tandem/space/${encodeURIComponent(space.spaceId)}`)
+                    }
+                  >
+                    <div className="flex items-start gap-4">
+                      <AppAvatar
+                        name={space.name || space.partnerUserId}
+                        className="h-12 w-12"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="truncate text-[15px] font-semibold text-text">
+                            {space.name}
+                          </h3>
+                          <div className="text-xs text-text-muted">
+                            {formatTimestamp(space.timestamp)}
+                          </div>
+                        </div>
+                        <p className="mt-1 truncate text-sm text-text-muted">
+                          {space.preview}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
+                          <span>{space.partnerUserId}</span>
+                          <span>{space.roomCount} threads</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
-        {(error || catalogError) && (
-          <div className="px-4 pb-2 text-sm text-danger">{error || catalogError}</div>
-        )}
-        <ChatListSection
-          chats={visibleChats}
-          emptyTitle="No chats yet"
-          emptyBody="Direct conversations and app-owned chat rooms will appear here."
-        />
       </ListPageLayout>
-
-      <AppMenu
-        isOpen={showMenu}
-        onClose={() => setShowMenu(false)}
-        onOpenEncryption={() => {
-          setShowMenu(false);
-          setShowEncryptionModal(true);
-        }}
-        onLogout={logout}
-      />
-
-      <EncryptionSetupModal
-        isOpen={showEncryptionModal}
-        onClose={() => setShowEncryptionModal(false)}
-        onSetupComplete={() => setShowEncryptionModal(false)}
-        onLoadSetupInfo={getEncryptionSetupInfo}
-        onGenerateKey={handleGenerateRecoveryKey}
-        onFinishSetup={handleFinishEncryptionSetup}
-        verification={deviceVerification}
-        onStartDeviceVerification={startDeviceVerificationUnlock}
-        onStartSasVerification={startSasDeviceVerification}
-        onConfirmSasVerification={confirmSasDeviceVerification}
-        onCancelDeviceVerification={cancelDeviceVerification}
-      />
     </>
   );
 }

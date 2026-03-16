@@ -169,7 +169,7 @@ function EncryptionSetupModal({
     >
       {isOpen && step === 'loading' && (
         <div className="space-y-4">
-          <p className="text-gray-600">
+          <p className="text-sm leading-6 text-text-muted">
             Inspecting this account&apos;s encryption state...
           </p>
         </div>
@@ -177,7 +177,7 @@ function EncryptionSetupModal({
 
       {step === 'status' && (
         <div className="space-y-4">
-          <p className="text-gray-600">{error || message}</p>
+          <p className="text-sm leading-6 text-text-muted">{error || message}</p>
           <div className="flex justify-end">
             <Button onClick={handleClose}>
               {mode === 'ready' ? 'Done' : 'Close'}
@@ -188,18 +188,18 @@ function EncryptionSetupModal({
 
       {step === 'generate' && (
         <div className="space-y-4">
-          <p className="text-gray-600">{message}</p>
+          <p className="text-sm leading-6 text-text-muted">{message}</p>
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-600">{error}</p>
+            <div className="rounded-2xl border border-danger/20 bg-danger-soft p-3">
+              <p className="text-sm text-danger">{error}</p>
             </div>
           )}
           {generatedKey && (
-            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="rounded-2xl border border-warning/20 bg-warning-soft p-3 text-warning">
               {generatedKey}
             </div>
           )}
-          <div className="flex justify-end space-x-3">
+          <div className="flex flex-wrap justify-end gap-3">
             <Button variant="outline" onClick={handleClose} disabled={loading}>
               Cancel
             </Button>
@@ -212,22 +212,22 @@ function EncryptionSetupModal({
 
       {step === 'display' && (
         <div className="space-y-4">
-          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <p className="text-sm text-yellow-800 font-semibold mb-2">
-              ⚠️ Important: Save this key securely
+          <div className="rounded-2xl border border-warning/20 bg-warning-soft p-4">
+            <p className="mb-2 text-sm font-semibold text-warning">
+              Important: save this key securely
             </p>
-            <p className="text-sm text-yellow-700">
+            <p className="text-sm leading-6 text-warning">
               You will need this key to decrypt your messages if you lose access
               to your device. Store it in a safe place like a password manager.
             </p>
           </div>
 
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="rounded-2xl border border-line bg-elevated p-4">
+            <label className="mb-2 block text-sm font-medium text-text">
               Your Recovery Key
             </label>
-            <div className="flex items-center space-x-2">
-              <code className="flex-1 block p-3 bg-white border border-gray-300 rounded font-mono text-sm break-all">
+            <div className="flex items-center gap-2">
+              <code className="block flex-1 break-all rounded-2xl border border-line bg-canvas p-3 font-mono text-sm text-text">
                 {generatedKey}
               </code>
               <Button size="sm" variant="outline" onClick={handleCopyKey}>
@@ -236,7 +236,7 @@ function EncryptionSetupModal({
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3">
+          <div className="flex flex-wrap justify-end gap-3">
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
@@ -249,7 +249,7 @@ function EncryptionSetupModal({
 
       {step === 'verify' && (
         <div className="space-y-4">
-          <p className="text-gray-600">
+          <p className="text-sm leading-6 text-text-muted">
             {mode === 'create'
               ? "Please re-enter your recovery key to confirm you've saved it correctly."
               : message}
@@ -280,7 +280,7 @@ function EncryptionSetupModal({
             />
           )}
 
-          <div className="flex justify-end space-x-3">
+          <div className="flex flex-wrap justify-end gap-3">
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
@@ -300,11 +300,11 @@ function EncryptionSetupModal({
 
       {step === 'complete' && (
         <div className="space-y-4">
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-sm text-green-800 font-semibold">
+          <div className="rounded-2xl border border-success/20 bg-success-soft p-4">
+            <p className="text-sm font-semibold text-success">
               ✓ Encryption setup complete!
             </p>
-            <p className="text-sm text-green-700 mt-1">
+            <p className="mt-1 text-sm text-success">
               Your device is now set up for end-to-end encryption.
             </p>
           </div>

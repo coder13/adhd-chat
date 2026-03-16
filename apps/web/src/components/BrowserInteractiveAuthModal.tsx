@@ -21,26 +21,24 @@ function BrowserInteractiveAuthModal({
   return (
     <Modal isOpen={isOpen} onClose={onCancel} title={title} size="sm">
       <div className="space-y-4">
-        <p className="text-gray-600">{description}</p>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm leading-6 text-text-muted">{description}</p>
+        <p className="text-sm leading-6 text-text-subtle">
           Open the authentication page, complete the homeserver prompt, then
           return here and continue.
         </p>
-        <div className="flex justify-between gap-3">
+        <div className="flex flex-wrap justify-end gap-3">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
           <Button
-            variant="outline"
+            variant="secondary"
             onClick={() => {
               window.open(url, '_blank', 'noopener,noreferrer');
             }}
           >
             Open Authentication
           </Button>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button onClick={onContinue}>Continue</Button>
-          </div>
+          <Button onClick={onContinue}>Continue</Button>
         </div>
       </div>
     </Modal>

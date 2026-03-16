@@ -1,11 +1,5 @@
-import {
-  IonAvatar,
-  IonBadge,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonNote,
-} from '@ionic/react';
+import { IonBadge, IonItem, IonLabel, IonList, IonNote } from '@ionic/react';
+import { AppAvatar } from '..';
 import type { ChatSummary } from '../../lib/matrix/chatCatalog';
 
 function formatTimestamp(timestamp: number) {
@@ -61,11 +55,10 @@ function ChatListSection({
           routerLink={`/room/${encodeURIComponent(chat.id)}`}
           className="app-list-item"
         >
-          <IonAvatar slot="start" className="h-12 w-12 bg-accent-soft">
-            <div className="flex h-full items-center justify-center font-semibold text-accent">
-              {chat.name.charAt(0).toUpperCase()}
-            </div>
-          </IonAvatar>
+          <AppAvatar
+            name={chat.name}
+            className="h-12 w-12"
+          />
           <IonLabel className="py-1">
             <div className="flex items-center justify-between gap-3">
               <h2 className="truncate text-[15px] font-semibold text-text">
@@ -80,6 +73,21 @@ function ChatListSection({
               {chat.nativeSpaceName && (
                 <IonBadge color="primary" className="rounded-full px-2 py-1 text-[10px]">
                   {chat.nativeSpaceName}
+                </IonBadge>
+              )}
+              {chat.isTandemMain && (
+                <IonBadge color="warning" className="rounded-full px-2 py-1 text-[10px]">
+                  Tandem
+                </IonBadge>
+              )}
+              {chat.isPinned && (
+                <IonBadge color="medium" className="rounded-full px-2 py-1 text-[10px]">
+                  Pinned
+                </IonBadge>
+              )}
+              {chat.category && (
+                <IonBadge color="tertiary" className="rounded-full px-2 py-1 text-[10px]">
+                  {chat.category}
                 </IonBadge>
               )}
               {chat.isEncrypted && (

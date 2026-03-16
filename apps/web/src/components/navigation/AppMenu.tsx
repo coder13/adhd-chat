@@ -18,14 +18,17 @@ function AppMenu({
       isOpen={isOpen}
       onDidDismiss={onClose}
       header="More"
+      cssClass="app-action-sheet"
       buttons={[
         {
           text: 'Encryption settings',
+          cssClass: 'app-action-primary',
           handler: onOpenEncryption,
         },
         {
           text: 'Log out',
           role: 'destructive',
+          cssClass: 'app-action-danger',
           handler: () => {
             void onLogout();
           },

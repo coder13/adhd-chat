@@ -36,7 +36,7 @@ function SecretStorageKeyModal({
   return (
     <Modal isOpen={isOpen} onClose={handleCancel} title="Enter Recovery Key">
       <div className="space-y-4">
-        <p className="text-gray-600">
+        <p className="text-sm leading-6 text-text-muted">
           Enter your recovery key to decrypt your messages. This is the key you
           saved when you first set up encryption.
         </p>
@@ -55,7 +55,7 @@ function SecretStorageKeyModal({
           }}
         />
 
-        <div className="flex justify-end space-x-3">
+        <div className="flex flex-wrap justify-end gap-3">
           <Button variant="outline" onClick={handleCancel}>
             Cancel
           </Button>

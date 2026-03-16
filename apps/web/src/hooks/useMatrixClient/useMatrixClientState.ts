@@ -281,10 +281,10 @@ export function useMatrixClientState() {
     };
   }, [client]);
 
-  const loginWithSso = useCallback(async (baseUrl: string) => {
+  const loginWithSso = useCallback(async (baseUrl: string, returnPath?: string) => {
     setError(null);
     setAuthState('redirecting');
-    startSsoRedirect(baseUrl);
+    startSsoRedirect(baseUrl, returnPath);
   }, []);
 
   const completeSsoLogin = useCallback(async () => {

@@ -1,6 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 function Register() {
+  const location = useLocation();
+  const redirect = new URLSearchParams(location.search).get('redirect');
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
@@ -10,7 +13,7 @@ function Register() {
           account with the homeserver provider, then come back here to sign in.
         </p>
         <Link
-          to="/login"
+          to={redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login'}
           className="text-primary-600 hover:text-primary-700 underline"
         >
           Go to login

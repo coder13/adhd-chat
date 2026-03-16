@@ -6,7 +6,14 @@ import Register from './pages/Register';
 import Room from './pages/Room';
 import AuthCallback from './pages/AuthCallback';
 import Contacts from './pages/Contacts';
+import AddContactPage from './pages/AddContact';
 import OtherRooms from './pages/OtherRooms';
+import TandemInvitePage from './pages/TandemInvite';
+import TandemCreateRoomPage from './pages/TandemCreateRoom';
+import TandemSpacePage from './pages/TandemSpace';
+import TandemSpaceMembersPage from './pages/TandemSpaceMembers';
+import UserMenuPage from './pages/UserMenu';
+import UserMenuStubPage from './pages/UserMenuStub';
 import {
   BrowserInteractiveAuthModal,
   InteractiveAuthModal,
@@ -38,6 +45,13 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/other" element={<OtherRooms />} />
           <Route path="/contacts" element={<Contacts />} />
+          <Route path="/contacts/new" element={<AddContactPage />} />
+          <Route path="/menu" element={<UserMenuPage />} />
+          <Route path="/menu/:section" element={<UserMenuStubPage />} />
+          <Route path="/tandem/invite" element={<TandemInvitePage />} />
+          <Route path="/tandem/space/:spaceId" element={<TandemSpacePage />} />
+          <Route path="/tandem/space/:spaceId/members" element={<TandemSpaceMembersPage />} />
+          <Route path="/tandem/rooms/new" element={<TandemCreateRoomPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/room/:roomId" element={<Room />} />

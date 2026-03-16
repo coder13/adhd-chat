@@ -1,4 +1,9 @@
 import { MsgType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
+import {
+  getResolvedTandemRelationships,
+  getTandemRoomMeta,
+  TANDEM_ROOM_EVENT_TYPE,
+} from './tandem';
 
 const ADHD_CHAT_SPACE_EVENT_TYPE = 'dev.adhd-chat.space';
 const ROOM_CREATE_EVENT_TYPE = 'm.room.create';
@@ -16,6 +21,10 @@ export type ChatSummary = {
   memberCount: number;
   nativeSpaceName: string | null;
   source: 'primary' | 'other';
+  isTandemMain: boolean;
+  isPinned: boolean;
+  isArchived: boolean;
+  category: string | null;
 };
 
 export type ChatCatalog = {
@@ -33,9 +42,16 @@ export type ContactSummary = {
 export type TimelineMessage = {
   id: string;
   senderId: string;
+  senderName: string;
   body: string;
   timestamp: number;
   isOwn: boolean;
+  msgtype: string;
+  mediaUrl?: string | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
 };
 
 function asArray<T>(value: T | T[] | null | undefined): T[] {
@@ -120,6 +136,11 @@ function getLatestMessageEvent(room: Room) {
     const content = event.getContent<{ body?: string; msgtype?: string }>();
     if (
       content.msgtype === MsgType.Text ||
+      content.msgtype === MsgType.Image ||
+      content.msgtype === MsgType.File ||
+      content.msgtype === MsgType.Audio ||
+      content.msgtype === MsgType.Video ||
+      content.msgtype === MsgType.Emote ||
       content.msgtype === MsgType.Notice ||
       !content.msgtype
     ) {
@@ -136,8 +157,25 @@ function getPreviewText(room: Room) {
     return 'No messages yet';
   }
 
-  const content = latestMessageEvent.getContent<{ body?: string }>();
-  return content.body?.trim() || 'No messages yet';
+  const content = latestMessageEvent.getContent<{
+    body?: string;
+    msgtype?: string;
+  }>();
+
+  switch (content.msgtype) {
+    case MsgType.Image:
+      return 'Photo';
+    case MsgType.File:
+      return 'File';
+    case MsgType.Audio:
+      return 'Audio';
+    case MsgType.Video:
+      return 'Video';
+    case MsgType.Emote:
+      return content.body?.trim() ? `* ${content.body.trim()}` : 'Emote';
+    default:
+      return content.body?.trim() || 'No messages yet';
+  }
 }
 
 function getLatestTimestamp(room: Room) {
@@ -145,7 +183,12 @@ function getLatestTimestamp(room: Room) {
 }
 
 function compareChats(a: ChatSummary, b: ChatSummary) {
-  return b.timestamp - a.timestamp || a.name.localeCompare(b.name);
+  return (
+    Number(b.isPinned) - Number(a.isPinned) ||
+    Number(b.isTandemMain) - Number(a.isTandemMain) ||
+    b.timestamp - a.timestamp ||
+    a.name.localeCompare(b.name)
+  );
 }
 
 export async function buildChatCatalog(
@@ -168,6 +211,10 @@ export async function buildChatCatalog(
   );
 
   const directRoomIds = getDirectRoomIds(client);
+  const tandemRelationships = getResolvedTandemRelationships(client);
+  const tandemMainRoomIds = new Set(
+    tandemRelationships.relationships.map((relationship) => relationship.mainRoomId)
+  );
   const spaces = joinedRooms.filter(isSpaceRoom);
   const nativeSpaceNamesByRoomId = new Map<string, string>();
 
@@ -189,6 +236,11 @@ export async function buildChatCatalog(
       const isDirect = directRoomIds.has(room.roomId);
       const nativeSpaceName = nativeSpaceNamesByRoomId.get(room.roomId) ?? null;
       const encryptionEvent = room.currentState.getStateEvents('m.room.encryption', '');
+      const tandemRoomMeta = getTandemRoomMeta(room);
+      const isTandemMain = Boolean(
+        tandemMainRoomIds.has(room.roomId) ||
+          room.currentState.getStateEvents(TANDEM_ROOM_EVENT_TYPE, '')
+      );
 
       return {
         id: room.roomId,
@@ -199,37 +251,99 @@ export async function buildChatCatalog(
         isEncrypted: Boolean(encryptionEvent),
         memberCount: room.getJoinedMemberCount(),
         nativeSpaceName,
-        source: isDirect || nativeSpaceName ? 'primary' : 'other',
+        source:
+          isTandemMain || (isDirect && !tandemRoomMeta.archived)
+            ? 'primary'
+            : nativeSpaceName || !tandemRoomMeta.archived
+              ? 'other'
+              : 'other',
+        isTandemMain,
+        isPinned: Boolean(tandemRoomMeta.pinned),
+        isArchived: Boolean(tandemRoomMeta.archived),
+        category: tandemRoomMeta.category ?? null,
       } satisfies ChatSummary;
     })
+    .filter((chat) => !getTandemRoomMeta(client.getRoom(chat.id)).hidden)
     .sort(compareChats);
 
   return {
-    primaryChats: chats.filter((chat) => chat.source === 'primary'),
-    otherChats: chats.filter((chat) => chat.source === 'other'),
+    primaryChats: chats.filter((chat) => chat.source === 'primary' && !chat.isArchived),
+    otherChats: chats.filter((chat) => chat.source === 'other' || chat.isArchived),
   };
 }
 
-export function getTimelineMessages(room: Room, currentUserId: string): TimelineMessage[] {
+export function getTimelineMessages(
+  client: MatrixClient,
+  room: Room,
+  currentUserId: string
+): TimelineMessage[] {
   return room
     .getLiveTimeline()
     .getEvents()
     .filter((event) => event.getType() === 'm.room.message')
     .map((event) => {
-      const content = event.getContent<{ body?: string; msgtype?: string }>();
+      const content = event.getContent<{
+        body?: string;
+        msgtype?: string;
+        url?: string;
+        info?: {
+          mimetype?: string;
+          size?: number;
+          w?: number;
+          h?: number;
+        };
+      }>();
+      const mediaUrl = content.url
+        ? client.mxcUrlToHttp(
+            content.url,
+            undefined,
+            undefined,
+            undefined,
+            false,
+            true,
+            true
+          ) ?? null
+        : null;
+      const msgtype = content.msgtype ?? MsgType.Text;
+      const body = (() => {
+        switch (msgtype) {
+          case MsgType.Image:
+            return content.body ?? 'Image';
+          case MsgType.File:
+            return content.body ?? 'File';
+          case MsgType.Audio:
+            return content.body ?? 'Audio';
+          case MsgType.Video:
+            return content.body ?? 'Video';
+          case MsgType.Emote:
+            return content.body ?? '';
+          case MsgType.Notice:
+          case MsgType.Text:
+          default:
+            return content.body ?? '';
+        }
+      })();
 
       return {
         id: event.getId() ?? `${event.getTs()}`,
         senderId: event.getSender() ?? 'Unknown sender',
-        body:
-          content.msgtype === MsgType.Text || !content.msgtype
-            ? content.body ?? ''
-            : `[${content.msgtype}] ${content.body ?? ''}`,
+        senderName:
+          room.getMember(event.getSender() ?? '')?.name ||
+          room.getMember(event.getSender() ?? '')?.rawDisplayName ||
+          event.getSender() ||
+          'Unknown sender',
+        body,
         timestamp: event.getTs(),
         isOwn: event.getSender() === currentUserId,
+        msgtype,
+        mediaUrl,
+        mimeType: content.info?.mimetype ?? null,
+        fileSize: content.info?.size ?? null,
+        imageWidth: content.info?.w ?? null,
+        imageHeight: content.info?.h ?? null,
       };
     })
-    .filter((message) => message.body.trim().length > 0)
+    .filter((message) => message.body.trim().length > 0 || Boolean(message.mediaUrl))
     .sort((a, b) => a.timestamp - b.timestamp);
 }
 

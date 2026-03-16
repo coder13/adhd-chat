@@ -16,7 +16,7 @@ export default {
           DEFAULT: 'rgb(var(--ion-text-color-rgb) / <alpha-value>)',
           muted: 'rgb(var(--ion-color-medium-rgb) / <alpha-value>)',
           subtle: 'rgb(var(--ion-color-medium-rgb) / <alpha-value>)',
-          inverse: '#ffffff',
+          inverse: 'var(--app-inverse-text-color)',
         },
         accent: {
           DEFAULT: 'rgb(var(--ion-color-primary-rgb) / <alpha-value>)',

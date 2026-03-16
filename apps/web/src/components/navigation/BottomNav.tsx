@@ -1,10 +1,9 @@
 import { IonButton, IonFooter, IonIcon, IonLabel, IonToolbar } from '@ionic/react';
-import { chatbubbleEllipsesOutline, gridOutline, peopleOutline } from 'ionicons/icons';
+import { chatbubbleEllipsesOutline, peopleOutline } from 'ionicons/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const navItems = [
   { path: '/', label: 'Chats', icon: chatbubbleEllipsesOutline },
-  { path: '/other', label: 'Other', icon: gridOutline },
   { path: '/contacts', label: 'Contacts', icon: peopleOutline },
 ];
 
@@ -15,9 +14,11 @@ function BottomNav() {
   return (
     <IonFooter className="app-bottom-nav ion-no-border">
       <IonToolbar className="app-bottom-nav">
-        <div className="grid grid-cols-3 gap-1 px-2 pb-1 pt-2">
+        <div className="grid grid-cols-2 gap-1 px-2 pb-1 pt-2">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
+            const isActive =
+              location.pathname === item.path ||
+              (item.path === '/contacts' && location.pathname.startsWith('/contacts'));
 
             return (
               <IonButton

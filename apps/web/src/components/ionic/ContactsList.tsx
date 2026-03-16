@@ -1,4 +1,5 @@
-import { IonAvatar, IonItem, IonLabel, IonList, IonNote } from '@ionic/react';
+import { IonItem, IonLabel, IonList, IonNote } from '@ionic/react';
+import { AppAvatar } from '..';
 import type { ContactSummary } from '../../lib/matrix/chatCatalog';
 
 function formatTimestamp(timestamp: number) {
@@ -38,11 +39,10 @@ function ContactsList({ contacts }: ContactsListProps) {
           routerLink={`/room/${encodeURIComponent(contact.roomId)}`}
           className="app-list-item"
         >
-          <IonAvatar slot="start" className="h-12 w-12 bg-accent-soft">
-            <div className="flex h-full items-center justify-center font-semibold text-accent">
-              {contact.displayName.charAt(0).toUpperCase()}
-            </div>
-          </IonAvatar>
+          <AppAvatar
+            name={contact.displayName}
+            className="h-12 w-12"
+          />
           <IonLabel>
             <div className="flex items-center justify-between gap-3">
               <h2 className="truncate text-[15px] font-semibold text-text">

@@ -63,15 +63,16 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
         <div
           ref={modalRef}
           className={cn(
-            'inline-block w-full transform overflow-hidden rounded-[28px] border border-line bg-panel text-left shadow-panel transition-all sm:my-8 sm:align-middle',
+            'inline-block w-full transform overflow-hidden rounded-[28px] border border-line text-left text-text shadow-panel transition-all sm:my-8 sm:align-middle',
             sizeStyles[size]
           )}
+          style={{ backgroundColor: 'var(--app-shell-background)' }}
         >
           <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="sm:flex sm:items-start">
               <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
                 <h3
-                  className="mb-4 text-lg font-medium leading-6 text-text"
+                  className="mb-4 border-b border-line pb-4 text-lg font-semibold leading-6 text-text"
                   id="modal-title"
                 >
                   {title}

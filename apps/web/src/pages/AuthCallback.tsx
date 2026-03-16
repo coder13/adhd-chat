@@ -2,6 +2,10 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+import {
+  clearPostAuthRedirectPath,
+  getPostAuthRedirectPath,
+} from '../hooks/useMatrixClient/auth';
 
 function AuthCallback() {
   const { completeSsoLogin, state, error, logout } = useMatrixClient();
@@ -19,8 +23,9 @@ function AuthCallback() {
 
   useEffect(() => {
     if (state === 'ready') {
-      // Redirect to home after successful login
-      navigate('/');
+      const redirectPath = getPostAuthRedirectPath();
+      clearPostAuthRedirectPath();
+      navigate(redirectPath);
     }
   }, [state, navigate]);
 

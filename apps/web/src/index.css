@@ -96,7 +96,7 @@
   .app-chat-bubble.own {
     margin-left: auto;
     background: var(--app-bubble-own);
-    color: #fff;
+    color: var(--app-inverse-text-color);
     border-bottom-right-radius: 10px;
   }
 
@@ -124,5 +124,49 @@
 
   .dark .app-compose-field {
     background: #1f2937;
+  }
+
+  .app-action-sheet {
+    --background: var(--app-shell-background);
+    --button-background: var(--app-shell-background);
+    --button-background-hover: rgba(var(--ion-color-primary-rgb), 0.08);
+    --button-background-activated: rgba(var(--ion-color-primary-rgb), 0.12);
+    --button-color: var(--ion-text-color);
+    --backdrop-opacity: 0.45;
+  }
+
+  .app-action-sheet .action-sheet-group {
+    background: var(--app-shell-background);
+    box-shadow: 0 24px 60px -32px rgba(15, 23, 42, 0.3),
+      0 10px 24px -18px rgba(15, 23, 42, 0.22);
+  }
+
+  .app-action-sheet .action-sheet-title,
+  .app-action-sheet .action-sheet-sub-title {
+    color: var(--ion-text-color);
+    text-align: left;
+  }
+
+  .app-action-sheet .action-sheet-button {
+    justify-content: flex-start;
+    text-align: left;
+    color: var(--ion-text-color);
+    font-weight: 500;
+  }
+
+  .app-action-sheet .action-sheet-button-inner {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .app-action-sheet .action-sheet-button.app-action-primary {
+    color: rgb(var(--ion-color-primary-rgb));
+    font-weight: 600;
+  }
+
+  .app-action-sheet .action-sheet-button.app-action-danger,
+  .app-action-sheet .action-sheet-button.action-sheet-destructive {
+    color: #dc2626;
+    font-weight: 600;
   }
 }

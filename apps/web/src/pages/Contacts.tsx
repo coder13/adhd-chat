@@ -1,62 +1,41 @@
-import { IonButton, IonIcon, IonSearchbar } from '@ionic/react';
-import { ellipsisHorizontal } from 'ionicons/icons';
+import { IonFab, IonFabButton, IonIcon } from '@ionic/react';
+import { add } from 'ionicons/icons';
+import { ClientEvent } from 'matrix-js-sdk';
 import { useEffect, useMemo, useState } from 'react';
-import { AppMenu, EncryptionSetupModal } from '../components';
+import { useNavigate } from 'react-router-dom';
+import { EmptyState } from '../components';
 import { ContactsList, ListPageLayout } from '../components/ionic';
+import { usePersistedResource } from '../hooks/usePersistedResource';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { buildContactCatalog, type ContactSummary } from '../lib/matrix/chatCatalog';
 
 function Contacts() {
-  const {
-    client,
-    isReady,
-    user,
-    error,
-    handleGenerateRecoveryKey,
-    getEncryptionSetupInfo,
-    handleFinishEncryptionSetup,
-    deviceVerification,
-    startDeviceVerificationUnlock,
-    startSasDeviceVerification,
-    confirmSasDeviceVerification,
-    cancelDeviceVerification,
-    logout,
-  } = useMatrixClient();
-  const [contacts, setContacts] = useState<ContactSummary[]>([]);
-  const [contactsError, setContactsError] = useState<string | null>(null);
+  const { client, isReady, user, error } = useMatrixClient();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const [showEncryptionModal, setShowEncryptionModal] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const cacheKey = user?.userId ? `contacts:${user.userId}` : null;
+  const {
+    data: contacts,
+    error: contactsError,
+    refresh: refreshContacts,
+    isLoading,
+  } = usePersistedResource<ContactSummary[]>({
+    cacheKey,
+    enabled: Boolean(client && user && isReady),
+    initialValue: [],
+    load: async () => buildContactCatalog(client!, user!.userId),
+  });
 
   useEffect(() => {
     if (!client || !user || !isReady) {
-      setContacts([]);
-      setContactsError(null);
       return;
     }
-
-    let cancelled = false;
-
-    const loadContacts = async () => {
-      try {
-        const nextContacts = await buildContactCatalog(client, user.userId);
-        if (!cancelled) {
-          setContacts(nextContacts);
-          setContactsError(null);
-        }
-      } catch (cause) {
-        if (!cancelled) {
-          setContactsError(cause instanceof Error ? cause.message : String(cause));
-        }
-      }
-    };
-
-    void loadContacts();
+    client.on(ClientEvent.Sync, refreshContacts);
 
     return () => {
-      cancelled = true;
+      client.off(ClientEvent.Sync, refreshContacts);
     };
-  }, [client, isReady, user]);
+  }, [client, isReady, refreshContacts, user]);
 
   const visibleContacts = useMemo(() => {
     const searchValue = search.trim().toLowerCase();
@@ -73,53 +52,48 @@ function Contacts() {
   }, [contacts, search]);
 
   return (
-    <>
-      <ListPageLayout
-        title="Contacts"
-        endSlot={
-          <IonButton fill="clear" color="medium" onClick={() => setShowMenu(true)}>
-            <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
-          </IonButton>
-        }
-      >
-        <div className="px-4 pb-2 pt-2">
-          <IonSearchbar
-            value={search}
-            onIonInput={(event) => setSearch(event.detail.value ?? '')}
-            placeholder="Search contacts"
-            className="app-searchbar"
-          />
+    <ListPageLayout
+      title="Contacts"
+      headerContent={
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search contacts"
+          className="block w-full rounded-2xl border border-line bg-elevated px-4 py-3 text-text shadow-sm placeholder:text-text-subtle focus:outline-none focus:ring-2 focus:ring-accent/40"
+        />
+      }
+    >
+      <div className="space-y-4 px-4 pb-24 pt-4">
+        <div>
+          <h2 className="text-lg font-semibold text-text">People you already know</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Contacts come from your active direct chats. Use the add button to look up
+            someone by Matrix ID and invite them into Tandem.
+          </p>
         </div>
+
         {(error || contactsError) && (
-          <div className="px-4 pb-2 text-sm text-danger">{error || contactsError}</div>
+          <div className="text-sm text-danger">{error || contactsError}</div>
         )}
-        <ContactsList contacts={visibleContacts} />
-      </ListPageLayout>
 
-      <AppMenu
-        isOpen={showMenu}
-        onClose={() => setShowMenu(false)}
-        onOpenEncryption={() => {
-          setShowMenu(false);
-          setShowEncryptionModal(true);
-        }}
-        onLogout={logout}
-      />
+        {visibleContacts.length === 0 && !isLoading ? (
+          <EmptyState
+            title="No contacts yet"
+            body="People from your direct conversations will show up here once you have chatted."
+          />
+        ) : isLoading && visibleContacts.length === 0 ? (
+          <div className="py-12 text-center text-sm text-text-muted">Loading contacts...</div>
+        ) : (
+          <ContactsList contacts={visibleContacts} />
+        )}
+      </div>
 
-      <EncryptionSetupModal
-        isOpen={showEncryptionModal}
-        onClose={() => setShowEncryptionModal(false)}
-        onSetupComplete={() => setShowEncryptionModal(false)}
-        onLoadSetupInfo={getEncryptionSetupInfo}
-        onGenerateKey={handleGenerateRecoveryKey}
-        onFinishSetup={handleFinishEncryptionSetup}
-        verification={deviceVerification}
-        onStartDeviceVerification={startDeviceVerificationUnlock}
-        onStartSasVerification={startSasDeviceVerification}
-        onConfirmSasVerification={confirmSasDeviceVerification}
-        onCancelDeviceVerification={cancelDeviceVerification}
-      />
-    </>
+      <IonFab slot="fixed" vertical="bottom" horizontal="end">
+        <IonFabButton onClick={() => navigate('/contacts/new')}>
+          <IonIcon icon={add} />
+        </IonFabButton>
+      </IonFab>
+    </ListPageLayout>
   );
 }
 

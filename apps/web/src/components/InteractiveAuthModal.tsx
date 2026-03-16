@@ -42,7 +42,7 @@ function InteractiveAuthModal({
       size="sm"
     >
       <div className="space-y-4">
-        <p className="text-gray-600">
+        <p className="text-sm leading-6 text-text-muted">
           Your homeserver requires interactive authentication before it will
           upload new cross-signing keys.
         </p>
@@ -61,7 +61,7 @@ function InteractiveAuthModal({
           }}
         />
 
-        <div className="flex justify-end space-x-3">
+        <div className="flex flex-wrap justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>

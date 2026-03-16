@@ -26,8 +26,9 @@
   --ion-color-step-900: #111827;
   --app-shell-background: #ffffff;
   --app-chat-background: #eaf1ff;
-  --app-bubble-own: #2f6fed;
-  --app-bubble-other: #ffffff;
+  --app-bubble-own: #dbeafe;
+  --app-bubble-other: #f3f4f6;
+  --app-inverse-text-color: #111827;
   --app-border-color: rgba(15, 23, 42, 0.08);
 }
 
@@ -44,5 +45,6 @@
   --app-chat-background: #162033;
   --app-bubble-own: #3b82f6;
   --app-bubble-other: #1f2937;
+  --app-inverse-text-color: #ffffff;
   --app-border-color: rgba(148, 163, 184, 0.14);
 }
