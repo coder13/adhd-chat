@@ -80,6 +80,27 @@ describe('optimistic timeline helpers', () => {
     );
   });
 
+  it('keeps image captions separate from filenames in optimistic messages', () => {
+    const file = new File(['image'], 'photo.jpg', { type: 'image/jpeg' });
+    const message = createOptimisticAttachmentMessage({
+      file,
+      senderId: '@me:matrix.org',
+      senderName: 'Me',
+      transactionId: 'txn-image-1',
+      caption: 'Look at this',
+      timestamp: 14,
+    });
+
+    expect(message).toEqual(
+      expect.objectContaining({
+        body: 'Look at this',
+        filename: 'photo.jpg',
+        attachmentCaption: 'Look at this',
+        msgtype: 'm.image',
+      })
+    );
+  });
+
   it('merges optimistic messages into timeline order', () => {
     const optimisticMessage = createOptimisticTextMessage({
       body: 'pending',

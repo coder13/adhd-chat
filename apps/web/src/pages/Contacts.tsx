@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { EmptyState } from '../components';
 import { ContactsList, ListPageLayout } from '../components/ionic';
 import { usePersistedResource } from '../hooks/usePersistedResource';
+import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import {
   buildContactCatalog,
@@ -29,17 +30,21 @@ function Contacts() {
     initialValue: [],
     load: async () => buildContactCatalog(client!, user!.userId),
   });
+  const scheduleRefreshContacts = useThrottledRefresh(refreshContacts);
 
   useEffect(() => {
     if (!client || !user || !isReady) {
       return;
     }
-    client.on(ClientEvent.Sync, refreshContacts);
+    const handleSync = () => {
+      scheduleRefreshContacts();
+    };
+    client.on(ClientEvent.Sync, handleSync);
 
     return () => {
-      client.off(ClientEvent.Sync, refreshContacts);
+      client.off(ClientEvent.Sync, handleSync);
     };
-  }, [client, isReady, refreshContacts, user]);
+  }, [client, isReady, scheduleRefreshContacts, user]);
 
   const visibleContacts = useMemo(() => {
     const searchValue = search.trim().toLowerCase();

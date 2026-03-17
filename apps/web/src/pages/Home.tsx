@@ -7,7 +7,10 @@ import { AppAvatar, AuthFallbackState, Button, Card } from '../components';
 import { ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { usePersistedResource } from '../hooks/usePersistedResource';
+import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
 import { useTandem } from '../hooks/useTandem';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { resolveDesktopHomeTarget } from '../lib/desktopShell';
 import {
   buildTandemSpaceCatalog,
   type TandemSpaceSummary,
@@ -53,6 +56,7 @@ function Home() {
     isRecoveringRelationships,
   } = useTandem(client, cacheUserId);
   const navigate = useNavigate();
+  const isDesktopLayout = useMediaQuery('(min-width: 1280px)');
   const [search, setSearch] = useState('');
   const cacheKey = cacheUserId ? `tandem-spaces:${cacheUserId}` : null;
   const {
@@ -73,17 +77,21 @@ function Home() {
         : currentSpaces,
   });
   const [stableSpaces, setStableSpaces] = useState<TandemSpaceSummary[]>([]);
+  const scheduleRefreshSpaces = useThrottledRefresh(refreshSpaces);
 
   useEffect(() => {
     if (!client || !user) {
       return;
     }
-    client.on(ClientEvent.Sync, refreshSpaces);
+    const handleSync = () => {
+      scheduleRefreshSpaces();
+    };
+    client.on(ClientEvent.Sync, handleSync);
 
     return () => {
-      client.off(ClientEvent.Sync, refreshSpaces);
+      client.off(ClientEvent.Sync, handleSync);
     };
-  }, [client, refreshSpaces, user, incomingInvites]);
+  }, [client, scheduleRefreshSpaces, user, incomingInvites]);
 
   useEffect(() => {
     if (!client || !user) {
@@ -106,8 +114,8 @@ function Home() {
       return;
     }
 
-    void refreshSpaces();
-  }, [client, refreshSpaces, relationships, isRecoveringRelationships, user]);
+    scheduleRefreshSpaces(true);
+  }, [client, scheduleRefreshSpaces, relationships, isRecoveringRelationships, user]);
 
   useEffect(() => {
     if (spaces.length > 0) {
@@ -163,6 +171,24 @@ function Home() {
     state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
   const isRestoring = !isReady || !user;
 
+  useEffect(() => {
+    if (!isDesktopLayout || !client || !user || displaySpaces.length === 0) {
+      return;
+    }
+
+    const target = resolveDesktopHomeTarget({
+      client,
+      userId: user.userId,
+      spaces: displaySpaces,
+    });
+
+    if (!target?.roomId) {
+      return;
+    }
+
+    navigate(`/room/${encodeURIComponent(target.roomId)}`, { replace: true });
+  }, [client, displaySpaces, isDesktopLayout, navigate, user]);
+
   if (isRestoring && !canRenderCachedHome) {
     return (
       <AuthFallbackState
@@ -180,6 +206,28 @@ function Home() {
           </>
         }
       />
+    );
+  }
+
+  if (isDesktopLayout && displaySpaces.length === 0 && !isLoadingSpaces) {
+    return (
+      <div className="app-shell flex min-h-[100dvh] items-center justify-center bg-[var(--app-chat-background)] px-6">
+        <Card tone="accent" className="w-full max-w-xl">
+          <h2 className="text-xl font-semibold text-text">Start your first hub</h2>
+          <p className="mt-3 text-sm leading-6 text-text-muted">
+            Invite a partner to create your shared Tandem space. Once you have a
+            hub, desktop will open directly into your latest room.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button onClick={() => navigate('/contacts/new')} disabled={isRestoring}>
+              Invite a partner
+            </Button>
+            <Button variant="outline" onClick={() => navigate('/contacts')}>
+              Open contacts
+            </Button>
+          </div>
+        </Card>
+      </div>
     );
   }
 

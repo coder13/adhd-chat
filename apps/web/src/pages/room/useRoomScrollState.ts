@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
 const NEAR_BOTTOM_THRESHOLD_PX = 96;
@@ -6,7 +6,9 @@ const NEAR_BOTTOM_THRESHOLD_PX = 96;
 interface UseRoomScrollStateParams {
   roomId: string | null;
   contentRef: RefObject<HTMLIonContentElement | null>;
+  scrollElementRef?: RefObject<HTMLElement | null>;
   messageKeys: string[];
+  scrollToLatest: (duration?: number) => void;
 }
 
 function getDistanceFromBottom(element: HTMLElement) {
@@ -16,7 +18,9 @@ function getDistanceFromBottom(element: HTMLElement) {
 export function useRoomScrollState({
   roomId,
   contentRef,
+  scrollElementRef,
   messageKeys,
+  scrollToLatest,
 }: UseRoomScrollStateParams) {
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const nearBottomRef = useRef(true);
@@ -25,15 +29,6 @@ export function useRoomScrollState({
   const previousMessageKeysRef = useRef<string[] | null>(null);
   const lastScrollTopRef = useRef(0);
   const messageSignature = useMemo(() => messageKeys.join('|'), [messageKeys]);
-
-  const scrollToLatest = useCallback(
-    (duration = 250) => {
-      window.requestAnimationFrame(() => {
-        void contentRef.current?.scrollToBottom(duration);
-      });
-    },
-    [contentRef]
-  );
 
   useEffect(() => {
     previousMessageKeysRef.current = null;
@@ -49,7 +44,8 @@ export function useRoomScrollState({
     let cleanup: (() => void) | null = null;
 
     const attachScrollListener = async () => {
-      const scrollHost = await contentRef.current?.getScrollElement();
+      const directScrollHost = scrollElementRef?.current;
+      const scrollHost = directScrollHost ?? await contentRef.current?.getScrollElement();
       if (!scrollHost || cancelled) {
         return;
       }
@@ -79,7 +75,7 @@ export function useRoomScrollState({
       cancelled = true;
       cleanup?.();
     };
-  }, [contentRef, roomId]);
+  }, [contentRef, roomId, scrollElementRef]);
 
   useLayoutEffect(() => {
     const previousMessageKeys = previousMessageKeysRef.current;

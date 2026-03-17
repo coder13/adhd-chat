@@ -19,6 +19,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AuthFallbackState } from '../components';
 import { MessageBubble } from '../components/chat';
 import { usePersistedResource } from '../hooks/usePersistedResource';
+import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
 import {
   buildRoomSnapshot,
@@ -74,6 +75,7 @@ function RoomPinnedMessagesPage() {
     },
     load: async () => buildPinnedMessagesSnapshot(roomId!, client!, user!.userId),
   });
+  const scheduleRefreshPinnedMessages = useThrottledRefresh(refresh);
   const isLiveSession = Boolean(client && user && isReady);
   const canRenderCachedPins =
     state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
@@ -84,10 +86,6 @@ function RoomPinnedMessagesPage() {
     }
 
     const room = client.getRoom(roomId);
-
-    const refreshPinnedMessages = async () => {
-      await refresh();
-    };
 
     const handleTimeline = (
       _event: MatrixEvent,
@@ -100,7 +98,7 @@ function RoomPinnedMessagesPage() {
         return;
       }
 
-      void refreshPinnedMessages();
+      void refresh();
     };
 
     const handleAccountData = (
@@ -108,24 +106,28 @@ function RoomPinnedMessagesPage() {
       eventRoom: MatrixRoom
     ) => {
       if (eventRoom.roomId === roomId) {
-        void refreshPinnedMessages();
+        void refresh();
       }
     };
 
-    client.on(ClientEvent.Sync, refreshPinnedMessages);
+    const handleSync = () => {
+      scheduleRefreshPinnedMessages();
+    };
+
+    client.on(ClientEvent.Sync, handleSync);
     client.on(RoomEvent.Timeline, handleTimeline);
     client.on(RoomEvent.AccountData, handleAccountData);
-    client.on(RoomEvent.Name, refreshPinnedMessages);
-    room?.on(RoomEvent.CurrentStateUpdated, refreshPinnedMessages);
+    client.on(RoomEvent.Name, refresh);
+    room?.on(RoomEvent.CurrentStateUpdated, refresh);
 
     return () => {
-      client.off(ClientEvent.Sync, refreshPinnedMessages);
+      client.off(ClientEvent.Sync, handleSync);
       client.off(RoomEvent.Timeline, handleTimeline);
       client.off(RoomEvent.AccountData, handleAccountData);
-      client.off(RoomEvent.Name, refreshPinnedMessages);
-      room?.off(RoomEvent.CurrentStateUpdated, refreshPinnedMessages);
+      client.off(RoomEvent.Name, refresh);
+      room?.off(RoomEvent.CurrentStateUpdated, refresh);
     };
-  }, [client, isReady, refresh, roomId, user]);
+  }, [client, isReady, refresh, roomId, scheduleRefreshPinnedMessages, user]);
 
   if (!roomId) {
     return (

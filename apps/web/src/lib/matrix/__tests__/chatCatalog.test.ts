@@ -45,6 +45,7 @@ type MockEvent = {
   getContent: jest.Mock<
     {
       body?: string;
+      filename?: string;
       msgtype?: string;
       url?: string;
       'm.new_content'?: {
@@ -96,6 +97,8 @@ function createMessageEvent({
   sender,
   timestamp,
   body,
+  filename = undefined,
+  url = undefined,
   msgtype = 'm.text',
   txnId = null,
   status = null,
@@ -107,6 +110,8 @@ function createMessageEvent({
   sender: string;
   timestamp: number;
   body: string;
+  filename?: string;
+  url?: string;
   msgtype?: string;
   txnId?: string | null;
   status?: string | null;
@@ -116,6 +121,8 @@ function createMessageEvent({
 }): MockEvent {
   const content = {
     body,
+    ...(filename ? { filename } : {}),
+    ...(url ? { url } : {}),
     msgtype,
     ...(relation ? { 'm.relates_to': relation } : {}),
     ...(mentions ? { 'm.mentions': mentions } : {}),
@@ -253,6 +260,32 @@ describe('getTimelineMessages', () => {
 
     expect(message.transactionId).toBe('txn-local-echo');
     expect(message.deliveryStatus).toBe('sending');
+  });
+
+  it('preserves image filenames separately from captions', () => {
+    const room = createRoom([
+      createMessageEvent({
+        id: 'captioned-image',
+        sender: '@alex:matrix.org',
+        timestamp: 50,
+        body: 'Look at this',
+        filename: 'photo.jpg',
+        url: 'mxc://example/photo',
+        msgtype: 'm.image',
+      }),
+    ]);
+
+    const [message] = getTimelineMessages(
+      {
+        mxcUrlToHttp: jest.fn(() => 'https://media.example/photo.jpg'),
+      } as never,
+      room as never,
+      '@me:matrix.org'
+    );
+
+    expect(message.body).toBe('Look at this');
+    expect(message.filename).toBe('photo.jpg');
+    expect(message.mediaUrl).toBe('https://media.example/photo.jpg');
   });
 
   it('keeps messages from older linked timeline fragments after live timeline reset', () => {

@@ -7,6 +7,7 @@ import { MessageBubble } from '../components/chat';
 import MessageActionMenu from '../components/chat/MessageActionMenu';
 import { getEmojiQuery, getEmojiSuggestions } from '../lib/chat/emojis';
 import { createMentionCandidate, getMentionQuery } from '../lib/chat/mentions';
+import { cn } from '../lib/cn';
 import {
   applyOptimisticReactionChanges,
   mergeTimelineMessages,
@@ -17,22 +18,38 @@ import {
 } from '../lib/matrix/optimisticTimeline';
 import { isPendingTandemRoomId } from '../lib/matrix/pendingTandemRoom';
 import { findLatestOwnReadReceipt } from '../lib/matrix/readReceipts';
-import { buildRoomSnapshot, type RoomSnapshot } from '../lib/matrix/roomSnapshot';
+import {
+  buildRoomSnapshot,
+  type RoomSnapshot,
+} from '../lib/matrix/roomSnapshot';
 import {
   buildTandemSpaceRoomCatalog,
   type TandemSpaceRoomSummary,
 } from '../lib/matrix/spaceCatalog';
-import { getTandemMembershipPolicy, getTandemSpaceIdForRoom, type TandemRoomMeta } from '../lib/matrix/tandem';
-import { formatTypingIndicator, TYPING_SERVER_TIMEOUT_MS } from '../lib/matrix/typingIndicators';
+import {
+  getTandemMembershipPolicy,
+  getTandemSpaceIdForRoom,
+  type TandemRoomMeta,
+} from '../lib/matrix/tandem';
+import {
+  formatTypingIndicator,
+  TYPING_SERVER_TIMEOUT_MS,
+} from '../lib/matrix/typingIndicators';
 import { useChatPreferences } from '../hooks/useChatPreferences';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { usePersistedResource } from '../hooks/usePersistedResource';
 import { useTandem } from '../hooks/useTandem';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
+import { loadDesktopLastSelection } from '../lib/desktopShell';
+import DesktopRailHeader from './room/DesktopRailHeader';
+import DesktopRoomPanel from './room/DesktopRoomPanel';
 import RoomComposer from './room/RoomComposer';
+import DesktopTopicSidebar from './room/DesktopTopicSidebar';
 import RoomDialogs from './room/RoomDialogs';
 import RoomHeader from './room/RoomHeader';
 import type { ComposerMode, QueuedImage, RoomMessage } from './room/types';
 import { buildPendingRoomMessages, formatTimestamp } from './room/utils';
+import { useDesktopRoomShell } from './room/useDesktopRoomShell';
 import { useRoomComposer } from './room/useRoomComposer';
 import { useRoomPageActions } from './room/useRoomPageActions';
 import { useRoomRealtime } from './room/useRoomRealtime';
@@ -51,6 +68,7 @@ function RoomPage() {
     resolveRoomNotificationMode,
   } = useChatPreferences(client, cacheUserId);
   const { relationships } = useTandem(client, cacheUserId);
+  const isDesktopLayout = useMediaQuery('(min-width: 1280px)');
 
   const cacheKey =
     !isPendingRoom && cacheUserId && roomId
@@ -92,10 +110,12 @@ function RoomPage() {
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showIdentityModal, setShowIdentityModal] = useState(false);
-  const [showTopicNotificationModal, setShowTopicNotificationModal] = useState(false);
+  const [showTopicNotificationModal, setShowTopicNotificationModal] =
+    useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showQueuedImagePreview, setShowQueuedImagePreview] = useState(false);
-  const [selectedEmojiSuggestionIndex, setSelectedEmojiSuggestionIndex] = useState(0);
+  const [selectedEmojiSuggestionIndex, setSelectedEmojiSuggestionIndex] =
+    useState(0);
   const [showDeleteTopicConfirm, setShowDeleteTopicConfirm] = useState(false);
   const [deleteTopicNameInput, setDeleteTopicNameInput] = useState('');
   const [deletingTopic, setDeletingTopic] = useState(false);
@@ -109,10 +129,14 @@ function RoomPage() {
     position: { x: number; y: number };
   } | null>(null);
   const [composerMode, setComposerMode] = useState<ComposerMode>(null);
-  const [optimisticMessages, setOptimisticMessages] = useState<OptimisticTimelineMessage[]>([]);
-  const [optimisticReactionChanges, setOptimisticReactionChanges] = useState<OptimisticReactionChange[]>([]);
-
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    OptimisticTimelineMessage[]
+  >([]);
+  const [optimisticReactionChanges, setOptimisticReactionChanges] = useState<
+    OptimisticReactionChange[]
+  >([]);
   const contentRef = useRef<HTMLIonContentElement>(null);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLIonTextareaElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -120,20 +144,21 @@ function RoomPage() {
   const lastTypingSentAtRef = useRef(0);
   const typingIdleTimeoutRef = useRef<number | null>(null);
   const lastReadReceiptEventIdRef = useRef<string | null>(null);
-  const scrollToLatest = useCallback((duration = 250) => {
-    window.requestAnimationFrame(() => {
-      void contentRef.current?.scrollToBottom(duration);
-    });
-  }, []);
 
   const currentRoom = client?.getRoom(roomId ?? undefined) ?? null;
   const mentionCandidates =
     currentRoom && user
       ? currentRoom
           .getMembers()
-          .filter((member) => member.membership === 'join' && member.userId !== user.userId)
+          .filter(
+            (member) =>
+              member.membership === 'join' && member.userId !== user.userId
+          )
           .map((member) =>
-            createMentionCandidate(member.userId, member.name || member.rawDisplayName || member.userId)
+            createMentionCandidate(
+              member.userId,
+              member.name || member.rawDisplayName || member.userId
+            )
           )
       : [];
   const mentionQuery = getMentionQuery(draft);
@@ -141,7 +166,9 @@ function RoomPage() {
   const emojiSuggestions = getEmojiSuggestions(emojiQuery);
   const roomMembership = currentRoom?.getMyMembership() ?? 'join';
   const membershipPolicy =
-    !isPendingRoom && client && currentRoom ? getTandemMembershipPolicy(client, currentRoom) : null;
+    !isPendingRoom && client && currentRoom
+      ? getTandemMembershipPolicy(client, currentRoom)
+      : null;
   const isLiveSession = Boolean(client && user && isReady);
   const canRenderCachedRoom =
     !isPendingRoom &&
@@ -152,13 +179,28 @@ function RoomPage() {
     isLiveSession &&
     (isPendingRoom || !membershipPolicy || roomMembership === 'join');
   const canDeleteTopic = membershipPolicy?.roomKind === 'tandem-child-room';
-  const tangentSpaceId = isPendingRoom
+  const liveTangentSpaceId = isPendingRoom
     ? null
     : client
       ? getTandemSpaceIdForRoom(client, currentRoom)
       : null;
+  const persistedDesktopSelection = loadDesktopLastSelection(
+    user?.userId ?? bootstrapUserId
+  );
+  const tangentSpaceId =
+    liveTangentSpaceId ??
+    (persistedDesktopSelection.lastRoomId === roomId
+      ? persistedDesktopSelection.lastHubId
+      : null);
   const tangentRelationship =
-    relationships.find((entry) => entry.sharedSpaceId === tangentSpaceId) ?? null;
+    relationships.find((entry) => entry.sharedSpaceId === tangentSpaceId) ??
+    null;
+  const currentUserProfile = user ? (client?.getUser(user.userId) ?? null) : null;
+  const currentUserName =
+    currentUserProfile?.displayName || user?.userId || 'User';
+  const currentUserAvatarUrl = currentUserProfile?.avatarUrl
+    ? (client?.mxcUrlToHttp(currentUserProfile.avatarUrl, 64, 64, 'crop') ?? null)
+    : null;
 
   const { data: tangentTopics, refresh: refreshTangentTopics } =
     usePersistedResource<TandemSpaceRoomSummary[]>({
@@ -168,8 +210,60 @@ function RoomPage() {
           : null,
       enabled: Boolean(client && user && isReady && tangentSpaceId),
       initialValue: [],
-      load: async () => buildTandemSpaceRoomCatalog(client!, user!.userId, tangentSpaceId!),
+      load: async () =>
+        buildTandemSpaceRoomCatalog(client!, user!.userId, tangentSpaceId!),
     });
+  const showDesktopSidebar =
+    isDesktopLayout &&
+    Boolean(tangentSpaceId) &&
+    !isPendingRoom;
+  const {
+    desktopRailView,
+    desktopSettingsSection,
+    setDesktopSettingsSection,
+    desktopRailSearchQuery,
+    setDesktopRailSearchQuery,
+    showDesktopRailMenu,
+    setShowDesktopRailMenu,
+    desktopRoomPanelView,
+    setDesktopRoomPanelView,
+    desktopRailWidth,
+    isResizingDesktopRail,
+    setIsResizingDesktopRail,
+    openDesktopContacts,
+    openDesktopOtherRooms,
+    openDesktopSettings,
+    handleDesktopRailBack,
+    openDesktopEditPanel,
+    openDesktopPinsPanel,
+    openDesktopSearchPanel,
+    openDesktopDetailsPanel,
+    closeDesktopRoomPanel,
+    backToDesktopRoomDetails,
+  } = useDesktopRoomShell({
+    isDesktopLayout,
+    showDesktopSidebar,
+    roomId,
+    tangentSpaceId,
+    userId: user?.userId,
+    bootstrapUserId,
+  });
+  const openPinnedMessagesPath = `/room/${encodeURIComponent(roomId ?? '')}/pinned`;
+  const openSearchPath = `/room/${encodeURIComponent(roomId ?? '')}/search`;
+  const scrollToLatest = useCallback((duration = 250) => {
+    window.requestAnimationFrame(() => {
+      const timelineScrollHost = timelineScrollRef.current;
+      if (showDesktopSidebar && timelineScrollHost) {
+        timelineScrollHost.scrollTo({
+          top: timelineScrollHost.scrollHeight,
+          behavior: duration === 0 ? 'auto' : 'smooth',
+        });
+        return;
+      }
+
+      void contentRef.current?.scrollToBottom(duration);
+    });
+  }, [showDesktopSidebar]);
 
   const { pendingRoom, typingMemberNames } = useRoomRealtime({
     client,
@@ -211,15 +305,18 @@ function RoomPage() {
 
     outgoingTypingRef.current = false;
     lastTypingSentAtRef.current = 0;
-    void client.sendTyping(roomId, false, TYPING_SERVER_TIMEOUT_MS).catch((cause: unknown) => {
-      console.error('Failed to clear typing state', cause);
-    });
+    void client
+      .sendTyping(roomId, false, TYPING_SERVER_TIMEOUT_MS)
+      .catch((cause: unknown) => {
+        console.error('Failed to clear typing state', cause);
+      });
   };
 
   const {
     handleSendMessage,
     handleAttachmentSelection,
     handleComposerKeyDown,
+    handleComposerPaste,
     handleDraftInput,
     handleRetryMessage,
     handleReplyToMessage,
@@ -234,6 +331,7 @@ function RoomPage() {
     roomId: roomId ?? '',
     isPendingRoom,
     canInteractWithTimeline,
+    uploadingAttachment,
     draft,
     setDraft,
     queuedImage,
@@ -265,29 +363,47 @@ function RoomPage() {
         roomDescription: pendingRoom.topic ?? null,
         roomIcon: null,
         roomSubtitle:
-          pendingRoom.status === 'failed' ? 'Topic setup ran into a problem' : 'Setting up your new topic...',
+          pendingRoom.status === 'failed'
+            ? 'Topic setup ran into a problem'
+            : 'Setting up your new topic...',
         messages: buildPendingRoomMessages(pendingRoom),
         isEncrypted: false,
         roomMeta: {} as TandemRoomMeta,
       }
     : null;
   const activeSnapshot = pendingSnapshot ?? snapshot;
-  const { roomName, roomDescription, roomIcon, roomSubtitle, messages, isEncrypted, roomMeta } =
-    activeSnapshot;
+  const {
+    roomName,
+    roomDescription,
+    roomIcon,
+    roomSubtitle,
+    messages,
+    isEncrypted,
+    roomMeta,
+  } = activeSnapshot;
   const visibleMessages = applyOptimisticReactionChanges(
-    mergeTimelineMessages(messages, reconcileOptimisticTimeline(messages, optimisticMessages)),
+    mergeTimelineMessages(
+      messages,
+      reconcileOptimisticTimeline(messages, optimisticMessages)
+    ),
     optimisticReactionChanges
   );
   const { showJumpToLatest } = useRoomScrollState({
     roomId,
     contentRef,
+    scrollElementRef: timelineScrollRef,
     messageKeys: visibleMessages.map((message) => message.id),
+    scrollToLatest,
   });
-  const visibleError = pendingRoom?.status === 'failed' ? pendingRoom.error ?? actionError : actionError ?? error;
+  const visibleError =
+    pendingRoom?.status === 'failed'
+      ? (pendingRoom.error ?? actionError)
+      : (actionError ?? error);
   const typingIndicator = formatTypingIndicator(typingMemberNames);
   const pinnedMessageIds =
-    currentRoom?.currentState.getStateEvents('m.room.pinned_events', '')?.getContent<{ pinned?: string[] }>()
-      .pinned ?? [];
+    currentRoom?.currentState
+      .getStateEvents('m.room.pinned_events', '')
+      ?.getContent<{ pinned?: string[] }>().pinned ?? [];
   const latestOwnReadReceipt = findLatestOwnReadReceipt(visibleMessages);
   const readReceiptMessageId = latestOwnReadReceipt?.messageId ?? null;
   const readReceiptNames = latestOwnReadReceipt?.readerNames ?? [];
@@ -350,7 +466,9 @@ function RoomPage() {
     return (
       <IonPage className="app-shell">
         <IonContent className="app-list-page">
-          <div className="flex min-h-screen items-center justify-center text-text">No conversation selected.</div>
+          <div className="flex items-center justify-center min-h-screen text-text">
+            No conversation selected.
+          </div>
         </IonContent>
       </IonPage>
     );
@@ -388,88 +506,236 @@ function RoomPage() {
         isEncrypted={isEncrypted}
         isPendingRoom={isPendingRoom}
         tangentSpaceId={tangentSpaceId}
+        desktopRailWidth={showDesktopSidebar ? desktopRailWidth : 0}
+        desktopRailHeader={
+          showDesktopSidebar ? (
+            <DesktopRailHeader
+              view={desktopRailView}
+              settingsSection={desktopSettingsSection}
+              searchQuery={desktopRailSearchQuery}
+              showMenu={showDesktopRailMenu}
+              currentUserName={currentUserName}
+              currentUserAvatarUrl={currentUserAvatarUrl}
+              currentUserId={user?.userId ?? bootstrapUserId ?? null}
+              onToggleMenu={() => setShowDesktopRailMenu((current) => !current)}
+              onCloseMenu={() => setShowDesktopRailMenu(false)}
+              onSearchQueryChange={setDesktopRailSearchQuery}
+              onOpenContacts={openDesktopContacts}
+              onOpenOtherRooms={openDesktopOtherRooms}
+              onOpenSettings={openDesktopSettings}
+              onBack={handleDesktopRailBack}
+            />
+          ) : null
+        }
         onBack={handleBackNavigation}
         onEditTopic={() => {
+          if (isDesktopLayout) {
+            openDesktopEditPanel();
+            return;
+          }
+
           if (isLiveSession) {
             setShowIdentityModal(true);
           }
         }}
-        onSearch={() => navigate('/search')}
+        onOpenPinnedMessages={() => {
+          if (isDesktopLayout) {
+            openDesktopPinsPanel();
+            return;
+          }
+
+          navigate(openPinnedMessagesPath);
+        }}
+        onSearch={() => {
+          if (isDesktopLayout) {
+            openDesktopSearchPanel();
+            return;
+          }
+
+          navigate(openSearchPath);
+        }}
         onCreateTopic={() => {
           if (isLiveSession) {
             setShowTangentModal(true);
           }
         }}
         onOpenMenu={() => {
+          if (isDesktopLayout) {
+            openDesktopDetailsPanel();
+            return;
+          }
+
           if (isLiveSession) {
             setShowMenu(true);
           }
         }}
       />
 
-      <IonContent ref={contentRef} fullscreen className="app-chat-page">
-        <div className="px-4 pb-4 pt-6">
-          {isPendingRoom ? (
-            <div className="space-y-3">
-              {messages.map((message) => (
-                <div key={message.id} className="app-chat-bubble other">
-                  <div className="mb-1 text-[11px] font-medium text-text-subtle">{message.senderId}</div>
-                  <div>{message.body}</div>
-                  <div className="mt-2 text-right text-[11px] text-text-subtle">
-                    {formatTimestamp(message.timestamp)}
+      <IonContent
+        ref={contentRef}
+        fullscreen
+        className="app-chat-page"
+        scrollY={!showDesktopSidebar}
+      >
+        <div
+          className={
+            showDesktopSidebar
+              ? 'h-full xl:flex xl:min-h-0 xl:overflow-hidden'
+              : ''
+          }
+        >
+          {showDesktopSidebar && tangentSpaceId ? (
+            <>
+              <DesktopTopicSidebar
+                width={desktopRailWidth}
+                view={desktopRailView}
+                settingsSection={desktopSettingsSection}
+                searchQuery={desktopRailSearchQuery}
+                currentRoomId={roomId ?? ''}
+                topics={tangentTopics}
+                onSelectTopic={(topicId) => {
+                  void handleSelectTopic(topicId);
+                }}
+                onSelectSettingsSection={setDesktopSettingsSection}
+                onOpenRoute={(path) => navigate(path)}
+              />
+              <div
+                className={cn(
+                  'relative hidden w-3 shrink-0 xl:block',
+                  isResizingDesktopRail ? 'bg-accent/10' : ''
+                )}
+              >
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize left panel"
+                  className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-line"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    setIsResizingDesktopRail(true);
+                  }}
+                />
+              </div>
+            </>
+          ) : null}
+          <div
+            className={
+              showDesktopSidebar
+                ? 'flex min-h-0 min-w-0 flex-1 flex-col'
+                : 'flex-1 min-w-0'
+            }
+          >
+            <div
+              ref={timelineScrollRef}
+              className={showDesktopSidebar ? 'min-h-0 flex-1 overflow-y-auto' : ''}
+            >
+              <div className="px-4 pb-4 pt-6 xl:px-8">
+                {isPendingRoom ? (
+                  <div className="space-y-3">
+                    {messages.map((message) => (
+                      <div key={message.id} className="app-chat-bubble other">
+                        <div className="mb-1 text-[11px] font-medium text-text-subtle">
+                          {message.senderId}
+                        </div>
+                        <div>{message.body}</div>
+                        <div className="mt-2 text-right text-[11px] text-text-subtle">
+                          {formatTimestamp(message.timestamp)}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : loading ? (
-            <div className="py-12 text-center text-sm text-text-muted">Loading messages...</div>
-          ) : visibleError && messages.length === 0 ? (
-            <div className="py-6 text-center text-sm text-danger">{visibleError}</div>
-          ) : membershipPolicy && roomMembership !== 'join' ? (
-            <div className="space-y-4">
-              <div className="rounded-[28px] border border-line bg-panel/95 px-5 py-5 shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
-                {membershipPolicy.supportsJoin ? (
-                  <Button onClick={() => void handleJoinCurrentRoom()}>Join topic</Button>
+                ) : loading ? (
+                  <div className="py-12 text-sm text-center text-text-muted">
+                    Loading messages...
+                  </div>
+                ) : visibleError && messages.length === 0 ? (
+                  <div className="py-6 text-sm text-center text-danger">
+                    {visibleError}
+                  </div>
+                ) : membershipPolicy && roomMembership !== 'join' ? (
+                  <div className="space-y-4">
+                    <div className="rounded-[28px] border border-line bg-panel/95 px-5 py-5 shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
+                      {membershipPolicy.supportsJoin ? (
+                        <Button onClick={() => void handleJoinCurrentRoom()}>
+                          Join topic
+                        </Button>
+                      ) : (
+                        <div className="text-sm text-text-muted">Unavailable</div>
+                      )}
+                    </div>
+                  </div>
+                ) : visibleMessages.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <p className="text-base font-medium text-text">
+                      No messages yet
+                    </p>
+                    <p className="mt-2 text-sm text-text-muted">
+                      Start the topic below.
+                    </p>
+                  </div>
                 ) : (
-                  <div className="text-sm text-text-muted">Unavailable</div>
+                  <div className="space-y-3">
+                    {visibleError ? (
+                      <div className="py-2 text-sm text-center text-danger">
+                        {visibleError}
+                      </div>
+                    ) : null}
+                    {visibleMessages.map((message) => (
+                      <MessageBubble
+                        key={message.id}
+                        message={message}
+                        accessToken={client?.getAccessToken() ?? null}
+                        viewMode={preferences.chatViewMode}
+                        onRetry={isLiveSession ? handleRetryMessage : undefined}
+                        onToggleReaction={
+                          isLiveSession
+                            ? (targetMessage, reactionKey) => {
+                                void handleToggleReaction(
+                                  targetMessage,
+                                  reactionKey
+                                );
+                              }
+                            : undefined
+                        }
+                        onRequestActions={
+                          !isLiveSession || message.id.startsWith('local:')
+                            ? undefined
+                            : (nextMessage, position) => {
+                                setMessageMenu({
+                                  message: nextMessage,
+                                  position,
+                                });
+                              }
+                        }
+                        mentionTargets={mentionCandidates}
+                        receiptNames={
+                          message.id === readReceiptMessageId
+                            ? readReceiptNames
+                            : null
+                        }
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
-          ) : visibleMessages.length === 0 ? (
-            <div className="py-12 text-center">
-              <p className="text-base font-medium text-text">No messages yet</p>
-              <p className="mt-2 text-sm text-text-muted">Start the topic below.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {visibleError ? <div className="py-2 text-center text-sm text-danger">{visibleError}</div> : null}
-              {visibleMessages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  accessToken={client?.getAccessToken() ?? null}
-                  viewMode={preferences.chatViewMode}
-                  onRetry={isLiveSession ? handleRetryMessage : undefined}
-                  onToggleReaction={
-                    isLiveSession
-                      ? (targetMessage, reactionKey) => {
-                          void handleToggleReaction(targetMessage, reactionKey);
-                        }
-                      : undefined
-                  }
-                  onRequestActions={
-                    !isLiveSession || message.id.startsWith('local:')
-                      ? undefined
-                      : (nextMessage, position) => {
-                          setMessageMenu({ message: nextMessage, position });
-                        }
-                  }
-                  mentionTargets={mentionCandidates}
-                  receiptNames={message.id === readReceiptMessageId ? readReceiptNames : null}
-                />
-              ))}
-            </div>
-          )}
+          </div>
+          {isDesktopLayout && desktopRoomPanelView ? (
+            <DesktopRoomPanel
+              view={desktopRoomPanelView}
+              roomName={roomName}
+              roomDescription={roomDescription}
+              roomIcon={roomIcon}
+              pinnedMessageIds={pinnedMessageIds}
+              messages={visibleMessages}
+              savingIdentity={savingIdentity}
+              actionError={actionError}
+              onClose={closeDesktopRoomPanel}
+              onBackToDetails={backToDesktopRoomDetails}
+              onOpenView={setDesktopRoomPanelView}
+              onSaveTopicIdentity={handleSaveTopicIdentity}
+            />
+          ) : null}
         </div>
       </IonContent>
 
@@ -484,34 +750,45 @@ function RoomPage() {
       ) : null}
 
       <IonFooter className="app-chat-footer ion-no-border">
-        <RoomComposer
-          isPendingRoom={isPendingRoom}
-          canInteractWithTimeline={canInteractWithTimeline}
-          uploadingAttachment={uploadingAttachment}
-          draft={draft}
-          queuedImage={queuedImage}
-          composerMode={composerMode}
-          mentionSuggestions={mentionSuggestions}
-          emojiSuggestions={emojiSuggestions}
-          selectedEmojiSuggestionIndex={selectedEmojiSuggestionIndex}
-          showEmojiPicker={showEmojiPicker}
-          attachmentInputRef={attachmentInputRef}
-          composerRef={composerRef}
-          emojiPickerRef={emojiPickerRef}
-          onAttachmentSelection={handleAttachmentSelection}
-          onToggleEmojiPicker={() => setShowEmojiPicker((current) => !current)}
-          onDraftInput={handleDraftInput}
-          onComposerKeyDown={handleComposerKeyDown}
-          onSend={() => {
-            void handleSendMessage();
-          }}
-          onCancelComposerContext={handleCancelComposerContext}
-          onRemoveQueuedImage={handleRemoveQueuedImage}
-          onInsertEmoji={handleInsertEmoji}
-          onHighlightEmoji={setEmojiHighlight}
-          onOpenQueuedImagePreview={() => setShowQueuedImagePreview(true)}
-          setDraft={setDraft}
-        />
+        <div className={showDesktopSidebar ? 'xl:flex xl:min-h-full' : ''}>
+          {showDesktopSidebar ? (
+            <div
+              className="hidden xl:block xl:shrink-0 xl:border-r xl:border-line/80 xl:bg-white/70 xl:backdrop-blur-sm"
+              style={{ width: desktopRailWidth }}
+            />
+          ) : null}
+          <div className={showDesktopSidebar ? 'min-w-0 flex-1' : ''}>
+            <RoomComposer
+              isPendingRoom={isPendingRoom}
+              canInteractWithTimeline={canInteractWithTimeline}
+              uploadingAttachment={uploadingAttachment}
+              draft={draft}
+              queuedImage={queuedImage}
+              composerMode={composerMode}
+              mentionSuggestions={mentionSuggestions}
+              emojiSuggestions={emojiSuggestions}
+              selectedEmojiSuggestionIndex={selectedEmojiSuggestionIndex}
+              showEmojiPicker={showEmojiPicker}
+              attachmentInputRef={attachmentInputRef}
+              composerRef={composerRef}
+              emojiPickerRef={emojiPickerRef}
+              onAttachmentSelection={handleAttachmentSelection}
+              onToggleEmojiPicker={() => setShowEmojiPicker((current) => !current)}
+              onDraftInput={handleDraftInput}
+              onComposerKeyDown={handleComposerKeyDown}
+              onComposerPaste={handleComposerPaste}
+              onSend={() => {
+                void handleSendMessage();
+              }}
+              onCancelComposerContext={handleCancelComposerContext}
+              onRemoveQueuedImage={handleRemoveQueuedImage}
+              onInsertEmoji={handleInsertEmoji}
+              onHighlightEmoji={setEmojiHighlight}
+              onOpenQueuedImagePreview={() => setShowQueuedImagePreview(true)}
+              setDraft={setDraft}
+            />
+          </div>
+        </div>
       </IonFooter>
 
       {showQueuedImagePreview && queuedImage ? (
@@ -544,13 +821,16 @@ function RoomPage() {
           canEdit={
             messageMenu.message.isOwn &&
             !messageMenu.message.isDeleted &&
-            (messageMenu.message.msgtype === MsgType.Text || messageMenu.message.msgtype === MsgType.Emote)
+            (messageMenu.message.msgtype === MsgType.Text ||
+              messageMenu.message.msgtype === MsgType.Emote)
           }
           isPinned={pinnedMessageIds.includes(messageMenu.message.id)}
           onClose={() => setMessageMenu(null)}
           onReply={() => handleReplyToMessage(messageMenu.message)}
           onEdit={
-            messageMenu.message.isOwn ? () => handleEditMessage(messageMenu.message) : undefined
+            messageMenu.message.isOwn
+              ? () => handleEditMessage(messageMenu.message)
+              : undefined
           }
           onDelete={
             messageMenu.message.isOwn && !messageMenu.message.isDeleted

@@ -1,6 +1,13 @@
 import { IonButton, IonIcon, IonTextarea } from '@ionic/react';
 import { attachOutline, closeOutline, happyOutline, send } from 'ionicons/icons';
-import type { ChangeEvent, Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
+import type {
+  ChangeEvent,
+  ClipboardEvent,
+  Dispatch,
+  KeyboardEvent,
+  RefObject,
+  SetStateAction,
+} from 'react';
 import ComposerContextBar from '../../components/chat/ComposerContextBar';
 import EmojiSuggestions from '../../components/chat/EmojiSuggestions';
 import ReactionPicker from '../../components/chat/ReactionPicker';
@@ -25,6 +32,7 @@ interface RoomComposerProps {
   onToggleEmojiPicker: () => void;
   onDraftInput: (value: string) => void;
   onComposerKeyDown: (event: KeyboardEvent<HTMLIonTextareaElement>) => void;
+  onComposerPaste: (event: ClipboardEvent<HTMLIonTextareaElement>) => void;
   onSend: () => void;
   onCancelComposerContext: () => void;
   onRemoveQueuedImage: () => void;
@@ -52,6 +60,7 @@ function RoomComposer({
   onToggleEmojiPicker,
   onDraftInput,
   onComposerKeyDown,
+  onComposerPaste,
   onSend,
   onCancelComposerContext,
   onRemoveQueuedImage,
@@ -175,6 +184,7 @@ function RoomComposer({
               value={draft}
               onIonInput={(event) => onDraftInput(event.detail.value ?? '')}
               onKeyDown={onComposerKeyDown}
+              onPaste={onComposerPaste}
               autoGrow
               rows={1}
               placeholder={

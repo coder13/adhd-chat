@@ -65,6 +65,7 @@ export type TimelineMessage = {
   senderId: string;
   senderName: string;
   body: string;
+  filename?: string | null;
   timestamp: number;
   isOwn: boolean;
   msgtype: string;

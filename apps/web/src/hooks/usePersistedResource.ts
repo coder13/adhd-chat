@@ -5,6 +5,8 @@ import {
   savePersistedValue,
 } from '../lib/persistence';
 
+const inflightResourceLoads = new Map<string, Promise<unknown>>();
+
 interface UsePersistedResourceOptions<T> {
   cacheKey: string | null;
   enabled: boolean;
@@ -76,7 +78,22 @@ export function usePersistedResource<T>({
     setIsFetching(true);
 
     try {
-      const nextValue: T = await loadRef.current();
+      const existingLoad = inflightResourceLoads.get(cacheKey) as
+        | Promise<T>
+        | undefined;
+      const loadPromise =
+        existingLoad ??
+        loadRef.current().finally(() => {
+          if (inflightResourceLoads.get(cacheKey) === loadPromise) {
+            inflightResourceLoads.delete(cacheKey);
+          }
+        });
+
+      if (!existingLoad) {
+        inflightResourceLoads.set(cacheKey, loadPromise);
+      }
+
+      const nextValue: T = await loadPromise;
       let resolvedValue: T = nextValue;
       setData((currentValue) => {
         resolvedValue = preserveValueRef.current

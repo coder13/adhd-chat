@@ -10,6 +10,7 @@ import {
   deleteTandemRoom,
   ensureTandemRelationshipRooms,
   getTandemMembershipPolicy,
+  getTandemSpaceIdForRoom,
   joinTandemRoom,
   leaveTandemRoom,
   recoverTandemRelationshipRooms,
@@ -25,10 +26,33 @@ type MockRoom = {
   leave: jest.Mock<Promise<void>, []>;
   currentState: {
     getStateEvents: jest.Mock<
-      { getContent: () => { kind?: string; spaceId?: string } } | null,
+      | {
+          getContent: () => {
+            kind?: string;
+            spaceId?: string;
+            canonical?: boolean;
+          };
+          getStateKey?: () => string | undefined;
+        }
+      | Array<{
+          getContent: () => {
+            kind?: string;
+            spaceId?: string;
+            canonical?: boolean;
+          };
+          getStateKey?: () => string | undefined;
+        }>
+      | null,
       [string, string?]
     >;
   };
+  __stateEvents: Map<
+    string,
+    Array<{
+      content: { kind?: string; spaceId?: string; canonical?: boolean };
+      stateKey?: string;
+    }>
+  >;
 };
 
 type MockClient = {
@@ -56,7 +80,10 @@ type MockClient = {
 function createRoom(membership: string | undefined): MockRoom {
   const stateEvents = new Map<
     string,
-    { getContent: () => { kind?: string; spaceId?: string } }
+    Array<{
+      content: { kind?: string; spaceId?: string; canonical?: boolean };
+      stateKey?: string;
+    }>
   >();
 
   return {
@@ -69,27 +96,42 @@ function createRoom(membership: string | undefined): MockRoom {
     getAccountData: jest.fn((_eventType: string) => null),
     leave: jest.fn(async () => {}),
     currentState: {
-      getStateEvents: jest.fn((eventType: string) => stateEvents.get(eventType) ?? null),
+      getStateEvents: jest.fn((eventType: string, stateKey?: string) => {
+        const events = stateEvents.get(eventType) ?? [];
+        const matched =
+          typeof stateKey === 'undefined'
+            ? events
+            : events.filter((event) => event.stateKey === stateKey);
+
+        if (matched.length === 0) {
+          return null;
+        }
+
+        const normalized = matched.map((event) => ({
+          getContent: () => event.content,
+          getStateKey: () => event.stateKey,
+        }));
+
+        if (typeof stateKey !== 'undefined') {
+          return normalized[0] ?? null;
+        }
+
+        return normalized.length === 1 ? normalized[0] : normalized;
+      }),
     },
+    __stateEvents: stateEvents,
   };
 }
 
 function withStateEvent(
   room: MockRoom,
   eventType: string,
-  content: { kind?: string; spaceId?: string }
+  content: { kind?: string; spaceId?: string; canonical?: boolean },
+  stateKey?: string
 ) {
-  room.currentState.getStateEvents.mockImplementation(
-    (requestedType: string) => {
-      if (requestedType === eventType) {
-        return {
-          getContent: () => content,
-        };
-      }
-
-      return null;
-    }
-  );
+  const existing = room.__stateEvents.get(eventType) ?? [];
+  existing.push({ content, stateKey: typeof stateKey === 'undefined' ? '' : stateKey });
+  room.__stateEvents.set(eventType, existing);
 
   return room;
 }
@@ -138,6 +180,36 @@ function createClient({
 }
 
 describe('tandem room recovery', () => {
+  it('resolves a Tandem space from canonical m.space.parent links', () => {
+    const topicRoom = withStateEvent(
+      {
+        ...createRoom('join'),
+        roomId: '!topic:matrix.org',
+      },
+      'm.space.parent',
+      { canonical: true },
+      '!space:matrix.org'
+    );
+    const spaceRoom = withStateEvent(
+      {
+        ...createRoom('join'),
+        roomId: '!space:matrix.org',
+      },
+      'com.tandem.space',
+      {}
+    );
+    const client = createClient({
+      roomsById: {
+        '!topic:matrix.org': topicRoom,
+        '!space:matrix.org': spaceRoom,
+      },
+    });
+
+    expect(getTandemSpaceIdForRoom(client as never, topicRoom as never)).toBe(
+      '!space:matrix.org'
+    );
+  });
+
   it('joins only Tandem rooms that are not already joined', async () => {
     const client = createClient({
       roomsById: {

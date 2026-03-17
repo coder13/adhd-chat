@@ -16,8 +16,25 @@ jest.mock('../..', () => ({
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import MessageBubble from '../MessageBubble';
+import { clearResolvedMediaCache } from '../mediaLoader';
 
 describe('MessageBubble', () => {
+  const originalFetch = globalThis.fetch;
+  const originalCreateObjectUrl = URL.createObjectURL;
+  const originalRevokeObjectUrl = URL.revokeObjectURL;
+
+  beforeEach(() => {
+    clearResolvedMediaCache();
+    URL.createObjectURL = jest.fn(() => 'blob:cached-media');
+    URL.revokeObjectURL = jest.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    URL.createObjectURL = originalCreateObjectUrl;
+    URL.revokeObjectURL = originalRevokeObjectUrl;
+  });
+
   it('renders emoji-only text messages in the default timeline view', () => {
     render(
       <MessageBubble
@@ -201,5 +218,99 @@ describe('MessageBubble', () => {
 
     expect(screen.getByText('Open file')).toBeInTheDocument();
     expect(screen.getByText('application/pdf • 4 KB')).toBeInTheDocument();
+  });
+
+  it('renders image captions separately from the original filename', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'captioned-image',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'Look at this',
+          filename: 'photo.jpg',
+          timestamp: Date.UTC(2026, 2, 15, 10, 36),
+          isOwn: false,
+          msgtype: 'm.image',
+          mediaUrl: 'https://media.example/photo.jpg',
+          mimeType: 'image/jpeg',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Look at this')).toBeInTheDocument();
+    expect(screen.getAllByAltText('photo.jpg')).toHaveLength(1);
+  });
+
+  it('reserves image space from known Matrix dimensions', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'sized-image',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'photo.jpg',
+          timestamp: Date.UTC(2026, 2, 15, 10, 37),
+          isOwn: false,
+          msgtype: 'm.image',
+          mediaUrl: 'https://media.example/photo.jpg',
+          imageWidth: 1200,
+          imageHeight: 800,
+        }}
+      />
+    );
+
+    const image = screen.getByAltText('photo.jpg');
+    expect(image).toHaveAttribute('width', '1200');
+    expect(image).toHaveAttribute('height', '800');
+  });
+
+  it('reuses authenticated media across remounts without refetching', async () => {
+    const blob = new Blob(['image'], { type: 'image/jpeg' });
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      blob: async () => blob,
+    } as Response));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const firstRender = render(
+      <MessageBubble
+        message={{
+          id: 'cached-image',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'photo.jpg',
+          timestamp: Date.UTC(2026, 2, 15, 10, 38),
+          isOwn: false,
+          msgtype: 'm.image',
+          mediaUrl: 'https://media.example/image',
+        }}
+        accessToken="token"
+      />
+    );
+
+    await screen.findByRole('button', { name: 'Expand image' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    firstRender.unmount();
+
+    render(
+      <MessageBubble
+        message={{
+          id: 'cached-image-2',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: 'photo.jpg',
+          timestamp: Date.UTC(2026, 2, 15, 10, 39),
+          isOwn: false,
+          msgtype: 'm.image',
+          mediaUrl: 'https://media.example/image',
+        }}
+        accessToken="token"
+      />
+    );
+
+    await screen.findByRole('button', { name: 'Expand image' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

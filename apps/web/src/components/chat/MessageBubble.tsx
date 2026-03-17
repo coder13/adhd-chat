@@ -3,6 +3,7 @@ import { AppAvatar } from '..';
 import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
 import type { ChatViewMode } from '../../lib/matrix/preferences';
 import { cn } from '../../lib/cn';
+import { resolveMediaUrl } from './mediaLoader';
 import { renderLinkedMessageText } from './linkSegments';
 import MessageLinkPreview from './MessageLinkPreview';
 
@@ -27,6 +28,37 @@ function formatFileSize(fileSize?: number | null) {
   }
 
   return `${Math.round(fileSize / 104857.6) / 10} MB`;
+}
+
+function getImageFrameMetrics(message: TimelineMessage) {
+  const width = message.imageWidth ?? null;
+  const height = message.imageHeight ?? null;
+  const hasDimensions =
+    typeof width === 'number' &&
+    typeof height === 'number' &&
+    width > 0 &&
+    height > 0;
+
+  return {
+    aspectRatio: hasDimensions ? `${width} / ${height}` : '4 / 3',
+    width,
+    height,
+  };
+}
+
+function getImageCaption(message: TimelineMessage) {
+  const body = message.body.trim();
+  const filename = message.filename?.trim() ?? '';
+
+  if (!body) {
+    return null;
+  }
+
+  if (filename && body === filename) {
+    return null;
+  }
+
+  return body;
 }
 
 interface MessageBubbleProps {
@@ -110,26 +142,14 @@ function MessageBubble({
     }
 
     let isDisposed = false;
-    let objectUrl: string | null = null;
 
     const loadMedia = async () => {
       try {
         setMediaError(false);
-        const response = await fetch(message.mediaUrl!, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to load media (${response.status})`);
-        }
-
-        const blob = await response.blob();
-        objectUrl = URL.createObjectURL(blob);
+        const nextMediaUrl = await resolveMediaUrl(message.mediaUrl!, accessToken);
 
         if (!isDisposed) {
-          setResolvedMediaUrl(objectUrl);
+          setResolvedMediaUrl(nextMediaUrl);
         }
       } catch (cause) {
         console.error(cause);
@@ -144,9 +164,6 @@ function MessageBubble({
 
     return () => {
       isDisposed = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
     };
   }, [accessToken, mediaRetryToken, message.mediaUrl]);
 
@@ -161,7 +178,9 @@ function MessageBubble({
     );
   }
 
-  const imageAltText = message.body?.trim() || 'Image';
+  const imageCaption = getImageCaption(message);
+  const imageAltText = message.filename?.trim() || imageCaption || 'Image';
+  const imageFrame = getImageFrameMetrics(message);
   const linkedMessageBody = renderLinkedMessageText(message.body, mentionTargets);
   const isSending = message.deliveryStatus === 'sending';
   const isFailed = message.deliveryStatus === 'failed';
@@ -267,6 +286,9 @@ function MessageBubble({
           <img
             src={resolvedMediaUrl}
             alt={imageAltText}
+            width={imageFrame.width ?? undefined}
+            height={imageFrame.height ?? undefined}
+            decoding="async"
             className="max-h-[70vh] min-h-[50vh] w-auto max-w-full object-contain"
           />
         ) : (
@@ -281,17 +303,25 @@ function MessageBubble({
     <button
       type="button"
       onClick={() => setIsImageExpanded(true)}
-      className="inline-block max-w-full overflow-hidden rounded-2xl border border-line bg-panel text-left transition-opacity hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-accent/30"
+      className="inline-block w-[min(18rem,70vw)] max-w-full overflow-hidden rounded-2xl border border-line bg-panel text-left transition-opacity hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-accent/30"
       aria-label="Expand image"
+      style={{ aspectRatio: imageFrame.aspectRatio }}
     >
       <img
         src={resolvedMediaUrl}
         alt={imageAltText}
-        className="max-h-[360px] w-full object-cover sm:w-auto sm:max-w-full sm:object-contain"
+        width={imageFrame.width ?? undefined}
+        height={imageFrame.height ?? undefined}
+        decoding="async"
+        className="h-full w-full object-cover sm:object-contain"
+        style={{ aspectRatio: imageFrame.aspectRatio }}
       />
     </button>
   ) : (
-    <div className="flex aspect-[4/3] w-[min(18rem,70vw)] max-w-full flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-elevated px-4 text-center text-sm text-text-muted">
+    <div
+      className="flex w-[min(18rem,70vw)] max-w-full flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-elevated px-4 text-center text-sm text-text-muted"
+      style={{ aspectRatio: imageFrame.aspectRatio }}
+    >
       <span>{mediaError ? 'Unable to load image' : 'Loading image…'}</span>
       {retryMediaLoadButton}
     </div>
@@ -353,7 +383,20 @@ function MessageBubble({
             )}
             {replyPreview}
             {message.msgtype === 'm.image' ? (
-              <div className="max-w-[280px]">{imagePreview}</div>
+              <div className="max-w-[280px]">
+                {imagePreview}
+                <div className="mt-2 flex flex-wrap items-end gap-x-2 gap-y-1 text-sm leading-6">
+                  {imageCaption ? (
+                    <p className="min-w-0 max-w-full flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                      {renderLinkedMessageText(imageCaption, mentionTargets)}
+                    </p>
+                  ) : null}
+                  <p className="shrink-0 text-[11px] text-text-subtle">
+                    {bubbleMeta}
+                  </p>
+                  {receiptAvatars}
+                </div>
+              </div>
             ) : message.msgtype === 'm.file' ? (
               <div className="max-w-[280px]">
                 {fileCard}
@@ -442,7 +485,19 @@ function MessageBubble({
 
           {replyPreview}
           {message.msgtype === 'm.image' ? (
-            <div className="mt-2 max-w-[280px]">{imagePreview}</div>
+            <div className="mt-2 max-w-[280px]">
+              {imagePreview}
+              <div className="mt-2 flex flex-wrap items-end gap-x-2 gap-y-1 text-sm leading-6 text-text">
+                {imageCaption ? (
+                  <p className="min-w-0 max-w-full flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                    {renderLinkedMessageText(imageCaption, mentionTargets)}
+                  </p>
+                ) : null}
+                <p className="shrink-0 text-[11px] text-text-subtle">
+                  {bubbleMeta}
+                </p>
+              </div>
+            </div>
           ) : message.msgtype === 'm.file' ? (
             fileCard
           ) : message.msgtype === 'm.emote' ? (

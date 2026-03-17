@@ -7,6 +7,7 @@ import {
 
 type MessageContent = {
   body?: string;
+  filename?: string;
   msgtype?: string;
   url?: string;
   info?: {
@@ -52,6 +53,7 @@ export type ResolvedTimelineEvent = {
   senderId: string;
   senderName: string;
   body: string;
+  filename: string | null;
   timestamp: number;
   isOwn: boolean;
   msgtype: string;
@@ -277,6 +279,7 @@ export function resolveTimelineEvent(
       event.getSender() ||
       'Unknown sender',
     body,
+    filename: effectiveContent.filename ?? null,
     timestamp: event.getTs(),
     isOwn: event.getSender() === currentUserId,
     msgtype: isDeleted ? MsgType.Notice : msgtype,

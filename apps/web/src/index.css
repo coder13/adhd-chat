@@ -46,6 +46,20 @@
     animation-name: app-page-enter-forward;
   }
 
+  @media (min-width: 1280px) {
+    .app-shell {
+      max-width: none;
+      margin: 0;
+      animation: none;
+    }
+
+    html[data-nav-direction='back'] .app-shell,
+    html[data-nav-direction='initial'] .app-shell,
+    html[data-nav-direction='forward'] .app-shell {
+      animation: none;
+    }
+  }
+
   .app-list-page {
     --background: var(--app-shell-background);
   }

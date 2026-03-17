@@ -1,6 +1,13 @@
 import { MsgType, RelationType, type MatrixClient } from 'matrix-js-sdk';
 import { useEffect } from 'react';
-import type { ChangeEvent, Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
+import type {
+  ChangeEvent,
+  ClipboardEvent,
+  Dispatch,
+  KeyboardEvent,
+  RefObject,
+  SetStateAction,
+} from 'react';
 import { shouldSubmitComposerOnEnter } from '../../lib/chat/composerBehavior';
 import { insertEmojiQueryResult, replaceCompletedEmojiShortcodes } from '../../lib/chat/emojis';
 import { collectMentionedUserIds, type MentionCandidate } from '../../lib/chat/mentions';
@@ -12,6 +19,7 @@ import {
   resolveOwnSenderName,
   type OptimisticTimelineMessage,
 } from '../../lib/matrix/optimisticTimeline';
+import { getPastedImageFile } from './mediaInput';
 import type { ComposerMode, QueuedImage, RoomMessage } from './types';
 
 interface UseRoomComposerParams {
@@ -20,6 +28,7 @@ interface UseRoomComposerParams {
   roomId: string;
   isPendingRoom: boolean;
   canInteractWithTimeline: boolean;
+  uploadingAttachment: boolean;
   draft: string;
   setDraft: Dispatch<SetStateAction<string>>;
   queuedImage: QueuedImage;
@@ -51,6 +60,7 @@ export function useRoomComposer({
   roomId,
   isPendingRoom,
   canInteractWithTimeline,
+  uploadingAttachment,
   draft,
   setDraft,
   queuedImage,
@@ -105,6 +115,79 @@ export function useRoomComposer({
   useEffect(() => {
     setSelectedEmojiSuggestionIndex(0);
   }, [emojiQuery, setSelectedEmojiSuggestionIndex]);
+
+  const queueImageFile = (file: File) => {
+    setShowEmojiPicker(false);
+    if (composerMode?.type === 'edit') {
+      setComposerMode(null);
+      setDraft('');
+    }
+    if (queuedImage?.previewUrl) {
+      URL.revokeObjectURL(queuedImage.previewUrl);
+    }
+    setQueuedImage({ file, previewUrl: URL.createObjectURL(file) });
+    setActionError(null);
+  };
+
+  const sendFileAttachment = async (file: File) => {
+    if (!client || !userId || isPendingRoom) {
+      return;
+    }
+
+    const transactionId = createId('txn');
+    const senderName = resolveOwnSenderName(client, roomId, userId);
+    const optimisticAttachmentMessage = createOptimisticAttachmentMessage({
+      file,
+      senderId: userId,
+      senderName,
+      transactionId,
+    });
+
+    setOptimisticMessages((currentMessages) => [...currentMessages, optimisticAttachmentMessage]);
+    setUploadingAttachment(true);
+    setActionError(null);
+
+    try {
+      const content = await buildMatrixMediaPayload(client, file);
+      const response = (await (
+        client.sendEvent as (
+          nextRoomId: string,
+          eventType: string,
+          content: Record<string, unknown>,
+          txnId?: string
+        ) => Promise<unknown>
+      )(roomId, 'm.room.message', content, transactionId)) as
+        | { event_id?: string }
+        | string
+        | undefined;
+      const remoteEventId =
+        typeof response === 'string'
+          ? response
+          : response && typeof response === 'object' && 'event_id' in response
+            ? response.event_id ?? null
+            : null;
+      setOptimisticMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.transactionId === transactionId ? { ...message, remoteEventId } : message
+        )
+      );
+      scrollToLatest();
+      void refresh();
+    } catch (cause) {
+      console.error(cause);
+      const errorText = cause instanceof Error ? cause.message : String(cause);
+      setActionError(errorText);
+      setOptimisticMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.transactionId === transactionId
+            ? { ...message, deliveryStatus: 'failed', errorText }
+            : message
+        )
+      );
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
 
   const sendTextMessage = async ({
     body,
@@ -263,7 +346,9 @@ export function useRoomComposer({
       setQueuedImage(null);
 
       try {
-        const content = await buildMatrixMediaPayload(client, queuedImage.file, { body });
+        const content = await buildMatrixMediaPayload(client, queuedImage.file, {
+          caption: body,
+        });
         const response = (await (
           client.sendEvent as (
             nextRoomId: string,
@@ -332,71 +417,25 @@ export function useRoomComposer({
 
     setShowEmojiPicker(false);
     if (file.type.startsWith('image/')) {
-      if (composerMode?.type === 'edit') {
-        setComposerMode(null);
-        setDraft('');
-      }
-      if (queuedImage?.previewUrl) {
-        URL.revokeObjectURL(queuedImage.previewUrl);
-      }
-      setQueuedImage({ file, previewUrl: URL.createObjectURL(file) });
-      setActionError(null);
+      queueImageFile(file);
       return;
     }
 
-    const transactionId = createId('txn');
-    const senderName = resolveOwnSenderName(client, roomId, userId);
-    const optimisticAttachmentMessage = createOptimisticAttachmentMessage({
-      file,
-      senderId: userId,
-      senderName,
-      transactionId,
-    });
+    await sendFileAttachment(file);
+  };
 
-    setOptimisticMessages((currentMessages) => [...currentMessages, optimisticAttachmentMessage]);
-    setUploadingAttachment(true);
-    setActionError(null);
-
-    try {
-      const content = await buildMatrixMediaPayload(client, file);
-      const response = (await (
-        client.sendEvent as (
-          nextRoomId: string,
-          eventType: string,
-          content: Record<string, unknown>,
-          txnId?: string
-        ) => Promise<unknown>
-      )(roomId, 'm.room.message', content, transactionId)) as
-        | { event_id?: string }
-        | string
-        | undefined;
-      const remoteEventId =
-        typeof response === 'string'
-          ? response
-          : response && typeof response === 'object' && 'event_id' in response
-            ? response.event_id ?? null
-            : null;
-      setOptimisticMessages((currentMessages) =>
-        currentMessages.map((message) =>
-          message.transactionId === transactionId ? { ...message, remoteEventId } : message
-        )
-      );
-      scrollToLatest();
-      void refresh();
-    } catch (cause) {
-      console.error(cause);
-      const errorText = cause instanceof Error ? cause.message : String(cause);
-      setActionError(errorText);
-      setOptimisticMessages((currentMessages) =>
-        currentMessages.map((message) =>
-          message.transactionId === transactionId
-            ? { ...message, deliveryStatus: 'failed', errorText }
-            : message
-        )
-      );
-    } finally {
-      setUploadingAttachment(false);
+  const handleComposerPaste = (event: ClipboardEvent<HTMLIonTextareaElement>) => {
+    if (!canInteractWithTimeline || uploadingAttachment || isPendingRoom) {
+      return;
     }
+
+    const imageFile = getPastedImageFile(event);
+    if (!imageFile) {
+      return;
+    }
+
+    event.preventDefault();
+    queueImageFile(imageFile);
   };
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLIonTextareaElement>) => {
@@ -489,7 +528,7 @@ export function useRoomComposer({
             roomId,
             'm.room.message',
             await buildMatrixMediaPayload(client, retryFile, {
-              body: failedMessage.attachmentCaption ?? failedMessage.body,
+              caption: failedMessage.attachmentCaption ?? failedMessage.body,
             }),
             transactionId
           )) as { event_id?: string } | string | undefined;
@@ -575,6 +614,7 @@ export function useRoomComposer({
     handleSendMessage,
     handleAttachmentSelection,
     handleComposerKeyDown,
+    handleComposerPaste,
     handleDraftInput,
     handleRetryMessage,
     handleReplyToMessage,

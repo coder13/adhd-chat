@@ -29,6 +29,7 @@ import {
   TangentModal,
 } from '../components';
 import { usePersistedResource } from '../hooks/usePersistedResource';
+import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
 import { useChatPreferences } from '../hooks/useChatPreferences';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useTandem } from '../hooks/useTandem';
@@ -38,6 +39,7 @@ import {
   type TandemSpaceRoomSummary,
 } from '../lib/matrix/spaceCatalog';
 import { getRoomDisplayName } from '../lib/matrix/chatCatalog';
+import { shouldSuppressMissingTandemSpaceError } from '../lib/matrix/restoreErrors';
 import { startPendingTandemRoomCreation } from '../lib/matrix/pendingTandemRoom';
 import {
   getTandemPartnerSummary,
@@ -109,6 +111,7 @@ function TandemSpacePage() {
       buildTandemSpaceRoomCatalog(client!, user!.userId, spaceId!),
     preserveValue: preserveRoomCatalog,
   });
+  const scheduleRefresh = useThrottledRefresh(refresh);
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
   const [showTangentModal, setShowTangentModal] = useState(false);
   const [creatingTangent, setCreatingTangent] = useState(false);
@@ -138,6 +141,16 @@ function TandemSpacePage() {
   const isLiveSession = Boolean(client && user && isReady);
   const canRenderCachedSpace =
     state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
+  const suppressMissingSpaceError = shouldSuppressMissingTandemSpaceError({
+    error,
+    hasCachedData,
+    hasRelationship: Boolean(relationship),
+    hasLiveSpaceRoom: Boolean(currentHub),
+    isAuthRestoring: state === 'syncing',
+  });
+  const visibleError = suppressMissingSpaceError ? null : error;
+  const isRestoringTopics =
+    loading || (suppressMissingSpaceError && rooms.length === 0);
   const pinnedRooms = useMemo(
     () => rooms.filter((room) => room.isPinned && !room.isArchived),
     [rooms]
@@ -151,12 +164,15 @@ function TandemSpacePage() {
     if (!client || !user || !isReady || !spaceId) {
       return;
     }
-    client.on(ClientEvent.Sync, refresh);
+    const handleSync = () => {
+      scheduleRefresh();
+    };
+    client.on(ClientEvent.Sync, handleSync);
 
     return () => {
-      client.off(ClientEvent.Sync, refresh);
+      client.off(ClientEvent.Sync, handleSync);
     };
-  }, [client, isReady, refresh, spaceId, user]);
+  }, [client, isReady, scheduleRefresh, spaceId, user]);
 
   useEffect(() => {
     if (!client || !user || !relationship) {
@@ -447,12 +463,12 @@ function TandemSpacePage() {
             <div className="text-sm text-text-muted">{spaceNotice}</div>
           )}
 
-          {loading ? (
+          {isRestoringTopics ? (
             <div className="py-12 text-sm text-center text-text-muted">
-              Loading topics...
+              Restoring topics...
             </div>
-          ) : error ? (
-            <div className="py-6 text-sm text-center text-danger">{error}</div>
+          ) : visibleError ? (
+            <div className="py-6 text-sm text-center text-danger">{visibleError}</div>
           ) : rooms.length === 0 ? (
             <Card>
               <h3 className="text-base font-semibold text-text">No topics yet</h3>

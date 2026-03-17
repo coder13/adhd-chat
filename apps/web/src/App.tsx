@@ -67,6 +67,7 @@ function AppShell() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/room/:roomId/search" element={<SearchPage />} />
         <Route path="/other" element={<OtherRooms />} />
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/contacts/new" element={<AddContactPage />} />

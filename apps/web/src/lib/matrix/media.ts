@@ -2,6 +2,7 @@ import { MsgType, type MatrixClient } from 'matrix-js-sdk';
 
 export type MatrixMediaPayload = {
   body: string;
+  filename?: string;
   info?: {
     mimetype?: string;
     size?: number;
@@ -39,7 +40,7 @@ export async function buildMatrixMediaPayload(
   client: MatrixClient,
   file: File,
   options?: {
-    body?: string | null;
+    caption?: string | null;
   }
 ): Promise<MatrixMediaPayload> {
   const upload = await client.uploadContent(file, {
@@ -47,7 +48,8 @@ export async function buildMatrixMediaPayload(
     includeFilename: true,
   });
 
-  const messageBody = options?.body?.trim() || file.name;
+  const caption = options?.caption?.trim() || null;
+  const messageBody = caption || file.name;
 
   const baseInfo = {
     mimetype: file.type || undefined,
@@ -59,6 +61,7 @@ export async function buildMatrixMediaPayload(
 
     return {
       body: messageBody,
+      ...(caption ? { filename: file.name } : {}),
       msgtype: MsgType.Image,
       url: upload.content_uri,
       info: {
@@ -70,6 +73,7 @@ export async function buildMatrixMediaPayload(
 
   return {
     body: messageBody,
+    ...(caption ? { filename: file.name } : {}),
     msgtype: MsgType.File,
     url: upload.content_uri,
     info: baseInfo,

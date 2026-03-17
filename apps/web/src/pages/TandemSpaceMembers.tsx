@@ -13,8 +13,10 @@ import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AppAvatar, AuthFallbackState, Card } from '../components';
 import { usePersistedResource } from '../hooks/usePersistedResource';
+import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
 import { useTandem } from '../hooks/useTandem';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+import { shouldSuppressMissingTandemSpaceError } from '../lib/matrix/restoreErrors';
 import { getTandemPartnerSummary } from '../lib/matrix/tandemPresentation';
 
 interface TandemSpaceMemberSummary {
@@ -82,6 +84,7 @@ function TandemSpaceMembersPage() {
     initialValue: [],
     load: async () => buildTandemSpaceMembers(spaceId!, client!),
   });
+  const scheduleRefresh = useThrottledRefresh(refresh);
   const relationship =
     relationships.find((entry) => entry.sharedSpaceId === spaceId) ?? null;
   const partner = relationship
@@ -90,18 +93,31 @@ function TandemSpaceMembersPage() {
   const isLiveSession = Boolean(client && user && isReady);
   const canRenderCachedMembers =
     state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
+  const suppressMissingSpaceError = shouldSuppressMissingTandemSpaceError({
+    error,
+    hasCachedData,
+    hasRelationship: Boolean(relationship),
+    hasLiveSpaceRoom: Boolean(client?.getRoom(spaceId ?? undefined)),
+    isAuthRestoring: state === 'syncing',
+  });
+  const visibleError = suppressMissingSpaceError ? null : error;
+  const isRestoringMembers =
+    isLoading || (suppressMissingSpaceError && members.length === 0);
 
   useEffect(() => {
     if (!client || !user || !isReady || !spaceId) {
       return;
     }
 
-    client.on(ClientEvent.Sync, refresh);
+    const handleSync = () => {
+      scheduleRefresh();
+    };
+    client.on(ClientEvent.Sync, handleSync);
 
     return () => {
-      client.off(ClientEvent.Sync, refresh);
+      client.off(ClientEvent.Sync, handleSync);
     };
-  }, [client, isReady, refresh, spaceId, user]);
+  }, [client, isReady, scheduleRefresh, spaceId, user]);
 
   if (!spaceId) {
     return (
@@ -169,12 +185,12 @@ function TandemSpaceMembersPage() {
             </p>
           </Card>
 
-          {isLoading ? (
+          {isRestoringMembers ? (
             <div className="py-12 text-center text-sm text-text-muted">
-              Loading members...
+              Restoring members...
             </div>
-          ) : error ? (
-            <div className="py-6 text-center text-sm text-danger">{error}</div>
+          ) : visibleError ? (
+            <div className="py-6 text-center text-sm text-danger">{visibleError}</div>
           ) : (
             <div className="space-y-3">
               {members.map((member) => (

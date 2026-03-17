@@ -69,6 +69,7 @@ export function createOptimisticAttachmentMessage(options: {
     senderId: options.senderId,
     senderName: options.senderName,
     body: attachmentCaption || options.file.name,
+    filename: options.file.name,
     timestamp,
     isOwn: true,
     msgtype: isImage ? MsgType.Image : MsgType.File,

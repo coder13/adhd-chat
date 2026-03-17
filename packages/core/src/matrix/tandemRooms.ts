@@ -64,6 +64,33 @@ export function getTandemSpaceIdForRoom(
     return tandemRoomContent.spaceId;
   }
 
+  const parentEvents = room.currentState.getStateEvents('m.space.parent');
+  const parentList = Array.isArray(parentEvents)
+    ? parentEvents
+    : parentEvents
+      ? [parentEvents]
+      : [];
+
+  const canonicalParent = parentList.find((event) => {
+    const stateKey = event.getStateKey();
+    if (!stateKey) {
+      return false;
+    }
+
+    const content = event.getContent<{ canonical?: boolean }>();
+    if (!content?.canonical) {
+      return false;
+    }
+
+    return Boolean(
+      client.getRoom(stateKey)?.currentState.getStateEvents(TANDEM_SPACE_EVENT_TYPE, '')
+    );
+  });
+
+  if (canonicalParent) {
+    return canonicalParent.getStateKey() ?? null;
+  }
+
   const relationship = getResolvedTandemRelationships(client).relationships.find(
     (entry) => entry.mainRoomId === room.roomId
   );

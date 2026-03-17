@@ -2,10 +2,12 @@ import { IonButton, IonIcon, IonSearchbar } from '@ionic/react';
 import { arrowBack } from 'ionicons/icons';
 import { type ISearchResults } from 'matrix-js-sdk';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { AppAvatar, Button } from '../components';
 import { ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+import { getRoomDisplayName } from '../lib/matrix/chatCatalog';
+import { getRoomIcon } from '../lib/matrix/identity';
 import {
   buildTandemSearchIndex,
   mergeTandemSearchResults,
@@ -56,6 +58,8 @@ function getSearchErrorMessage(error: unknown) {
 
 function SearchPage() {
   const navigate = useNavigate();
+  const { roomId: encodedRoomId } = useParams<{ roomId?: string }>();
+  const scopedRoomId = encodedRoomId ? decodeURIComponent(encodedRoomId) : null;
   const { client, isReady, user } = useMatrixClient();
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState<TandemSearchIndex | null>(null);
@@ -65,6 +69,13 @@ function SearchPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
+  const scopedRoom = scopedRoomId ? client?.getRoom(scopedRoomId) ?? null : null;
+  const scopedRoomName =
+    scopedRoom && user ? getRoomDisplayName(scopedRoom, user.userId) : 'Current room';
+  const scopedRoomIcon = scopedRoom ? getRoomIcon(scopedRoom) : null;
+  const scopedRoomIsEncrypted = Boolean(
+    scopedRoom?.currentState.getStateEvents('m.room.encryption', '')
+  );
 
   useEffect(() => {
     if (!client || !user || !isReady) {
@@ -120,17 +131,22 @@ function SearchPage() {
         client,
         index,
         trimmedQuery
-      );
+      ).filter((result) => (scopedRoomId ? result.roomId === scopedRoomId : true));
 
-      if (index.encryptedRoomCount > 0) {
+      if (index.encryptedRoomCount > 0 && !scopedRoomId) {
         setSearchNotice(
           `Encrypted topics are searched from decrypted messages already loaded on this device.`
+        );
+      } else if (scopedRoomIsEncrypted) {
+        setSearchNotice(
+          'Encrypted messages in this topic are searched from decrypted history already loaded on this device.'
         );
       } else {
         setSearchNotice(null);
       }
 
       const searchableServerRoomIds = index.rooms
+        .filter((room) => (scopedRoomId ? room.roomId === scopedRoomId : true))
         .filter((room) => !room.isEncrypted)
         .map((room) => room.roomId);
 
@@ -179,7 +195,7 @@ function SearchPage() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [client, index, isReady, query, user]);
+  }, [client, index, isReady, query, scopedRoomId, scopedRoomIsEncrypted, user]);
 
   const hasMoreResults = Boolean(rawResults?.next_batch);
   const encryptedRoomsNote = useMemo(() => {
@@ -206,7 +222,7 @@ function SearchPage() {
         client,
         index,
         query
-      );
+      ).filter((result) => (scopedRoomId ? result.roomId === scopedRoomId : true));
       setRawResults(nextResults);
       setResults(
         mergeTandemSearchResults(
@@ -223,7 +239,7 @@ function SearchPage() {
 
   return (
     <ListPageLayout
-      title="Search"
+      title={scopedRoomId ? 'Search topic' : 'Search'}
       startSlot={
         <IonButton fill="clear" color="medium" onClick={() => navigate(-1)}>
           <IonIcon slot="icon-only" icon={arrowBack} />
@@ -233,13 +249,30 @@ function SearchPage() {
         <IonSearchbar
           value={query}
           onIonInput={(event) => setQuery(event.detail.value ?? '')}
-          placeholder="Search messages"
+          placeholder={scopedRoomId ? 'Search this topic' : 'Search messages'}
           className="app-searchbar"
           autoFocus
         />
       }
     >
       <div className="space-y-4 px-4 pb-24 pt-4">
+        {scopedRoomId ? (
+          <div className="flex items-center gap-3 rounded-[22px] border border-line bg-panel px-3 py-3">
+            <AppAvatar
+              name={scopedRoomName}
+              icon={scopedRoomIcon}
+              className="h-10 w-10"
+              textClassName="text-sm"
+            />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-text">{scopedRoomName}</div>
+              <div className="truncate text-xs text-text-muted">
+                Searching messages in the current topic only
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {encryptedRoomsNote ? (
           <div className="text-sm text-text-muted">{encryptedRoomsNote}</div>
         ) : null}
@@ -256,7 +289,9 @@ function SearchPage() {
           </div>
         ) : query.trim().length < 2 ? (
           <div className="py-12 text-center">
-            <p className="text-base font-medium text-text">Search messages</p>
+            <p className="text-base font-medium text-text">
+              {scopedRoomId ? 'Search this topic' : 'Search messages'}
+            </p>
           </div>
         ) : isSearching && results.length === 0 ? (
           <div className="py-12 text-center text-sm text-text-muted">

@@ -24,6 +24,7 @@ import {
   TYPING_SERVER_TIMEOUT_MS,
 } from '../../lib/matrix/typingIndicators';
 import { ensureTandemSpaceLinks } from '../../lib/matrix/tandem';
+import { useThrottledRefresh } from '../../hooks/useThrottledRefresh';
 import type { MatrixClientContextValue } from '../../hooks/useMatrixClient/context';
 import type { OptimisticReactionChange, OptimisticTimelineMessage } from '../../lib/matrix/optimisticTimeline';
 import { prefersDesktopComposerShortcuts } from '../../lib/chat/composerBehavior';
@@ -92,6 +93,8 @@ export function useRoomRealtime({
   navigate,
 }: UseRoomRealtimeParams) {
   const [typingMemberNames, setTypingMemberNames] = useState<string[]>([]);
+  const scheduleRefresh = useThrottledRefresh(refresh, { intervalMs: 400 });
+  const scheduleRefreshTangentTopics = useThrottledRefresh(refreshTangentTopics);
   const [pendingRoom, setPendingRoom] = useState<PendingTandemRoomRecord | null>(() =>
     getPendingTandemRoom(roomId)
   );
@@ -136,6 +139,16 @@ export function useRoomRealtime({
       }
     };
 
+    const handleSync = () => {
+      // Sync fires continuously during normal client operation. Only use it to
+      // recover if the room is still missing locally after navigation/startup.
+      if (client.getRoom(roomId)) {
+        return;
+      }
+
+      void updateRoomState();
+    };
+
     void updateRoomState();
 
     const handleTimeline = (
@@ -159,11 +172,11 @@ export function useRoomRealtime({
 
     const handleReceipt = (_event: MatrixEvent, eventRoom: MatrixRoom) => {
       if (eventRoom.roomId === roomId) {
-        void updateRoomState();
+        scheduleRefresh();
       }
     };
 
-    client.on(ClientEvent.Sync, updateRoomState);
+    client.on(ClientEvent.Sync, handleSync);
     client.on(RoomEvent.Timeline, handleTimeline);
     client.on(RoomEvent.Receipt, handleReceipt);
     client.on(RoomEvent.Name, updateRoomState);
@@ -175,7 +188,7 @@ export function useRoomRealtime({
       if (roomLoadTimeoutId !== null) {
         window.clearTimeout(roomLoadTimeoutId);
       }
-      client.off(ClientEvent.Sync, updateRoomState);
+      client.off(ClientEvent.Sync, handleSync);
       client.off(RoomEvent.Timeline, handleTimeline);
       client.off(RoomEvent.Receipt, handleReceipt);
       client.off(RoomEvent.Name, updateRoomState);
@@ -183,7 +196,7 @@ export function useRoomRealtime({
       client.off(RoomEvent.AccountData, handleRoomAccountData);
       client.off(RoomEvent.TimelineReset, updateRoomState);
     };
-  }, [client, contentRef, isPendingRoom, refresh, roomId, user]);
+  }, [client, contentRef, isPendingRoom, refresh, roomId, scheduleRefresh, user]);
 
   useEffect(() => {
     setOptimisticMessages((currentMessages) =>
@@ -244,11 +257,15 @@ export function useRoomRealtime({
       return;
     }
 
-    client.on(ClientEvent.Sync, refreshTangentTopics);
-    return () => {
-      client.off(ClientEvent.Sync, refreshTangentTopics);
+    const handleSync = () => {
+      scheduleRefreshTangentTopics();
     };
-  }, [client, isReady, refreshTangentTopics, tangentSpaceId, user]);
+
+    client.on(ClientEvent.Sync, handleSync);
+    return () => {
+      client.off(ClientEvent.Sync, handleSync);
+    };
+  }, [client, isReady, scheduleRefreshTangentTopics, tangentSpaceId, user]);
 
   useEffect(() => {
     if (isPendingRoom || !currentRoom || !user) {
