@@ -9,6 +9,7 @@ const mockResetAuthedClient = jest.fn();
 const mockSaveSession = jest.fn();
 const mockClearSsoCallbackUrl = jest.fn();
 const mockCompleteSsoCallback = jest.fn();
+const mockLoginWithPassword = jest.fn();
 
 jest.mock('matrix-js-sdk', () => ({
   ClientEvent: {
@@ -51,6 +52,7 @@ jest.mock('../helpers', () => ({
 jest.mock('../auth', () => ({
   clearSsoCallbackUrl: mockClearSsoCallbackUrl,
   completeSsoCallback: mockCompleteSsoCallback,
+  loginWithPassword: mockLoginWithPassword,
   startSsoRedirect: jest.fn(),
 }));
 
@@ -126,6 +128,49 @@ describe('useMatrixClientState', () => {
     expect(mockResetAuthedClient).toHaveBeenCalled();
     expect(mockClearSsoCallbackUrl).toHaveBeenCalled();
     expect(result.current.error).toBe(EXPIRED_SESSION_MESSAGE);
+  });
+
+  it('authenticates with password and transitions to ready', async () => {
+    mockLoadSession.mockReturnValue(null);
+    mockLoginWithPassword.mockResolvedValue({
+      baseUrl: 'https://matrix.example',
+      userId: '@test:example',
+      deviceId: 'DEV1',
+      accessToken: 'token',
+    });
+
+    const authedClient = {
+      getSyncState: () => 'PREPARED',
+      on: jest.fn(),
+      off: jest.fn(),
+      stopClient: jest.fn(),
+    };
+
+    mockBuildAuthedClient.mockResolvedValue(authedClient);
+
+    const { result } = renderHook(() => useMatrixClientState());
+
+    await act(async () => {
+      await result.current.loginWithPassword(
+        'https://matrix.example',
+        'test-user',
+        'hunter2'
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.state).toBe('ready');
+    });
+
+    expect(mockLoginWithPassword).toHaveBeenCalledWith(
+      'https://matrix.example',
+      'test-user',
+      'hunter2'
+    );
+    expect(result.current.user).toEqual({
+      userId: '@test:example',
+      deviceId: 'DEV1',
+    });
   });
 
   it('retries restoring a saved session after a transient startup failure', async () => {

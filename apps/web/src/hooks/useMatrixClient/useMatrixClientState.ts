@@ -26,6 +26,7 @@ import {
 import {
   clearSsoCallbackUrl,
   completeSsoCallback,
+  loginWithPassword as authenticateWithPassword,
   startSsoRedirect,
 } from './auth';
 import {
@@ -321,6 +322,47 @@ export function useMatrixClientState() {
     []
   );
 
+  const loginWithPassword = useCallback(
+    async (baseUrl: string, username: string, password: string) => {
+      if (loggingIn || authState === 'authenticating') {
+        return;
+      }
+
+      setError(null);
+      setAuthState('authenticating');
+      loggingIn = true;
+
+      try {
+        const session = await authenticateWithPassword(
+          baseUrl,
+          username,
+          password
+        );
+        persist(session);
+        setAuthState('syncing');
+
+        const authedClient = await buildAuthedClient(session, persist);
+        setClient(authedClient);
+        setSyncState(authedClient.getSyncState() ?? null);
+        setAuthState('ready');
+      } catch (cause: unknown) {
+        if (isInactiveMatrixSessionError(cause)) {
+          recoverExpiredSession(cause);
+        } else {
+          console.error(cause);
+          resetAuthedClient();
+          clearSession();
+          setError(getAuthFailureMessage(cause));
+          setAuthState('error');
+          setSyncState(null);
+        }
+      } finally {
+        loggingIn = false;
+      }
+    },
+    [authState, persist, recoverExpiredSession]
+  );
+
   const completeSsoLogin = useCallback(async () => {
     if (loggingIn || authState === 'authenticating') {
       return;
@@ -613,6 +655,7 @@ export function useMatrixClientState() {
       client,
       error,
       loginWithSso,
+      loginWithPassword,
       completeSsoLogin,
       handleGenerateRecoveryKey,
       getEncryptionSetupInfo: loadEncryptionSetupInfo,
@@ -635,6 +678,7 @@ export function useMatrixClientState() {
       client,
       error,
       loginWithSso,
+      loginWithPassword,
       completeSsoLogin,
       handleGenerateRecoveryKey,
       loadEncryptionSetupInfo,

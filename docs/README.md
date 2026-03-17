@@ -19,6 +19,8 @@ mix of root-level notes.
   bootstrap, SSO callback handling, and interactive auth.
 - [End-to-End Encryption](./features/e2ee-encryption.md): encryption setup,
   recovery keys, verification, and room encryption behavior.
+- [Local Matrix Testing](./development/matrix-local-testing.md): local Synapse
+  setup and Cypress auth smoke coverage.
 - [Tandem Spaces](./features/tandem-spaces.md): relationship model, invites,
   shared spaces, and pending room creation.
 - [Chat Experience](./features/chat-experience.md): mobile-first shell, room

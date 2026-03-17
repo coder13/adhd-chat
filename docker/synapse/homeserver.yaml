@@ -1,0 +1,37 @@
+server_name: "localhost"
+pid_file: /data/homeserver.pid
+public_baseurl: "http://localhost:8008/"
+
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: false
+    resources:
+      - names:
+          - client
+          - federation
+        compress: false
+
+database:
+  name: sqlite3
+  args:
+    database: /data/homeserver.db
+
+media_store_path: /data/media_store
+registration_shared_secret: "dev_registration_secret"
+macaroon_secret_key: "dev_macaroon_secret"
+form_secret: "dev_form_secret"
+signing_key_path: "/config/localhost.signing.key"
+trusted_key_servers: []
+suppress_key_server_warning: true
+report_stats: false
+
+enable_registration: true
+enable_registration_without_verification: true
+
+allow_public_rooms_without_auth: true
+allow_public_rooms_over_federation: false
+allow_device_name_lookup_over_federation: false
+
+url_preview_enabled: false

@@ -12,6 +12,9 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "matrix:synapse:up": "docker compose -f docker-compose.synapse.yml up -d",
+    "matrix:synapse:down": "docker compose -f docker-compose.synapse.yml down",
+    "matrix:synapse:logs": "docker compose -f docker-compose.synapse.yml logs -f synapse",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

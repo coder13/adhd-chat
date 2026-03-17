@@ -1,0 +1,16 @@
+services:
+  synapse:
+    image: ${SYNAPSE_IMAGE:-matrixdotorg/synapse:latest}
+    container_name: adhd-chat-synapse
+    restart: unless-stopped
+    environment:
+      SYNAPSE_CONFIG_PATH: /config/homeserver.yaml
+    ports:
+      - '8008:8008'
+    volumes:
+      - synapse_data:/data
+      - ./docker/synapse/homeserver.yaml:/config/homeserver.yaml:ro
+      - ./docker/synapse/localhost.signing.key:/config/localhost.signing.key:ro
+
+volumes:
+  synapse_data:

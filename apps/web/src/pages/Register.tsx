@@ -9,8 +9,9 @@ function Register() {
       <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">Registration</h1>
         <p className="text-gray-600 mb-6">
-          This app relies on your Matrix homeserver&apos;s SSO flow. Create your
-          account with the homeserver provider, then come back here to sign in.
+          Create your account with your Matrix homeserver provider, then return
+          here to sign in with either SSO or a password if your homeserver
+          supports it.
         </p>
         <Link
           to={

@@ -7,6 +7,7 @@ A chat application built with Matrix protocol, using a Yarn workspace and Turbor
 - [Documentation Index](docs/README.md)
 - [Architecture](docs/architecture/monorepo.md)
 - [Development Setup](docs/development/setup.md)
+- [Local Matrix Testing](docs/development/matrix-local-testing.md)
 - [Authentication](docs/features/authentication.md)
 - [End-to-End Encryption](docs/features/e2ee-encryption.md)
 - [Tandem Spaces](docs/features/tandem-spaces.md)

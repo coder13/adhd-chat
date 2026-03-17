@@ -3,6 +3,7 @@ import { createId } from '../../lib/id';
 import {
   createUnauthedClient,
   exchangeLoginToken,
+  saveSession,
   loadSession,
 } from './helpers';
 
@@ -17,6 +18,43 @@ export function startSsoRedirect(baseUrl: string, returnPath = '/') {
   const redirectUri = `${window.location.origin}/auth/callback`;
   const ssoUrl = unauthenticatedClient.getSsoLoginUrl(redirectUri);
   window.location.assign(ssoUrl);
+}
+
+export async function loginWithPassword(
+  baseUrl: string,
+  username: string,
+  password: string,
+  deviceName = 'Web'
+): Promise<MatrixSession> {
+  const existingSession = loadSession();
+  const deviceId = existingSession?.deviceId ?? createId('device');
+  const unauthenticatedClient = createUnauthedClient(baseUrl);
+  const response = await unauthenticatedClient.login('m.login.password', {
+    identifier: {
+      type: 'm.id.user',
+      user: username,
+    },
+    user: username,
+    password,
+    device_id: deviceId,
+    initial_device_display_name: deviceName,
+    refresh_token: true,
+  });
+
+  const session: MatrixSession = {
+    baseUrl,
+    userId: response.user_id,
+    deviceId: response.device_id ?? deviceId,
+    accessToken: response.access_token,
+    refreshToken: response.refresh_token ?? undefined,
+    expiresAt:
+      typeof response.expires_in_ms === 'number'
+        ? Date.now() + response.expires_in_ms
+        : undefined,
+  };
+
+  saveSession(session);
+  return session;
 }
 
 export async function completeSsoCallback(): Promise<MatrixSession> {

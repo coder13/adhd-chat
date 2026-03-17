@@ -36,6 +36,8 @@ out/
 # Testing
 coverage/
 .nyc_output/
+apps/web/cypress/screenshots/
+apps/web/cypress/videos/
 
 # Debug
 npm-debug.log*

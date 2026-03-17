@@ -1,0 +1,74 @@
+name: Matrix Auth E2E
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  matrix-auth-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Start local Synapse
+        run: docker compose -f docker-compose.synapse.yml up -d
+
+      - name: Wait for Synapse
+        run: |
+          for attempt in {1..30}; do
+            if curl --silent --show-error --fail http://localhost:8008/_matrix/client/versions >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.synapse.yml logs synapse
+          exit 1
+
+      - name: Verify password auth unit coverage
+        run: yarn workspace web test --runInBand useMatrixClientState.test.tsx
+
+      - name: Run Cypress auth smoke test
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: apps/web
+          install: false
+          start: yarn dev
+          wait-on: 'http://127.0.0.1:5175'
+          wait-on-timeout: 120
+          spec: cypress/e2e/auth.cy.ts
+        env:
+          CYPRESS_MATRIX_BASE_URL: http://localhost:8008
+          CYPRESS_MATRIX_SERVER_NAME: localhost
+          CYPRESS_MATRIX_SHARED_SECRET: dev_registration_secret
+
+      - name: Show Synapse logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.synapse.yml logs synapse
+
+      - name: Upload Cypress artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-artifacts
+          path: |
+            apps/web/cypress/screenshots
+            apps/web/cypress/videos
+          if-no-files-found: ignore
+
+      - name: Stop Synapse
+        if: always()
+        run: docker compose -f docker-compose.synapse.yml down -v
