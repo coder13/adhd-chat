@@ -13,6 +13,7 @@ import { VerificationMethod } from 'matrix-js-sdk/lib/types';
 import type {
   AuthState,
   DeviceVerificationState,
+  EncryptionRestoreState,
   MatrixSession,
 } from './types';
 import {
@@ -46,9 +47,14 @@ import {
 } from './verificationState';
 
 let loggingIn = false;
+const RESTORE_RETRY_DELAY_MS = 1000;
+const MAX_RESTORE_ATTEMPTS = 3;
 
 export function useMatrixClientState() {
-  const [authState, setAuthState] = useState<AuthState>('idle');
+  const initialSessionRef = useRef<MatrixSession | null>(loadSession());
+  const [authState, setAuthState] = useState<AuthState>(() =>
+    initialSessionRef.current ? 'syncing' : 'logged_out'
+  );
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [client, setClient] = useState<MatrixClient | null>(null);
@@ -67,8 +73,11 @@ export function useMatrixClientState() {
   const verifierListenerCleanupRef = useRef<(() => void) | null>(null);
   const [deviceVerification, setDeviceVerification] =
     useState<DeviceVerificationState>({ status: 'idle' });
+  const [encryptionRestore, setEncryptionRestore] =
+    useState<EncryptionRestoreState>({ status: 'idle' });
 
   const isReady = authState === 'ready';
+  const bootstrapUserId = user?.userId ?? initialSessionRef.current?.userId ?? null;
 
   const clearVerifierListeners = useCallback(() => {
     if (verifierRef.current && verifierListenerCleanupRef.current) {
@@ -111,11 +120,20 @@ export function useMatrixClientState() {
   const attachVerifier = useCallback(
     (verifier: Verifier) => {
       if (verifierRef.current === verifier) {
+        const existingSasCallbacks = verifier.getShowSasCallbacks();
+        if (existingSasCallbacks && sasCallbacksRef.current !== existingSasCallbacks) {
+          sasCallbacksRef.current = existingSasCallbacks;
+          updateDeviceVerificationState();
+        }
         return;
       }
 
       clearVerifierListeners();
       verifierRef.current = verifier;
+      const existingSasCallbacks = verifier.getShowSasCallbacks();
+      if (existingSasCallbacks) {
+        sasCallbacksRef.current = existingSasCallbacks;
+      }
 
       const handleShowSas = (sas: ShowSasCallbacks) => {
         sasCallbacksRef.current = sas;
@@ -145,6 +163,10 @@ export function useMatrixClientState() {
         verifier.off(VerifierEvent.ShowSas, handleShowSas);
         verifier.off(VerifierEvent.Cancel, handleCancel);
       };
+
+      if (existingSasCallbacks) {
+        updateDeviceVerificationState();
+      }
     },
     [clearVerifierListeners, updateDeviceVerificationState]
   );
@@ -221,21 +243,32 @@ export function useMatrixClientState() {
   }, [client, handleEvent, handleSync, isReady]);
 
   useEffect(() => {
-    const session = loadSession();
+    const session = initialSessionRef.current;
     if (!session) {
       return;
     }
 
+    let cancelled = false;
+
     setAuthState('syncing');
 
-    buildAuthedClient(session, persist)
-      .then((authedClient) => {
+    const restoreSession = async (attempt: number) => {
+      try {
+        const authedClient = await buildAuthedClient(session, persist);
+        if (cancelled) {
+          return;
+        }
+
         setClient(authedClient);
         setSyncState(authedClient.getSyncState() ?? null);
         setUser({ userId: session.userId, deviceId: session.deviceId });
+        setError(null);
         setAuthState('ready');
-      })
-      .catch((cause: unknown) => {
+      } catch (cause: unknown) {
+        if (cancelled) {
+          return;
+        }
+
         if (isInactiveMatrixSessionError(cause)) {
           recoverExpiredSession(cause);
           return;
@@ -243,10 +276,25 @@ export function useMatrixClientState() {
 
         console.error(cause);
         resetAuthedClient();
-        clearSession();
+
+        if (attempt < MAX_RESTORE_ATTEMPTS) {
+          window.setTimeout(() => {
+            void restoreSession(attempt + 1);
+          }, RESTORE_RETRY_DELAY_MS);
+          return;
+        }
+
+        setSyncState(null);
         setError(getAuthFailureMessage(cause));
         setAuthState('error');
-      });
+      }
+    };
+
+    void restoreSession(1);
+
+    return () => {
+      cancelled = true;
+    };
   }, [persist, recoverExpiredSession]);
 
   useEffect(() => {
@@ -368,6 +416,18 @@ export function useMatrixClientState() {
       }
 
       try {
+        const setupInfo = await getEncryptionSetupInfo(client);
+        const isUnlockFlow = setupInfo.mode === 'unlock';
+
+        if (isUnlockFlow) {
+          setEncryptionRestore({
+            status: 'restoring',
+            message: 'Restoring encrypted history on this device...',
+          });
+        } else {
+          setEncryptionRestore({ status: 'idle' });
+        }
+
         await finishEncryptionSetup(
           client,
           user,
@@ -375,8 +435,21 @@ export function useMatrixClientState() {
           pendingRecoveryKeyRef.current
         );
         pendingRecoveryKeyRef.current = null;
+
+        if (isUnlockFlow) {
+          setEncryptionRestore({
+            status: 'restored',
+            message:
+              'Encrypted history restore finished. Some rooms may still need a moment to sync and decrypt.',
+          });
+        }
       } catch (cause) {
         console.error('Error setting up encryption:', cause);
+        setEncryptionRestore({
+          status: 'error',
+          message:
+            cause instanceof Error ? cause.message : 'Encrypted history restore failed.',
+        });
         throw cause;
       }
     },
@@ -430,7 +503,16 @@ export function useMatrixClientState() {
             throw new Error('Client not initialized.');
           }
 
+          setEncryptionRestore({
+            status: 'restoring',
+            message: 'Restoring encrypted history on this device...',
+          });
           await finishDeviceVerificationUnlock(client);
+          setEncryptionRestore({
+            status: 'restored',
+            message:
+              'Encrypted history restore finished. Some rooms may still need a moment to sync and decrypt.',
+          });
           setDeviceVerification({
             status: 'done',
             transactionId: verificationRequestRef.current?.transactionId,
@@ -459,6 +541,11 @@ export function useMatrixClientState() {
             transactionId: verificationRequestRef.current?.transactionId,
             otherDeviceId: verificationRequestRef.current?.otherDeviceId,
             error: cause instanceof Error ? cause.message : String(cause),
+          });
+          setEncryptionRestore({
+            status: 'error',
+            message:
+              cause instanceof Error ? cause.message : 'Encrypted history restore failed.',
           });
         });
     } catch (cause) {
@@ -532,12 +619,14 @@ export function useMatrixClientState() {
       getEncryptionDiagnostics: loadEncryptionDiagnostics,
       handleFinishEncryptionSetup,
       deviceVerification,
+      encryptionRestore,
       startDeviceVerificationUnlock,
       startSasDeviceVerification,
       confirmSasDeviceVerification,
       cancelDeviceVerification,
       logout,
       isReady,
+      bootstrapUserId,
       user,
     }),
     [
@@ -552,12 +641,14 @@ export function useMatrixClientState() {
       loadEncryptionDiagnostics,
       handleFinishEncryptionSetup,
       deviceVerification,
+      encryptionRestore,
       startDeviceVerificationUnlock,
       startSasDeviceVerification,
       confirmSasDeviceVerification,
       cancelDeviceVerification,
       logout,
       isReady,
+      bootstrapUserId,
       user,
     ]
   );

@@ -155,7 +155,7 @@ describe('MessageBubble', () => {
     globalThis.fetch = originalFetch;
   });
 
-  it('shows an expanded image view with a full-size action', () => {
+  it('shows an expanded image view on a dim backdrop', () => {
     render(
       <MessageBubble
         message={{
@@ -174,11 +174,11 @@ describe('MessageBubble', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand image' }));
 
-    expect(screen.getByText('photo.jpg')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open full size' })).toHaveAttribute(
-      'href',
-      'https://media.example/photo.jpg'
-    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getAllByAltText('photo.jpg')).toHaveLength(2);
+    expect(
+      screen.getByRole('button', { name: 'Close image preview' })
+    ).toBeInTheDocument();
   });
 
   it('shows clearer file action copy', () => {

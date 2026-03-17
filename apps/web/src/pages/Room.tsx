@@ -1,8 +1,8 @@
 import { IonContent, IonFooter, IonPage } from '@ionic/react';
 import { MsgType } from 'matrix-js-sdk';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button } from '../components';
+import { AuthFallbackState, Button } from '../components';
 import { MessageBubble } from '../components/chat';
 import MessageActionMenu from '../components/chat/MessageActionMenu';
 import { getEmojiQuery, getEmojiSuggestions } from '../lib/chat/emojis';
@@ -36,27 +36,32 @@ import { buildPendingRoomMessages, formatTimestamp } from './room/utils';
 import { useRoomComposer } from './room/useRoomComposer';
 import { useRoomPageActions } from './room/useRoomPageActions';
 import { useRoomRealtime } from './room/useRoomRealtime';
+import { useRoomScrollState } from './room/useRoomScrollState';
 
 function RoomPage() {
   const { roomId: encodedRoomId } = useParams<{ roomId: string }>();
   const roomId = encodedRoomId ? decodeURIComponent(encodedRoomId) : null;
   const isPendingRoom = Boolean(roomId && isPendingTandemRoomId(roomId));
   const navigate = useNavigate();
-  const { client, isReady, user } = useMatrixClient();
+  const { client, isReady, state, user, bootstrapUserId } = useMatrixClient();
+  const cacheUserId = user?.userId ?? bootstrapUserId;
   const {
     preferences,
     updateRoomNotificationMode,
     resolveRoomNotificationMode,
-  } = useChatPreferences(client, user?.userId);
-  const { relationships } = useTandem(client, user?.userId);
+  } = useChatPreferences(client, cacheUserId);
+  const { relationships } = useTandem(client, cacheUserId);
 
   const cacheKey =
-    !isPendingRoom && user?.userId && roomId ? `room:${user.userId}:${roomId}` : null;
+    !isPendingRoom && cacheUserId && roomId
+      ? `room:${cacheUserId}:${roomId}`
+      : null;
   const {
     data: snapshot,
     error,
     isLoading: loading,
     refresh,
+    hasCachedData,
   } = usePersistedResource<RoomSnapshot>({
     cacheKey,
     enabled: Boolean(client && user && roomId && !isPendingRoom),
@@ -115,6 +120,11 @@ function RoomPage() {
   const lastTypingSentAtRef = useRef(0);
   const typingIdleTimeoutRef = useRef<number | null>(null);
   const lastReadReceiptEventIdRef = useRef<string | null>(null);
+  const scrollToLatest = useCallback((duration = 250) => {
+    window.requestAnimationFrame(() => {
+      void contentRef.current?.scrollToBottom(duration);
+    });
+  }, []);
 
   const currentRoom = client?.getRoom(roomId ?? undefined) ?? null;
   const mentionCandidates =
@@ -132,7 +142,15 @@ function RoomPage() {
   const roomMembership = currentRoom?.getMyMembership() ?? 'join';
   const membershipPolicy =
     !isPendingRoom && client && currentRoom ? getTandemMembershipPolicy(client, currentRoom) : null;
-  const canInteractWithTimeline = isPendingRoom || !membershipPolicy || roomMembership === 'join';
+  const isLiveSession = Boolean(client && user && isReady);
+  const canRenderCachedRoom =
+    !isPendingRoom &&
+    state === 'syncing' &&
+    Boolean(cacheUserId) &&
+    hasCachedData;
+  const canInteractWithTimeline =
+    isLiveSession &&
+    (isPendingRoom || !membershipPolicy || roomMembership === 'join');
   const canDeleteTopic = membershipPolicy?.roomKind === 'tandem-child-room';
   const tangentSpaceId = isPendingRoom
     ? null
@@ -145,7 +163,9 @@ function RoomPage() {
   const { data: tangentTopics, refresh: refreshTangentTopics } =
     usePersistedResource<TandemSpaceRoomSummary[]>({
       cacheKey:
-        user?.userId && tangentSpaceId ? `space-rooms:${user.userId}:${tangentSpaceId}` : null,
+        cacheUserId && tangentSpaceId
+          ? `space-rooms:${cacheUserId}:${tangentSpaceId}`
+          : null,
       enabled: Boolean(client && user && isReady && tangentSpaceId),
       initialValue: [],
       load: async () => buildTandemSpaceRoomCatalog(client!, user!.userId, tangentSpaceId!),
@@ -167,11 +187,11 @@ function RoomPage() {
     draft,
     contentRef,
     composerRef,
+    scrollToLatest,
     outgoingTypingRef,
     lastTypingSentAtRef,
     typingIdleTimeoutRef,
     lastReadReceiptEventIdRef,
-    optimisticMessages,
     setOptimisticMessages,
     setOptimisticReactionChanges,
     reconcileOptimisticTimeline,
@@ -233,7 +253,7 @@ function RoomPage() {
     optimisticMessages,
     setOptimisticMessages,
     refresh,
-    contentRef,
+    scrollToLatest,
     composerRef,
     emojiPickerRef,
     clearOwnTypingState,
@@ -258,6 +278,11 @@ function RoomPage() {
     mergeTimelineMessages(messages, reconcileOptimisticTimeline(messages, optimisticMessages)),
     optimisticReactionChanges
   );
+  const { showJumpToLatest } = useRoomScrollState({
+    roomId,
+    contentRef,
+    messageKeys: visibleMessages.map((message) => message.id),
+  });
   const visibleError = pendingRoom?.status === 'failed' ? pendingRoom.error ?? actionError : actionError ?? error;
   const typingIndicator = formatTypingIndicator(typingMemberNames);
   const pinnedMessageIds =
@@ -331,15 +356,22 @@ function RoomPage() {
     );
   }
 
-  if (!client || !isReady || !user) {
+  if (!isLiveSession && !canRenderCachedRoom) {
     return (
       <IonPage className="app-shell">
         <IonContent className="app-list-page">
-          <div className="flex min-h-screen items-center justify-center px-6 text-center">
-            <p className="text-text">
-              Please <Link to="/login" className="text-accent">log in</Link> to view this chat.
-            </p>
-          </div>
+          <AuthFallbackState
+            state={state}
+            signedOutMessage={
+              <>
+                Please{' '}
+                <Link to="/login" className="text-accent">
+                  log in
+                </Link>{' '}
+                to view this chat.
+              </>
+            }
+          />
         </IonContent>
       </IonPage>
     );
@@ -356,16 +388,23 @@ function RoomPage() {
         isEncrypted={isEncrypted}
         isPendingRoom={isPendingRoom}
         tangentSpaceId={tangentSpaceId}
-        roomPinned={Boolean(roomMeta.pinned)}
         onBack={handleBackNavigation}
-        onEditTopic={() => setShowIdentityModal(true)}
-        onSearch={() => navigate('/search')}
-        onTogglePin={() => {
-          void handleUpdateRoomMeta({ pinned: !roomMeta.pinned });
+        onEditTopic={() => {
+          if (isLiveSession) {
+            setShowIdentityModal(true);
+          }
         }}
-        onCreateTopic={() => setShowTangentModal(true)}
-        onViewPins={() => navigate(`/room/${encodeURIComponent(roomId)}/pins`)}
-        onOpenMenu={() => setShowMenu(true)}
+        onSearch={() => navigate('/search')}
+        onCreateTopic={() => {
+          if (isLiveSession) {
+            setShowTangentModal(true);
+          }
+        }}
+        onOpenMenu={() => {
+          if (isLiveSession) {
+            setShowMenu(true);
+          }
+        }}
       />
 
       <IonContent ref={contentRef} fullscreen className="app-chat-page">
@@ -408,14 +447,18 @@ function RoomPage() {
                 <MessageBubble
                   key={message.id}
                   message={message}
-                  accessToken={client.getAccessToken()}
+                  accessToken={client?.getAccessToken() ?? null}
                   viewMode={preferences.chatViewMode}
-                  onRetry={handleRetryMessage}
-                  onToggleReaction={(targetMessage, reactionKey) => {
-                    void handleToggleReaction(targetMessage, reactionKey);
-                  }}
+                  onRetry={isLiveSession ? handleRetryMessage : undefined}
+                  onToggleReaction={
+                    isLiveSession
+                      ? (targetMessage, reactionKey) => {
+                          void handleToggleReaction(targetMessage, reactionKey);
+                        }
+                      : undefined
+                  }
                   onRequestActions={
-                    message.id.startsWith('local:')
+                    !isLiveSession || message.id.startsWith('local:')
                       ? undefined
                       : (nextMessage, position) => {
                           setMessageMenu({ message: nextMessage, position });
@@ -430,7 +473,17 @@ function RoomPage() {
         </div>
       </IonContent>
 
-      <IonFooter className="ion-no-border">
+      {showJumpToLatest ? (
+        <button
+          type="button"
+          className="fixed bottom-28 right-4 z-20 rounded-full bg-white px-4 py-2 text-sm font-medium text-text shadow-[0_18px_40px_-24px_rgba(15,23,42,0.38)]"
+          onClick={() => scrollToLatest()}
+        >
+          New messages
+        </button>
+      ) : null}
+
+      <IonFooter className="app-chat-footer ion-no-border">
         <RoomComposer
           isPendingRoom={isPendingRoom}
           canInteractWithTimeline={canInteractWithTimeline}

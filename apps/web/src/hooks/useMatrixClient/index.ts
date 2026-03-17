@@ -5,4 +5,8 @@ export type {
   EncryptionSetupInfo,
   EncryptionSetupMode,
 } from './crypto';
-export type { DeviceVerificationState, VerificationEmoji } from './types';
+export type {
+  DeviceVerificationState,
+  EncryptionRestoreState,
+  VerificationEmoji,
+} from './types';

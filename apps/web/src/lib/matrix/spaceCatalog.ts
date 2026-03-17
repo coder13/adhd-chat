@@ -18,6 +18,10 @@ import {
   getTimelineEventContent,
   isRenderableTimelineMessage,
 } from './timelineEvents';
+import {
+  getPendingTandemRoomsForSpace,
+  type PendingTandemRoomRecord,
+} from './pendingTandemRoom';
 
 const ROOM_CREATE_EVENT_TYPE = 'm.room.create';
 const SPACE_CHILD_EVENT_TYPE = 'm.space.child';
@@ -142,6 +146,33 @@ function relationshipBySpaceId(client: MatrixClient) {
   );
 }
 
+function getLocallyJoinedRooms(client: MatrixClient) {
+  return client
+    .getRooms()
+    .filter((room) => room.getMyMembership() === 'join');
+}
+
+function toPendingRoomSummary(
+  pendingRoom: PendingTandemRoomRecord
+): TandemSpaceRoomSummary {
+  return {
+    id: pendingRoom.pendingRoomId,
+    name: pendingRoom.roomName,
+    icon: null,
+    description: pendingRoom.topic ?? null,
+    preview:
+      pendingRoom.status === 'failed'
+        ? pendingRoom.error ?? 'Topic setup failed'
+        : 'Creating topic...',
+    timestamp: pendingRoom.createdAt,
+    unreadCount: 0,
+    memberCount: 2,
+    membership: 'join',
+    isPinned: false,
+    isArchived: false,
+  };
+}
+
 function getSpaceSummary(
   client: MatrixClient,
   spaceRoom: Room,
@@ -182,20 +213,7 @@ export async function buildTandemSpaceCatalog(
   client: MatrixClient,
   userId: string
 ): Promise<TandemSpaceSummary[]> {
-  const joinedRoomsResponse = await client.getJoinedRooms();
-  const joinedRooms = joinedRoomsResponse.joined_rooms
-    .map((roomId) => client.getRoom(roomId))
-    .filter((room): room is Room => room !== null);
-
-  await Promise.all(
-    joinedRooms.map(async (room) => {
-      try {
-        await room.loadMembersIfNeeded();
-      } catch (error) {
-        console.error(`Failed to load members for room ${room.roomId}`, error);
-      }
-    })
-  );
+  const joinedRooms = getLocallyJoinedRooms(client);
 
   const relationships = relationshipBySpaceId(client);
 
@@ -226,8 +244,6 @@ export async function buildTandemSpaceRoomCatalog(
     throw new Error('Tandem space not found.');
   }
 
-  await spaceRoom.loadMembersIfNeeded();
-
   const childRoomIds = getChildRoomIds(spaceRoom);
 
   const rooms = await Promise.all(
@@ -235,12 +251,6 @@ export async function buildTandemSpaceRoomCatalog(
       const room = client.getRoom(roomId);
       if (!room) {
         return null;
-      }
-
-      try {
-        await room.loadMembersIfNeeded();
-      } catch (error) {
-        console.error(`Failed to load members for room ${room.roomId}`, error);
       }
 
       const meta = getTandemRoomMeta(room);
@@ -266,5 +276,6 @@ export async function buildTandemSpaceRoomCatalog(
 
   return rooms
     .filter((room): room is TandemSpaceRoomSummary => room !== null)
+    .concat(getPendingTandemRoomsForSpace(spaceId).map(toPendingRoomSummary))
     .sort(compareRooms);
 }

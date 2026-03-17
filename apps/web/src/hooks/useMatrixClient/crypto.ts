@@ -11,6 +11,16 @@ export type EncryptionSetupInfo = {
   message: string;
 };
 
+export type CrossSigningStatusSummary = {
+  publicKeysOnDevice: boolean;
+  privateKeysInSecretStorage: boolean;
+  privateKeysCachedLocally: {
+    masterKey: boolean;
+    userSigningKey: boolean;
+    selfSigningKey: boolean;
+  };
+};
+
 export type EncryptionDiagnostics = {
   crossSigningReady: boolean;
   secretStorageReady: boolean;
@@ -22,16 +32,30 @@ export type EncryptionDiagnostics = {
     localVerified: boolean;
     tofu: boolean;
   } | null;
-  crossSigningStatus: {
-    publicKeysOnDevice: boolean;
-    privateKeysInSecretStorage: boolean;
-    privateKeysCachedLocally: {
-      masterKey: boolean;
-      userSigningKey: boolean;
-      selfSigningKey: boolean;
-    };
-  };
+  crossSigningStatus: CrossSigningStatusSummary;
 };
+
+export function hasAllPrivateCrossSigningKeys(
+  crossSigningStatus: CrossSigningStatusSummary
+) {
+  return (
+    crossSigningStatus.privateKeysCachedLocally.masterKey &&
+    crossSigningStatus.privateKeysCachedLocally.selfSigningKey &&
+    crossSigningStatus.privateKeysCachedLocally.userSigningKey
+  );
+}
+
+export function isDeviceCryptoReady(options: {
+  crossSigningReady: boolean;
+  secretStorageReady: boolean;
+  crossSigningStatus: CrossSigningStatusSummary;
+}) {
+  return (
+    options.crossSigningReady &&
+    (options.secretStorageReady ||
+      hasAllPrivateCrossSigningKeys(options.crossSigningStatus))
+  );
+}
 
 function requireCrypto(client: MatrixClient) {
   const cryptoApi = client.getCrypto?.();
@@ -121,7 +145,13 @@ export async function getEncryptionSetupInfo(client: MatrixClient) {
 
   const keyBackupEnabled = backupVersion !== null;
 
-  if (crossSigningReady && secretStorageReady) {
+  if (
+    isDeviceCryptoReady({
+      crossSigningReady,
+      secretStorageReady,
+      crossSigningStatus,
+    })
+  ) {
     return {
       mode: 'ready',
       message: keyBackupEnabled
@@ -254,9 +284,7 @@ export async function finishDeviceVerificationUnlock(client: MatrixClient) {
     cryptoApi.getActiveSessionBackupVersion(),
   ]);
   const privateKeysCachedLocally =
-    crossSigningStatus.privateKeysCachedLocally.masterKey &&
-    crossSigningStatus.privateKeysCachedLocally.selfSigningKey &&
-    crossSigningStatus.privateKeysCachedLocally.userSigningKey;
+    hasAllPrivateCrossSigningKeys(crossSigningStatus);
 
   if (!privateKeysCachedLocally) {
     await cryptoApi.bootstrapCrossSigning({});

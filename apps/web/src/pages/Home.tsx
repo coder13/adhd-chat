@@ -3,7 +3,7 @@ import { ClientEvent, RoomEvent } from 'matrix-js-sdk';
 import { searchOutline } from 'ionicons/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AppAvatar, Button, Card } from '../components';
+import { AppAvatar, AuthFallbackState, Button, Card } from '../components';
 import { ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { usePersistedResource } from '../hooks/usePersistedResource';
@@ -41,7 +41,9 @@ function formatTimestamp(timestamp: number) {
 }
 
 function Home() {
-  const { client, isReady, user, error } = useMatrixClient();
+  const { client, isReady, state, user, error, bootstrapUserId } =
+    useMatrixClient();
+  const cacheUserId = user?.userId ?? bootstrapUserId;
   const {
     incomingInvites,
     relationships,
@@ -49,10 +51,10 @@ function Home() {
     acceptInvite,
     declineInvite,
     isRecoveringRelationships,
-  } = useTandem(client, user?.userId);
+  } = useTandem(client, cacheUserId);
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const cacheKey = user?.userId ? `tandem-spaces:${user.userId}` : null;
+  const cacheKey = cacheUserId ? `tandem-spaces:${cacheUserId}` : null;
   const {
     data: spaces,
     error: catalogError,
@@ -65,6 +67,10 @@ function Home() {
     enabled: Boolean(client && user),
     initialValue: [],
     load: async () => buildTandemSpaceCatalog(client!, user!.userId),
+    preserveValue: (currentSpaces, nextSpaces) =>
+      nextSpaces.length > 0 || currentSpaces.length === 0
+        ? nextSpaces
+        : currentSpaces,
   });
   const [stableSpaces, setStableSpaces] = useState<TandemSpaceSummary[]>([]);
 
@@ -153,21 +159,27 @@ function Home() {
   const pendingIncomingInvites = incomingInvites.filter(
     (invite) => invite.status === 'pending'
   );
+  const canRenderCachedHome =
+    state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
+  const isRestoring = !isReady || !user;
 
-  if (!isReady || !user) {
+  if (isRestoring && !canRenderCachedHome) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="max-w-sm text-center">
-          <h1 className="text-3xl font-semibold text-text">ADHD Chat</h1>
-          <p className="mt-3 text-sm leading-6 text-text-muted">
+      <AuthFallbackState
+        state={state}
+        restoringTitle="Restoring ADHD Chat"
+        restoringMessage="Reconnecting to your shared hubs and recent conversations."
+        signedOutTitle="ADHD Chat"
+        signedOutMessage={
+          <>
             Please{' '}
             <Link to="/login" className="font-medium text-accent">
               log in
             </Link>{' '}
             to open your shared hubs.
-          </p>
-        </div>
-      </div>
+          </>
+        }
+      />
     );
   }
 
@@ -194,14 +206,9 @@ function Home() {
         }
       >
         <div className="space-y-4 px-4 pb-24 pt-4">
-          {pendingIncomingInvites.length > 0 && (
+          {!isRestoring && pendingIncomingInvites.length > 0 && (
             <section className="space-y-3">
-              <div>
-                <h2 className="text-lg font-semibold text-text">Pending invites</h2>
-                <p className="mt-1 text-sm text-text-muted">
-                  Accept a shared hub and it will become part of your everyday home.
-                </p>
-              </div>
+              <div className="text-lg font-semibold text-text">Pending invites</div>
               {pendingIncomingInvites.map((invite) => (
                 <Card key={invite.inviteId} tone="accent">
                   <div className="flex items-center gap-3">
@@ -214,9 +221,7 @@ function Home() {
                       <h3 className="truncate text-base font-semibold text-text">
                         Shared hub invite
                       </h3>
-                      <p className="mt-1 text-sm text-text-muted">
-                        {invite.inviterMatrixId} wants to start a private hub with you.
-                      </p>
+                      <p className="mt-1 text-sm text-text-muted">{invite.inviterMatrixId}</p>
                     </div>
                   </div>
                   {invite.message && (
@@ -255,25 +260,18 @@ function Home() {
             (isRecoveringRelationships || relationships.length > 0) &&
             !catalogError ? (
               <Card tone="accent">
-                <h3 className="text-base font-semibold text-text">
-                  Restoring your Tandem hubs
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-text-muted">
-                  Tandem is reconnecting your shared hubs and topics after sync so your home stays organized.
-                </p>
+                <h3 className="text-base font-semibold text-text">Restoring hubs</h3>
               </Card>
             ) : visibleSpaces.length === 0 &&
               displaySpaces.length === 0 &&
               !isLoadingSpaces ? (
               <Card tone="accent">
-                <h3 className="text-base font-semibold text-text">
-                  Start your first shared hub
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-text-muted">
-                  Invite your partner, then use one shared hub to keep plans, routines, and ongoing topics in one place.
-                </p>
+                <h3 className="text-base font-semibold text-text">Start your first hub</h3>
                 <div className="mt-4 flex items-center gap-4">
-                  <Button onClick={() => navigate('/contacts/new')}>
+                  <Button
+                    onClick={() => navigate('/contacts/new')}
+                    disabled={isRestoring}
+                  >
                     Invite a partner
                   </Button>
                 </div>
@@ -300,7 +298,7 @@ function Home() {
                         )
                       }
                     >
-                    <div className="flex items-start gap-4">
+                    <div className="flex items-start gap-3">
                       <AppAvatar
                         name={partner.displayName || space.name || space.partnerUserId}
                         icon={space.icon}
@@ -310,7 +308,7 @@ function Home() {
                               null
                             : null
                         }
-                        className="h-12 w-12"
+                        className="h-11 w-11"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-3">
@@ -328,15 +326,14 @@ function Home() {
                             </div>
                           </div>
                         </div>
-                        <p className="mt-1 text-xs font-medium uppercase tracking-[0.12em] text-text-subtle">
-                          Shared with {partner.displayName}
+                        <p className="mt-0.5 text-xs font-medium uppercase tracking-[0.12em] text-text-subtle">
+                          {partner.displayName}
                         </p>
                         <p className="mt-1 truncate text-sm text-text-muted">
                           {space.description || space.preview}
                         </p>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
+                        <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-text-muted">
                           <span>{formatTopicCountLabel(space.roomCount)}</span>
-                          {space.preview ? <span>Latest activity in a topic</span> : null}
                         </div>
                       </div>
                     </div>

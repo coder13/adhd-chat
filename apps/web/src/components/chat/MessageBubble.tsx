@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppAvatar, Modal } from '..';
+import { AppAvatar } from '..';
 import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
 import type { ChatViewMode } from '../../lib/matrix/preferences';
 import { cn } from '../../lib/cn';
@@ -249,6 +249,34 @@ function MessageBubble({
       Retry load
     </button>
   ) : null;
+  const expandedImagePreview = isImageExpanded ? (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
+      style={{ backgroundColor: 'rgba(15, 23, 42, 0.4)' }}
+      aria-modal="true"
+      role="dialog"
+    >
+      <button
+        type="button"
+        className="absolute inset-0"
+        onClick={() => setIsImageExpanded(false)}
+        aria-label="Close image preview"
+      />
+      <div className="relative z-10">
+        {resolvedMediaUrl ? (
+          <img
+            src={resolvedMediaUrl}
+            alt={imageAltText}
+            className="max-h-[70vh] min-h-[50vh] w-auto max-w-full object-contain"
+          />
+        ) : (
+          <div className="rounded-3xl bg-panel px-5 py-4 text-sm text-text-muted">
+            {mediaError ? 'Unable to load image' : 'Loading image...'}
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null;
   const imagePreview = resolvedMediaUrl ? (
     <button
       type="button"
@@ -331,8 +359,8 @@ function MessageBubble({
                 {fileCard}
               </div>
             ) : message.msgtype === 'm.emote' ? (
-              <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-1 text-sm italic leading-6">
-                <p className="whitespace-pre-wrap">
+              <div className="flex max-w-full flex-wrap items-end gap-x-2 gap-y-1 text-sm italic leading-6">
+                <p className="min-w-0 max-w-full flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
                   * {message.senderName} {linkedMessageBody}
                 </p>
                 <p className="shrink-0 text-[11px] not-italic text-text-subtle">
@@ -341,8 +369,8 @@ function MessageBubble({
                 {receiptAvatars}
               </div>
             ) : (
-              <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-1 text-sm leading-6">
-                <p className="whitespace-pre-wrap">
+              <div className="flex max-w-full flex-wrap items-end gap-x-2 gap-y-1 text-sm leading-6">
+                <p className="min-w-0 max-w-full flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
                   {linkedMessageBody}
                 </p>
                 <p className="shrink-0 text-[11px] text-text-subtle">
@@ -374,55 +402,7 @@ function MessageBubble({
           </div>
         </div>
 
-        <Modal
-          isOpen={isImageExpanded}
-          onClose={() => setIsImageExpanded(false)}
-          title="Image preview"
-          size="lg"
-        >
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-line bg-elevated px-4 py-3">
-              <p className="truncate text-sm font-semibold text-text">
-                {message.body || 'Image'}
-              </p>
-              <p className="mt-1 text-xs text-text-subtle">
-                {mediaMeta ||
-                  [message.imageWidth, message.imageHeight]
-                    .filter(Boolean)
-                    .join(' × ') ||
-                  'Image'}
-              </p>
-            </div>
-            <div className="flex justify-center rounded-[28px] border border-line bg-panel/70 p-2 sm:p-4">
-              {resolvedMediaUrl ? (
-                <img
-                  src={resolvedMediaUrl}
-                  alt={imageAltText}
-                  className="max-h-[75vh] w-full max-w-full rounded-2xl object-contain"
-                />
-              ) : (
-                <div className="flex min-h-48 w-full items-center justify-center text-sm text-text-muted">
-                  {mediaError ? 'Unable to load image' : 'Loading image…'}
-                </div>
-              )}
-            </div>
-            {resolvedMediaUrl ? (
-              <div className="flex justify-end">
-                <a
-                  href={resolvedMediaUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  download={message.body || 'image'}
-                  className="text-sm font-medium text-accent underline underline-offset-2"
-                >
-                  Open full size
-                </a>
-              </div>
-            ) : (
-              <div className="flex justify-end">{retryMediaLoadButton}</div>
-            )}
-          </div>
-        </Modal>
+        {expandedImagePreview}
       </>
     );
   }
@@ -466,8 +446,8 @@ function MessageBubble({
           ) : message.msgtype === 'm.file' ? (
             fileCard
           ) : message.msgtype === 'm.emote' ? (
-            <div className="mt-1 flex flex-wrap items-end gap-x-2 gap-y-1 text-sm italic leading-6 text-text">
-              <p className="whitespace-pre-wrap">
+            <div className="mt-1 flex max-w-full flex-wrap items-end gap-x-2 gap-y-1 text-sm italic leading-6 text-text">
+              <p className="min-w-0 max-w-full flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
                 * {message.senderName} {linkedMessageBody}
               </p>
               <p className="shrink-0 text-[11px] not-italic text-text-subtle">
@@ -475,8 +455,8 @@ function MessageBubble({
               </p>
             </div>
           ) : (
-            <div className="mt-1 flex flex-wrap items-end gap-x-2 gap-y-1 text-sm leading-6 text-text">
-              <p className="whitespace-pre-wrap">
+            <div className="mt-1 flex max-w-full flex-wrap items-end gap-x-2 gap-y-1 text-sm leading-6 text-text">
+              <p className="min-w-0 max-w-full flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
                 {linkedMessageBody}
               </p>
               <p className="shrink-0 text-[11px] text-text-subtle">
@@ -507,55 +487,7 @@ function MessageBubble({
         </div>
       </div>
 
-      <Modal
-        isOpen={isImageExpanded}
-        onClose={() => setIsImageExpanded(false)}
-        title="Image preview"
-        size="lg"
-      >
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-line bg-elevated px-4 py-3">
-            <p className="truncate text-sm font-semibold text-text">
-              {message.body || 'Image'}
-            </p>
-            <p className="mt-1 text-xs text-text-subtle">
-              {mediaMeta ||
-                [message.imageWidth, message.imageHeight]
-                  .filter(Boolean)
-                  .join(' × ') ||
-                'Image'}
-            </p>
-          </div>
-          <div className="flex justify-center rounded-[28px] border border-line bg-panel/70 p-2 sm:p-4">
-            {resolvedMediaUrl ? (
-              <img
-                src={resolvedMediaUrl}
-                alt={imageAltText}
-                className="max-h-[75vh] w-full max-w-full rounded-2xl object-contain"
-              />
-            ) : (
-              <div className="flex min-h-48 w-full items-center justify-center text-sm text-text-muted">
-                {mediaError ? 'Unable to load image' : 'Loading image…'}
-              </div>
-            )}
-          </div>
-          {resolvedMediaUrl ? (
-            <div className="flex justify-end">
-              <a
-                href={resolvedMediaUrl}
-                target="_blank"
-                rel="noreferrer"
-                download={message.body || 'image'}
-                className="text-sm font-medium text-accent underline underline-offset-2"
-              >
-                Open full size
-              </a>
-            </div>
-          ) : (
-            <div className="flex justify-end">{retryMediaLoadButton}</div>
-          )}
-        </div>
-      </Modal>
+      {expandedImagePreview}
     </>
   );
 }

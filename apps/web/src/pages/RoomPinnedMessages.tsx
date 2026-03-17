@@ -16,6 +16,7 @@ import {
 } from 'matrix-js-sdk';
 import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { AuthFallbackState } from '../components';
 import { MessageBubble } from '../components/chat';
 import { usePersistedResource } from '../hooks/usePersistedResource';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
@@ -55,15 +56,17 @@ function RoomPinnedMessagesPage() {
   const { roomId: encodedRoomId } = useParams<{ roomId: string }>();
   const roomId = encodedRoomId ? decodeURIComponent(encodedRoomId) : null;
   const navigate = useNavigate();
-  const { client, isReady, user } = useMatrixClient();
+  const { client, isReady, state, user, bootstrapUserId } = useMatrixClient();
+  const cacheUserId = user?.userId ?? bootstrapUserId;
   const {
     data: snapshot,
     error,
     isLoading,
     refresh,
+    hasCachedData,
   } = usePersistedResource<PinnedMessagesSnapshot>({
     cacheKey:
-      user?.userId && roomId ? `room-pins:${user.userId}:${roomId}` : null,
+      cacheUserId && roomId ? `room-pins:${cacheUserId}:${roomId}` : null,
     enabled: Boolean(client && user && isReady && roomId),
     initialValue: {
       roomName: 'Topic',
@@ -71,6 +74,9 @@ function RoomPinnedMessagesPage() {
     },
     load: async () => buildPinnedMessagesSnapshot(roomId!, client!, user!.userId),
   });
+  const isLiveSession = Boolean(client && user && isReady);
+  const canRenderCachedPins =
+    state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
 
   useEffect(() => {
     if (!client || !roomId || !user || !isReady) {
@@ -133,19 +139,22 @@ function RoomPinnedMessagesPage() {
     );
   }
 
-  if (!client || !isReady || !user) {
+  if (!isLiveSession && !canRenderCachedPins) {
     return (
       <IonPage className="app-shell">
         <IonContent className="app-list-page">
-          <div className="flex min-h-screen items-center justify-center px-6 text-center">
-            <p className="text-text">
-              Please{' '}
-              <Link to="/login" className="text-accent">
-                log in
-              </Link>{' '}
-              to view pinned messages.
-            </p>
-          </div>
+          <AuthFallbackState
+            state={state}
+            signedOutMessage={
+              <>
+                Please{' '}
+                <Link to="/login" className="text-accent">
+                  log in
+                </Link>{' '}
+                to view pinned messages.
+              </>
+            }
+          />
         </IonContent>
       </IonPage>
     );
@@ -194,7 +203,7 @@ function RoomPinnedMessagesPage() {
                 <MessageBubble
                   key={message.id}
                   message={message}
-                  accessToken={client.getAccessToken()}
+                  accessToken={client?.getAccessToken() ?? null}
                   viewMode="timeline"
                 />
               ))}

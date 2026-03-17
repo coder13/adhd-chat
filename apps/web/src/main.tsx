@@ -15,8 +15,10 @@ import '@ionic/react/css/display.css';
 import './index.css';
 import './theme/variables.css';
 import App from './App.tsx';
+import { registerPwa } from './lib/pwa/registerPwa';
 
 setupIonicReact();
+registerPwa();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

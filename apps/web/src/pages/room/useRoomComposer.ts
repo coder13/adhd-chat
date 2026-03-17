@@ -39,7 +39,7 @@ interface UseRoomComposerParams {
   optimisticMessages: OptimisticTimelineMessage[];
   setOptimisticMessages: Dispatch<SetStateAction<OptimisticTimelineMessage[]>>;
   refresh: () => Promise<unknown>;
-  contentRef: RefObject<HTMLIonContentElement | null>;
+  scrollToLatest: (duration?: number) => void;
   composerRef: RefObject<HTMLIonTextareaElement | null>;
   emojiPickerRef: RefObject<HTMLDivElement | null>;
   clearOwnTypingState: () => void;
@@ -70,7 +70,7 @@ export function useRoomComposer({
   optimisticMessages,
   setOptimisticMessages,
   refresh,
-  contentRef,
+  scrollToLatest,
   composerRef,
   emojiPickerRef,
   clearOwnTypingState,
@@ -210,9 +210,7 @@ export function useRoomComposer({
           message.transactionId === transactionId ? { ...message, remoteEventId } : message
         )
       );
-      requestAnimationFrame(() => {
-        void contentRef.current?.scrollToBottom(250);
-      });
+      scrollToLatest();
       if (editMessage) {
         setComposerMode(null);
       }
@@ -288,9 +286,7 @@ export function useRoomComposer({
             message.transactionId === transactionId ? { ...message, remoteEventId } : message
           )
         );
-        requestAnimationFrame(() => {
-          void contentRef.current?.scrollToBottom(250);
-        });
+        scrollToLatest();
         void refresh();
         didSend = true;
       } catch (cause) {
@@ -385,9 +381,7 @@ export function useRoomComposer({
           message.transactionId === transactionId ? { ...message, remoteEventId } : message
         )
       );
-      requestAnimationFrame(() => {
-        void contentRef.current?.scrollToBottom(250);
-      });
+      scrollToLatest();
       void refresh();
     } catch (cause) {
       console.error(cause);
@@ -538,6 +532,9 @@ export function useRoomComposer({
   const handleReplyToMessage = (message: RoomMessage) => {
     setComposerMode({ type: 'reply', message });
     setDraft('');
+    requestAnimationFrame(() => {
+      void composerRef.current?.setFocus();
+    });
   };
 
   const handleEditMessage = (message: RoomMessage) => {
@@ -548,6 +545,9 @@ export function useRoomComposer({
     setShowEmojiPicker(false);
     setComposerMode({ type: 'edit', message });
     setDraft(message.body);
+    requestAnimationFrame(() => {
+      void composerRef.current?.setFocus();
+    });
   };
 
   const handleCancelComposerContext = () => {

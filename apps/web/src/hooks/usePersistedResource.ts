@@ -10,6 +10,7 @@ interface UsePersistedResourceOptions<T> {
   enabled: boolean;
   initialValue: T;
   load: () => Promise<T>;
+  preserveValue?: (currentValue: T, nextValue: T) => T;
 }
 
 export function usePersistedResource<T>({
@@ -17,9 +18,11 @@ export function usePersistedResource<T>({
   enabled,
   initialValue,
   load,
+  preserveValue,
 }: UsePersistedResourceOptions<T>) {
   const initialValueRef = useRef(initialValue);
   const loadRef = useRef(load);
+  const preserveValueRef = useRef(preserveValue);
   const hasCachedDataRef = useRef(false);
   const [hasCachedData, setHasCachedData] = useState(() =>
     cacheKey ? loadPersistedValue<T>(cacheKey) !== null : false
@@ -41,6 +44,10 @@ export function usePersistedResource<T>({
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+
+  useEffect(() => {
+    preserveValueRef.current = preserveValue;
+  }, [preserveValue]);
 
   useEffect(() => {
     if (!cacheKey) {
@@ -69,10 +76,16 @@ export function usePersistedResource<T>({
     setIsFetching(true);
 
     try {
-      const nextValue = await loadRef.current();
-      setData(nextValue);
+      const nextValue: T = await loadRef.current();
+      let resolvedValue: T = nextValue;
+      setData((currentValue) => {
+        resolvedValue = preserveValueRef.current
+          ? preserveValueRef.current(currentValue, nextValue)
+          : nextValue;
+        return resolvedValue;
+      });
       setError(null);
-      savePersistedValue(cacheKey, nextValue);
+      savePersistedValue(cacheKey, resolvedValue);
       setHasCachedData(true);
       hasCachedDataRef.current = true;
     } catch (cause) {

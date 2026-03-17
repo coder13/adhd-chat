@@ -1,5 +1,6 @@
 export { default as Button } from './Button';
 export { default as Input } from './Input';
+export { default as AuthFallbackState } from './AuthFallbackState';
 export { default as AppAvatar } from './AppAvatar';
 export { default as IdentityEditorModal } from './IdentityEditorModal';
 export { default as IconPickerField } from './IconPickerField';

@@ -88,6 +88,18 @@ export function subscribeToPendingTandemRooms(listener: PendingRoomListener) {
   };
 }
 
+export function getPendingTandemRooms() {
+  return Object.values(readPendingRooms()).sort(
+    (left, right) => right.createdAt - left.createdAt
+  );
+}
+
+export function getPendingTandemRoomsForSpace(spaceId: string) {
+  return getPendingTandemRooms().filter(
+    (room) => room.sharedSpaceId === spaceId && room.status !== 'ready'
+  );
+}
+
 export function clearPendingTandemRoom(roomId: string) {
   const pendingRooms = readPendingRooms();
   if (!pendingRooms[roomId]) {

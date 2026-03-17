@@ -20,6 +20,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AppAvatar,
+  AuthFallbackState,
   Button,
   Card,
   IdentityEditorModal,
@@ -69,30 +70,44 @@ function formatTimestamp(timestamp: number) {
       }).format(date);
 }
 
+function preserveRoomCatalog(
+  currentRooms: TandemSpaceRoomSummary[],
+  nextRooms: TandemSpaceRoomSummary[]
+) {
+  if (nextRooms.length > 0 || currentRooms.length === 0) {
+    return nextRooms;
+  }
+
+  return currentRooms;
+}
+
 function TandemSpacePage() {
   const { spaceId: encodedSpaceId } = useParams<{ spaceId: string }>();
   const spaceId = encodedSpaceId ? decodeURIComponent(encodedSpaceId) : null;
   const navigate = useNavigate();
-  const { client, isReady, user } = useMatrixClient();
+  const { client, isReady, state, user, bootstrapUserId } = useMatrixClient();
+  const cacheUserId = user?.userId ?? bootstrapUserId;
   const {
     preferences,
     updateRoomNotificationMode,
     resolveRoomNotificationMode,
-  } = useChatPreferences(client, user?.userId);
-  const { relationships } = useTandem(client, user?.userId);
+  } = useChatPreferences(client, cacheUserId);
+  const { relationships } = useTandem(client, cacheUserId);
   const cacheKey =
-    user?.userId && spaceId ? `space-rooms:${user.userId}:${spaceId}` : null;
+    cacheUserId && spaceId ? `space-rooms:${cacheUserId}:${spaceId}` : null;
   const {
     data: rooms,
     error,
     isLoading: loading,
     refresh,
+    hasCachedData,
   } = usePersistedResource<TandemSpaceRoomSummary[]>({
     cacheKey,
     enabled: Boolean(client && user && isReady && spaceId),
     initialValue: [],
     load: async () =>
       buildTandemSpaceRoomCatalog(client!, user!.userId, spaceId!),
+    preserveValue: preserveRoomCatalog,
   });
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
   const [showTangentModal, setShowTangentModal] = useState(false);
@@ -120,6 +135,9 @@ function TandemSpacePage() {
     () => rooms.filter((room) => room.isArchived),
     [rooms]
   );
+  const isLiveSession = Boolean(client && user && isReady);
+  const canRenderCachedSpace =
+    state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
   const pinnedRooms = useMemo(
     () => rooms.filter((room) => room.isPinned && !room.isArchived),
     [rooms]
@@ -174,19 +192,22 @@ function TandemSpacePage() {
     );
   }
 
-  if (!isReady || !user) {
+  if (!isLiveSession && !canRenderCachedSpace) {
     return (
       <IonPage className="app-shell">
         <IonContent className="app-list-page">
-          <div className="flex items-center justify-center min-h-screen px-6 text-center">
-            <p className="text-text">
-              Please{' '}
-              <Link to="/login" className="text-accent">
-                log in
-              </Link>{' '}
-              to view this hub.
-            </p>
-          </div>
+          <AuthFallbackState
+            state={state}
+            signedOutMessage={
+              <>
+                Please{' '}
+                <Link to="/login" className="text-accent">
+                  log in
+                </Link>{' '}
+                to view this hub.
+              </>
+            }
+          />
         </IonContent>
       </IonPage>
     );
@@ -287,8 +308,12 @@ function TandemSpacePage() {
       <button
         key={room.id}
         type="button"
-        className="app-hover-surface flex w-full items-start gap-2.5 rounded-[24px] border border-transparent px-3 py-3 text-left"
-        onClick={() => handleOpenRoom(room)}
+        className="app-hover-surface flex w-full items-start gap-2.5 rounded-[22px] border border-transparent px-2.5 py-2.5 text-left"
+        onClick={() => {
+          if (isLiveSession || room.membership === 'join') {
+            handleOpenRoom(room);
+          }
+        }}
       >
         <AppAvatar
           name={room.name}
@@ -315,7 +340,7 @@ function TandemSpacePage() {
           <p className="mt-0.5 truncate text-[13px] text-text-muted">
             {room.description || room.preview}
           </p>
-          <div className="mt-1.5 flex flex-wrap gap-2 text-[11px] text-text-muted">
+          <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-text-muted">
             {room.isArchived && <span>Archived</span>}
             {room.membership === 'invite' && <span>Invited</span>}
           </div>
@@ -325,10 +350,12 @@ function TandemSpacePage() {
             <Button
               onClick={(event) => {
                 event.stopPropagation();
-                void handleJoinRoom(room.id);
+                if (isLiveSession) {
+                  void handleJoinRoom(room.id);
+                }
               }}
               size="sm"
-              disabled={joiningRoomId === room.id}
+              disabled={!isLiveSession || joiningRoomId === room.id}
             >
               {joiningRoomId === room.id ? 'Joining...' : joinLabel}
             </Button>
@@ -387,16 +414,26 @@ function TandemSpacePage() {
             <IonButton
               fill="clear"
               color="primary"
-              onClick={() => setShowTangentModal(true)}
+              onClick={() => {
+                if (isLiveSession) {
+                  setShowTangentModal(true);
+                }
+              }}
               aria-label="Create topic"
+              disabled={!isLiveSession}
             >
               <IonIcon slot="icon-only" icon={gitBranchOutline} />
             </IonButton>
             <IonButton
               fill="clear"
               color="medium"
-              onClick={() => setShowSpaceMenu(true)}
+              onClick={() => {
+                if (isLiveSession) {
+                  setShowSpaceMenu(true);
+                }
+              }}
               aria-label="Hub options"
+              disabled={!isLiveSession}
             >
               <IonIcon slot="icon-only" icon={ellipsisHorizontal} />
             </IonButton>
@@ -407,9 +444,7 @@ function TandemSpacePage() {
       <IonContent fullscreen className="app-list-page">
         <div className="px-4 py-4 space-y-4">
           {spaceNotice && (
-            <Card>
-              <p className="text-sm leading-6 text-text-muted">{spaceNotice}</p>
-            </Card>
+            <div className="text-sm text-text-muted">{spaceNotice}</div>
           )}
 
           {loading ? (
@@ -420,14 +455,12 @@ function TandemSpacePage() {
             <div className="py-6 text-sm text-center text-danger">{error}</div>
           ) : rooms.length === 0 ? (
             <Card>
-              <h3 className="text-base font-semibold text-text">
-                No topics yet
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-text-muted">
-                Create the first topic in this hub so you and your partner can keep different parts of life separate.
-              </p>
+              <h3 className="text-base font-semibold text-text">No topics yet</h3>
               <div className="mt-4">
-                <Button onClick={() => setShowTangentModal(true)}>
+                <Button
+                  onClick={() => setShowTangentModal(true)}
+                  disabled={!isLiveSession}
+                >
                   Create a topic
                 </Button>
               </div>
@@ -436,7 +469,7 @@ function TandemSpacePage() {
             <div className="space-y-4">
               {pinnedRooms.length > 0 && (
                 <section className="space-y-1.5">
-                  <div className="pb-1 text-xs font-medium uppercase tracking-[0.14em] text-text-subtle">
+                  <div className="pb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-text-subtle">
                     Pinned topics
                   </div>
                   {pinnedRooms.map(renderRoomCard)}
@@ -444,19 +477,13 @@ function TandemSpacePage() {
               )}
 
               {pinnedRooms.length > 0 && unpinnedRooms.length > 0 && (
-                <div className="flex items-center gap-3 py-1">
-                  <div className="flex-1 h-px bg-line" />
-                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-text-muted">
-                    More topics
-                  </span>
-                  <div className="flex-1 h-px bg-line" />
-                </div>
+                <div className="h-px bg-line/70" />
               )}
 
               {unpinnedRooms.length > 0 && (
                 <section className="space-y-1.5">
                   {pinnedRooms.length === 0 ? (
-                    <div className="pb-1 text-xs font-medium uppercase tracking-[0.14em] text-text-subtle">
+                    <div className="pb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-text-subtle">
                       All topics
                     </div>
                   ) : null}
@@ -477,12 +504,8 @@ function TandemSpacePage() {
                   </button>
                   {showArchivedRooms && (
                     <div className="space-y-3">
-                      <div className="flex items-center gap-3 py-1">
-                        <div className="flex-1 h-px bg-line" />
-                        <span className="text-xs font-medium uppercase tracking-[0.14em] text-text-muted">
+                      <div className="pb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
                           Archived
-                        </span>
-                        <div className="flex-1 h-px bg-line" />
                       </div>
                       <div className="space-y-1.5">
                         {archivedRooms.map(renderRoomCard)}

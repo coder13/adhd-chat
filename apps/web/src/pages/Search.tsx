@@ -3,7 +3,7 @@ import { arrowBack } from 'ionicons/icons';
 import { type ISearchResults } from 'matrix-js-sdk';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppAvatar, Button, Card } from '../components';
+import { AppAvatar, Button } from '../components';
 import { ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import {
@@ -233,7 +233,7 @@ function SearchPage() {
         <IonSearchbar
           value={query}
           onIonInput={(event) => setQuery(event.detail.value ?? '')}
-          placeholder="Search messages across your conversations"
+          placeholder="Search messages"
           className="app-searchbar"
           autoFocus
         />
@@ -241,21 +241,13 @@ function SearchPage() {
     >
       <div className="space-y-4 px-4 pb-24 pt-4">
         {encryptedRoomsNote ? (
-          <Card>
-            <p className="text-sm text-text-muted">{encryptedRoomsNote}</p>
-          </Card>
+          <div className="text-sm text-text-muted">{encryptedRoomsNote}</div>
         ) : null}
 
-        {error ? (
-          <Card>
-            <p className="text-sm text-danger">{error}</p>
-          </Card>
-        ) : null}
+        {error ? <div className="text-sm text-danger">{error}</div> : null}
 
         {searchNotice ? (
-          <Card>
-            <p className="text-sm text-text-muted">{searchNotice}</p>
-          </Card>
+          <div className="text-sm text-text-muted">{searchNotice}</div>
         ) : null}
 
         {isLoadingIndex ? (
@@ -265,10 +257,6 @@ function SearchPage() {
         ) : query.trim().length < 2 ? (
           <div className="py-12 text-center">
             <p className="text-base font-medium text-text">Search messages</p>
-            <p className="mt-2 text-sm text-text-muted">
-              Type at least two characters to search across your hubs, topics,
-              and other conversations.
-            </p>
           </div>
         ) : isSearching && results.length === 0 ? (
           <div className="py-12 text-center text-sm text-text-muted">
@@ -288,7 +276,7 @@ function SearchPage() {
                 <button
                   key={result.id}
                   type="button"
-                  className="app-hover-surface w-full rounded-[24px] border border-transparent bg-panel px-4 py-4 text-left"
+                  className="app-hover-surface w-full rounded-[22px] border border-transparent bg-panel px-3 py-3 text-left"
                   onClick={() =>
                     navigate(`/room/${encodeURIComponent(result.roomId)}`)
                   }
@@ -297,7 +285,7 @@ function SearchPage() {
                     <AppAvatar
                       name={result.roomName}
                       icon={result.roomIcon}
-                      className="h-11 w-11"
+                      className="h-10 w-10"
                       textClassName="text-sm"
                     />
                     <div className="min-w-0 flex-1">
@@ -312,16 +300,14 @@ function SearchPage() {
                               : result.senderName}
                           </p>
                           {result.source === 'local-encrypted' ? (
-                            <p className="mt-1 text-[11px] text-text-subtle">
-                              From loaded encrypted history
-                            </p>
+                            <p className="mt-1 text-[11px] text-text-subtle">Encrypted</p>
                           ) : null}
                         </div>
                         <div className="text-xs text-text-muted">
                           {formatTimestamp(result.timestamp)}
                         </div>
                       </div>
-                      <p className="mt-2 line-clamp-3 text-sm leading-6 text-text-muted">
+                      <p className="mt-1.5 line-clamp-3 text-sm leading-6 text-text-muted">
                         {result.body}
                       </p>
                     </div>

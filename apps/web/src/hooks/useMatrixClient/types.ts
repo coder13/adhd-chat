@@ -21,6 +21,15 @@ export type VerificationEmoji = {
   name: string;
 };
 
+export type EncryptionRestoreState =
+  | {
+      status: 'idle';
+    }
+  | {
+      status: 'restoring' | 'restored' | 'error';
+      message: string;
+    };
+
 export type DeviceVerificationState =
   | {
       status: 'idle';

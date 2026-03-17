@@ -7,6 +7,7 @@ import { isInactiveMatrixSessionError } from './sessionErrors';
 
 const KEY = 'matrix.session.v1';
 const SESSION_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+const SESSION_VALIDATION_TIMEOUT_MS = 10000;
 
 export const keyCache = new Map<
   string,
@@ -215,9 +216,21 @@ async function validateSessionWithRecovery(
   onPersist: (s: MatrixSession) => void
 ) {
   try {
-    await client.getJoinedRooms();
+    await Promise.race([
+      client.getJoinedRooms(),
+      new Promise<never>((_, reject) => {
+        window.setTimeout(() => {
+          reject(new Error('Session validation timed out'));
+        }, SESSION_VALIDATION_TIMEOUT_MS);
+      }),
+    ]);
     return session;
   } catch (error) {
+    if (error instanceof Error && error.message === 'Session validation timed out') {
+      console.warn('Session validation timed out; continuing with live client');
+      return session;
+    }
+
     if (!session.refreshToken || !isInactiveMatrixSessionError(error)) {
       throw error;
     }

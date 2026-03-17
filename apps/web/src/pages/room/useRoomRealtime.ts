@@ -7,7 +7,7 @@ import {
   type Room,
   type Room as MatrixRoom,
 } from 'matrix-js-sdk';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { RoomSnapshot } from '../../lib/matrix/roomSnapshot';
 import {
@@ -26,6 +26,7 @@ import {
 import { ensureTandemSpaceLinks } from '../../lib/matrix/tandem';
 import type { MatrixClientContextValue } from '../../hooks/useMatrixClient/context';
 import type { OptimisticReactionChange, OptimisticTimelineMessage } from '../../lib/matrix/optimisticTimeline';
+import { prefersDesktopComposerShortcuts } from '../../lib/chat/composerBehavior';
 
 const ROOM_LOAD_TIMEOUT_MS = 15000;
 
@@ -45,11 +46,11 @@ interface UseRoomRealtimeParams {
   draft: string;
   contentRef: RefObject<HTMLIonContentElement | null>;
   composerRef: RefObject<HTMLIonTextareaElement | null>;
+  scrollToLatest: (duration?: number) => void;
   outgoingTypingRef: RefObject<boolean>;
   lastTypingSentAtRef: RefObject<number>;
   typingIdleTimeoutRef: RefObject<number | null>;
   lastReadReceiptEventIdRef: RefObject<string | null>;
-  optimisticMessages: OptimisticTimelineMessage[];
   setOptimisticMessages: Dispatch<SetStateAction<OptimisticTimelineMessage[]>>;
   setOptimisticReactionChanges: Dispatch<SetStateAction<OptimisticReactionChange[]>>;
   reconcileOptimisticTimeline: (
@@ -79,11 +80,11 @@ export function useRoomRealtime({
   draft,
   contentRef,
   composerRef,
+  scrollToLatest,
   outgoingTypingRef,
   lastTypingSentAtRef,
   typingIdleTimeoutRef,
   lastReadReceiptEventIdRef,
-  optimisticMessages,
   setOptimisticMessages,
   setOptimisticReactionChanges,
   reconcileOptimisticTimeline,
@@ -94,6 +95,8 @@ export function useRoomRealtime({
   const [pendingRoom, setPendingRoom] = useState<PendingTandemRoomRecord | null>(() =>
     getPendingTandemRoom(roomId)
   );
+  const baselineViewportHeightRef = useRef<number | null>(null);
+  const keyboardOpenRef = useRef(false);
 
   useEffect(() => {
     if (isPendingRoom || !client || !user || !roomId) {
@@ -129,9 +132,7 @@ export function useRoomRealtime({
       } catch (cause) {
         console.error(cause);
       } finally {
-        requestAnimationFrame(() => {
-          void contentRef.current?.scrollToBottom(250);
-        });
+        // Timeline refreshes should not force the user to the bottom.
       }
     };
 
@@ -185,12 +186,6 @@ export function useRoomRealtime({
   }, [client, contentRef, isPendingRoom, refresh, roomId, user]);
 
   useEffect(() => {
-    requestAnimationFrame(() => {
-      void contentRef.current?.scrollToBottom(250);
-    });
-  }, [contentRef, optimisticMessages, pendingRoom?.status, isPendingRoom, snapshot.messages]);
-
-  useEffect(() => {
     setOptimisticMessages((currentMessages) =>
       reconcileOptimisticTimeline(snapshot.messages, currentMessages)
     );
@@ -221,9 +216,13 @@ export function useRoomRealtime({
       return;
     }
 
+    if (!client?.getRoom(pendingRoom.roomId)) {
+      return;
+    }
+
     clearPendingTandemRoom(pendingRoom.pendingRoomId);
     navigate(`/room/${encodeURIComponent(pendingRoom.roomId)}`, { replace: true });
-  }, [isPendingRoom, navigate, pendingRoom]);
+  }, [client, isPendingRoom, navigate, pendingRoom]);
 
   useEffect(() => {
     if (isPendingRoom || !client || !user || !tangentRelationship || !roomId) {
@@ -425,6 +424,10 @@ export function useRoomRealtime({
       return;
     }
 
+    if (!prefersDesktopComposerShortcuts()) {
+      return;
+    }
+
     const frameId = window.requestAnimationFrame(() => {
       void composerRef.current?.setFocus();
     });
@@ -433,6 +436,54 @@ export function useRoomRealtime({
       window.cancelAnimationFrame(frameId);
     };
   }, [canInteractWithTimeline, composerRef, isPendingRoom, roomId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || prefersDesktopComposerShortcuts()) {
+      return;
+    }
+
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      return;
+    }
+
+    const updateKeyboardViewport = () => {
+      const viewportHeight = viewport.height;
+      const previousBaseline = baselineViewportHeightRef.current;
+
+      if (previousBaseline === null || viewportHeight > previousBaseline) {
+        baselineViewportHeightRef.current = viewportHeight;
+      }
+
+      const baselineHeight =
+        Math.max(baselineViewportHeightRef.current ?? viewportHeight, viewportHeight);
+      const keyboardInset = baselineHeight - viewportHeight;
+      const keyboardOpen = keyboardInset > 120;
+
+      if (keyboardOpen && !keyboardOpenRef.current) {
+        keyboardOpenRef.current = true;
+        window.requestAnimationFrame(() => {
+          scrollToLatest();
+        });
+        window.setTimeout(() => {
+          scrollToLatest();
+        }, 180);
+        return;
+      }
+
+      if (!keyboardOpen && keyboardOpenRef.current) {
+        keyboardOpenRef.current = false;
+        composerRef.current?.blur();
+      }
+    };
+
+    updateKeyboardViewport();
+    viewport.addEventListener('resize', updateKeyboardViewport);
+
+    return () => {
+      viewport.removeEventListener('resize', updateKeyboardViewport);
+    };
+  }, [composerRef, contentRef, scrollToLatest]);
 
   return { pendingRoom, typingMemberNames };
 }

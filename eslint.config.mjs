@@ -7,7 +7,14 @@ import unusedImports from 'eslint-plugin-unused-imports';
 import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
-const sharedIgnores = ['dist', 'build', 'coverage', '.turbo', 'node_modules'];
+const sharedIgnores = [
+  'dist',
+  'dev-dist',
+  'build',
+  'coverage',
+  '.turbo',
+  'node_modules',
+];
 
 const sharedTypeCheckedRules = {
   '@typescript-eslint/consistent-type-imports': 'error',

@@ -13,10 +13,11 @@ import {
 } from '../lib/matrix/chatCatalog';
 
 function Contacts() {
-  const { client, isReady, user, error } = useMatrixClient();
+  const { client, isReady, user, error, bootstrapUserId } = useMatrixClient();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const cacheKey = user?.userId ? `contacts:${user.userId}` : null;
+  const cacheUserId = user?.userId ?? bootstrapUserId;
+  const cacheKey = cacheUserId ? `contacts:${cacheUserId}` : null;
   const {
     data: contacts,
     error: contactsError,

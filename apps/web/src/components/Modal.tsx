@@ -71,7 +71,7 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
         )}
       >
         <div
-          className="fixed inset-0 bg-text/45 transition-opacity app-sheet-backdrop"
+          className="fixed inset-0 bg-text/55 transition-opacity app-sheet-backdrop"
           aria-hidden="true"
           onClick={onClose}
         />
@@ -86,7 +86,7 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
         <div
           ref={modalRef}
           className={cn(
-            'inline-block w-full overflow-hidden border border-line text-left text-text shadow-panel transition-all sm:my-8 sm:align-middle',
+            'relative z-10 inline-block w-full overflow-hidden border border-line text-left text-text shadow-panel transition-all sm:my-8 sm:align-middle',
             isMobileSheet
               ? 'app-mobile-sheet rounded-t-[28px] rounded-b-none border-b-0'
               : 'rounded-[28px]',

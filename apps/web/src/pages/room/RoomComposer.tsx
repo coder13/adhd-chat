@@ -61,7 +61,7 @@ function RoomComposer({
   setDraft,
 }: RoomComposerProps) {
   return (
-    <div className="app-composer gap-2 px-3 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2 sm:gap-3 sm:px-4">
+    <div className="app-composer gap-2 px-3 pt-2 sm:gap-3 sm:px-4">
       <div className="relative min-w-0 flex-1">
         {composerMode ? (
           <ComposerContextBar

@@ -17,6 +17,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       fullWidth = false,
       className = '',
       disabled,
+      type = 'button',
       ...props
     },
     ref
@@ -55,6 +56,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           className
         )}
         disabled={disabled}
+        type={type}
         {...props}
       >
         {children}

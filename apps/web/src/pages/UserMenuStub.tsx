@@ -11,7 +11,11 @@ import {
 import { arrowBack } from 'ionicons/icons';
 import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Card, NotificationSettingsPanel, SegmentedControl } from '../components';
+import {
+  Card,
+  NotificationSettingsPanel,
+  SegmentedControl,
+} from '../components';
 import { useBrowserNotificationSettings } from '../hooks/useBrowserNotifications';
 import { useChatPreferences } from '../hooks/useChatPreferences';
 import { useMatrixClient } from '../hooks/useMatrixClient';
@@ -23,7 +27,7 @@ const copyBySection: Record<string, { title: string; body: string }> = {
   },
   encryption: {
     title: 'Encryption',
-    body: 'Encryption settings and recovery controls will live here. For now this is a stub page.',
+    body: 'Set up recovery keys and unlock encrypted history on this device.',
   },
   account: {
     title: 'Manage Account',
@@ -42,15 +46,14 @@ const copyBySection: Record<string, { title: string; body: string }> = {
 function UserMenuStubPage() {
   const navigate = useNavigate();
   const { section = '' } = useParams<{ section: string }>();
-  const { client, user } = useMatrixClient();
+  const { client, user, bootstrapUserId } = useMatrixClient();
   const {
     preferences,
     updateChatViewMode,
     updateAccountNotificationMode,
     isSaving,
     error,
-  } =
-    useChatPreferences(client, user?.userId);
+  } = useChatPreferences(client, user?.userId ?? bootstrapUserId);
   const {
     isSupported: notificationsSupported,
     permission: notificationPermission,
@@ -85,12 +88,16 @@ function UserMenuStubPage() {
       </IonHeader>
       <IonContent fullscreen className="app-list-page">
         <div className="space-y-4 px-4 py-4">
-          <Card tone="accent">
-            <h2 className="text-lg font-semibold text-text">{content.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-text-muted">
-              {content.body}
-            </p>
-          </Card>
+          {section !== 'encryption' && (
+            <Card tone="accent">
+              <h2 className="text-lg font-semibold text-text">
+                {content.title}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-text-muted">
+                {content.body}
+              </p>
+            </Card>
+          )}
 
           {section === 'notifications' && (
             <>
@@ -193,6 +200,7 @@ function UserMenuStubPage() {
               )}
             </Card>
           )}
+
         </div>
       </IonContent>
     </IonPage>

@@ -7,6 +7,9 @@ mix of root-level notes.
 
 - [Architecture](./architecture/monorepo.md): repo shape, workspace boundaries,
   and shared tooling.
+- [Web Client Runtime](./architecture/web-client-runtime.md): startup,
+  bootstrap, caching, Tandem derivation, encryption behavior, and migration
+  notes.
 - [Development Setup](./development/setup.md): install, run, test, lint, and
   common workflows.
 

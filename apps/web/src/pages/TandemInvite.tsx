@@ -8,7 +8,7 @@ import {
 } from '@ionic/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { AppAvatar, Button, Card } from '../components';
+import { AppAvatar, AuthFallbackState, Button, Card } from '../components';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useTandem } from '../hooks/useTandem';
 import { getInviteLinkPayloadFromSearchParams } from '../lib/matrix/tandem';
@@ -17,7 +17,7 @@ import { getTandemPartnerSummary } from '../lib/matrix/tandemPresentation';
 function TandemInvitePage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { client, isReady, user } = useMatrixClient();
+  const { client, isReady, state, user } = useMatrixClient();
   const {
     incomingInvites,
     acceptInvite,
@@ -115,25 +115,26 @@ function TandemInvitePage() {
           </IonToolbar>
         </IonHeader>
         <IonContent fullscreen className="app-list-page">
-          <div className="px-4 py-6">
-            <Card tone="accent">
-              <h2 className="text-xl font-semibold text-text">
-                Sign in to join Tandem
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-text-muted">
+          <AuthFallbackState
+            state={state}
+            signedOutTitle="Sign in to join Tandem"
+            signedOutMessage={
+              <>
                 {linkPayload.inviter} created a shared hub for you. Sign in or
                 create an account, then come back to join it.
-              </p>
-              <div className="mt-5 flex flex-wrap gap-3">
+              </>
+            }
+            signedOutActions={
+              <>
                 <Link to={`/login?redirect=${redirectTarget}`}>
                   <Button>Log in</Button>
                 </Link>
                 <Link to={`/register?redirect=${redirectTarget}`}>
                   <Button variant="outline">Create account</Button>
                 </Link>
-              </div>
-            </Card>
-          </div>
+              </>
+            }
+          />
         </IonContent>
       </IonPage>
     );

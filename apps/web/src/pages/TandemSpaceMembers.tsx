@@ -11,7 +11,7 @@ import { arrowBack } from 'ionicons/icons';
 import { ClientEvent, type RoomMember } from 'matrix-js-sdk';
 import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AppAvatar, Card } from '../components';
+import { AppAvatar, AuthFallbackState, Card } from '../components';
 import { usePersistedResource } from '../hooks/usePersistedResource';
 import { useTandem } from '../hooks/useTandem';
 import { useMatrixClient } from '../hooks/useMatrixClient';
@@ -64,17 +64,19 @@ function TandemSpaceMembersPage() {
   const { spaceId: encodedSpaceId } = useParams<{ spaceId: string }>();
   const spaceId = encodedSpaceId ? decodeURIComponent(encodedSpaceId) : null;
   const navigate = useNavigate();
-  const { client, isReady, user } = useMatrixClient();
-  const { relationships } = useTandem(client, user?.userId);
+  const { client, isReady, state, user, bootstrapUserId } = useMatrixClient();
+  const cacheUserId = user?.userId ?? bootstrapUserId;
+  const { relationships } = useTandem(client, cacheUserId);
   const {
     data: members,
     error,
     isLoading,
     refresh,
+    hasCachedData,
   } = usePersistedResource<TandemSpaceMemberSummary[]>({
     cacheKey:
-      user?.userId && spaceId
-        ? `space-members:${user.userId}:${spaceId}`
+      cacheUserId && spaceId
+        ? `space-members:${cacheUserId}:${spaceId}`
         : null,
     enabled: Boolean(client && user && isReady && spaceId),
     initialValue: [],
@@ -85,6 +87,9 @@ function TandemSpaceMembersPage() {
   const partner = relationship
     ? getTandemPartnerSummary(client, relationship.partnerUserId)
     : null;
+  const isLiveSession = Boolean(client && user && isReady);
+  const canRenderCachedMembers =
+    state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
 
   useEffect(() => {
     if (!client || !user || !isReady || !spaceId) {
@@ -110,19 +115,22 @@ function TandemSpaceMembersPage() {
     );
   }
 
-  if (!client || !isReady || !user) {
+  if (!isLiveSession && !canRenderCachedMembers) {
     return (
       <IonPage className="app-shell">
         <IonContent className="app-list-page">
-          <div className="flex min-h-screen items-center justify-center px-6 text-center">
-            <p className="text-text">
-              Please{' '}
-              <Link to="/login" className="text-accent">
-                log in
-              </Link>{' '}
-              to view hub members.
-            </p>
-          </div>
+          <AuthFallbackState
+            state={state}
+            signedOutMessage={
+              <>
+                Please{' '}
+                <Link to="/login" className="text-accent">
+                  log in
+                </Link>{' '}
+                to view hub members.
+              </>
+            }
+          />
         </IonContent>
       </IonPage>
     );
@@ -182,7 +190,7 @@ function TandemSpaceMembersPage() {
                         {member.displayName}
                       </div>
                       <div className="truncate text-xs text-text-muted">
-                        {member.userId === user.userId
+                        {member.userId === cacheUserId
                           ? 'You'
                           : partner && member.userId === partner.userId
                             ? 'Partner'

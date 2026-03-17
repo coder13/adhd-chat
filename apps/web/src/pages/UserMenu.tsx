@@ -8,35 +8,43 @@ import {
   IonTitle,
   IonToolbar,
 } from '@ionic/react';
-import { arrowBack, chevronForwardOutline } from 'ionicons/icons';
+import {
+  arrowBack,
+  chevronForwardOutline,
+  colorPaletteOutline,
+  notificationsOutline,
+  personCircleOutline,
+  phonePortraitOutline,
+  shieldCheckmarkOutline,
+} from 'ionicons/icons';
 import { useNavigate } from 'react-router-dom';
-import { AppAvatar, Card } from '../components';
+import { AppAvatar } from '../components';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 
 const menuItems = [
   {
+    icon: notificationsOutline,
     title: 'Notifications',
-    body: 'Tune alerts, reminders, and quiet hours.',
     path: '/menu/notifications',
   },
   {
+    icon: shieldCheckmarkOutline,
     title: 'Encryption',
-    body: 'Manage recovery keys, secure backup, and verification settings.',
     path: '/menu/encryption',
   },
   {
+    icon: personCircleOutline,
     title: 'Manage account',
-    body: 'Review profile, session, and account-level controls.',
     path: '/menu/account',
   },
   {
+    icon: phonePortraitOutline,
     title: 'Manage devices',
-    body: 'Inspect signed-in devices and verification status.',
     path: '/menu/devices',
   },
   {
+    icon: colorPaletteOutline,
     title: 'Chat appearance',
-    body: 'Choose between timeline text and bubble-style rooms.',
     path: '/menu/chat-appearance',
   },
 ];
@@ -59,65 +67,56 @@ function UserMenuPage() {
       <IonHeader className="ion-no-border">
         <IonToolbar className="app-toolbar">
           <IonButtons slot="start">
-            <IonButton fill="clear" onClick={() => navigate(-1)}>
+            <IonButton fill="clear" onClick={() => navigate('/')}>
               <IonIcon slot="icon-only" icon={arrowBack} />
             </IonButton>
           </IonButtons>
-          <IonTitle className="text-[28px] font-semibold">User Menu</IonTitle>
+          <IonTitle className="text-[22px] font-semibold">Settings</IonTitle>
         </IonToolbar>
       </IonHeader>
       <IonContent fullscreen className="app-list-page">
         <div className="space-y-4 px-4 py-4">
-          <Card tone="accent">
-            <div className="flex items-center gap-4">
-              <AppAvatar
-                name={currentUserName}
-                avatarUrl={currentUserAvatarUrl}
-                className="h-14 w-14"
-                textClassName="text-lg"
-              />
-              <div className="min-w-0">
-                <h2 className="truncate text-lg font-semibold text-text">
-                  {currentUserName}
-                </h2>
-                {user && (
-                  <p className="truncate text-sm text-text-muted">
-                    {user.userId}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="mt-4">
-              <h2 className="text-lg font-semibold text-text">
-                Account and app controls
+          <div className="flex items-center gap-3 px-1">
+            <AppAvatar
+              name={currentUserName}
+              avatarUrl={currentUserAvatarUrl}
+              className="h-12 w-12"
+              textClassName="text-base"
+            />
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-semibold text-text">
+                {currentUserName}
               </h2>
-              <p className="mt-2 text-sm leading-6 text-text-muted">
-                These sections are stubbed for now so the app has a stable
-                settings navigation path.
-              </p>
+              {user ? (
+                <p className="truncate text-sm text-text-muted">{user.userId}</p>
+              ) : null}
             </div>
-          </Card>
+          </div>
 
-          <div className="space-y-3">
+          <div className="space-y-1">
             {menuItems.map((item) => (
-              <Card
+              <button
+                type="button"
                 key={item.path}
-                className="cursor-pointer"
+                className="flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left transition-colors hover:bg-elevated/70"
                 onClick={() => navigate(item.path)}
               >
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-base font-semibold text-text">
-                      {item.title}
-                    </h3>
-                    <p className="mt-1 text-sm text-text-muted">{item.body}</p>
-                  </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-elevated text-text-muted">
                   <IonIcon
-                    icon={chevronForwardOutline}
-                    className="text-xl text-text-muted"
+                    icon={item.icon}
+                    className="text-[18px]"
                   />
                 </div>
-              </Card>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-[15px] font-medium text-text">
+                    {item.title}
+                  </h3>
+                </div>
+                <IonIcon
+                  icon={chevronForwardOutline}
+                  className="text-lg text-text-subtle"
+                />
+              </button>
             ))}
           </div>
         </div>

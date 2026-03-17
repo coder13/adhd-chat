@@ -80,8 +80,16 @@ function EncryptionSetupModal({
       return;
     }
 
+    if (
+      verification.status === 'done' ||
+      verification.status === 'cancelled' ||
+      verification.status === 'error'
+    ) {
+      void onCancelDeviceVerification();
+    }
+
     void loadSetupInfo();
-  }, [isOpen, loadSetupInfo]);
+  }, [isOpen, loadSetupInfo, onCancelDeviceVerification, verification.status]);
 
   const handleGenerate = async () => {
     setLoading(true);

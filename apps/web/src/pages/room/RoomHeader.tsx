@@ -1,5 +1,5 @@
 import { IonButton, IonButtons, IonHeader, IonIcon, IonToolbar } from '@ionic/react';
-import { arrowBack, ellipsisHorizontal, gitBranchOutline, pin, searchOutline, star, starOutline } from 'ionicons/icons';
+import { arrowBack, ellipsisHorizontal, gitBranchOutline, searchOutline } from 'ionicons/icons';
 import { AppAvatar } from '../../components';
 
 interface RoomHeaderProps {
@@ -11,13 +11,10 @@ interface RoomHeaderProps {
   isEncrypted: boolean;
   isPendingRoom: boolean;
   tangentSpaceId: string | null;
-  roomPinned: boolean;
   onBack: () => void;
   onEditTopic: () => void;
   onSearch: () => void;
-  onTogglePin: () => void;
   onCreateTopic: () => void;
-  onViewPins: () => void;
   onOpenMenu: () => void;
 }
 
@@ -30,13 +27,10 @@ function RoomHeader({
   isEncrypted,
   isPendingRoom,
   tangentSpaceId,
-  roomPinned,
   onBack,
   onEditTopic,
   onSearch,
-  onTogglePin,
   onCreateTopic,
-  onViewPins,
   onOpenMenu,
 }: RoomHeaderProps) {
   return (
@@ -81,24 +75,9 @@ function RoomHeader({
           <IonButton fill="clear" color="medium" onClick={onSearch} aria-label="Search conversations">
             <IonIcon slot="icon-only" icon={searchOutline} />
           </IonButton>
-          {!isPendingRoom ? (
-            <IonButton
-              fill="clear"
-              color={roomPinned ? 'primary' : 'medium'}
-              onClick={onTogglePin}
-              aria-label={roomPinned ? 'Unpin topic' : 'Pin topic'}
-            >
-              <IonIcon slot="icon-only" icon={roomPinned ? star : starOutline} />
-            </IonButton>
-          ) : null}
           {tangentSpaceId && !isPendingRoom ? (
             <IonButton fill="clear" color="primary" onClick={onCreateTopic} aria-label="Create topic">
               <IonIcon slot="icon-only" icon={gitBranchOutline} />
-            </IonButton>
-          ) : null}
-          {!isPendingRoom ? (
-            <IonButton fill="clear" color="medium" onClick={onViewPins} aria-label="View pinned messages">
-              <IonIcon slot="icon-only" icon={pin} />
             </IonButton>
           ) : null}
           <IonButton fill="clear" color="medium" onClick={onOpenMenu} disabled={isPendingRoom}>

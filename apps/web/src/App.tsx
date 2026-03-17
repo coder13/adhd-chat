@@ -1,4 +1,5 @@
-import { Route, Routes } from 'react-router-dom';
+import { useLayoutEffect, useRef } from 'react';
+import { Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 import { IonApp } from '@ionic/react';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -16,6 +17,8 @@ import TandemSpacePage from './pages/TandemSpace';
 import TandemSpaceMembersPage from './pages/TandemSpaceMembers';
 import UserMenuPage from './pages/UserMenu';
 import UserMenuStubPage from './pages/UserMenuStub';
+import EncryptionSettingsPage from './pages/settings/EncryptionSettingsPage';
+import EncryptionVerificationPage from './pages/settings/EncryptionVerificationPage';
 import {
   BrowserInteractiveAuthModal,
   InteractiveAuthModal,
@@ -25,10 +28,15 @@ import { useBrowserInteractiveAuthRequest } from './hooks/useBrowserInteractiveA
 import { useSecretStorageKeyRequest } from './hooks/useSecretStorageKeyRequest';
 import { useInteractiveAuthRequest } from './hooks/useInteractiveAuthRequest';
 import { useBrowserNotifications } from './hooks/useBrowserNotifications';
+import { useViewportMetrics } from './hooks/useViewportMetrics';
 import { MatrixClientProvider } from './hooks/useMatrixClient';
 
 function AppShell() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const hasMountedRef = useRef(false);
   useBrowserNotifications();
+  useViewportMetrics();
   const { isRequesting, handleProvideKey, handleCancel } =
     useSecretStorageKeyRequest();
   const {
@@ -42,6 +50,18 @@ function AppShell() {
     handleCancel: handleCancelBrowserInteractiveAuth,
   } = useBrowserInteractiveAuthRequest();
 
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+
+    if (!hasMountedRef.current) {
+      root.dataset.navDirection = 'initial';
+      hasMountedRef.current = true;
+      return;
+    }
+
+    root.dataset.navDirection = navigationType === 'POP' ? 'back' : 'forward';
+  }, [location.key, navigationType]);
+
   return (
     <IonApp>
       <Routes>
@@ -51,6 +71,11 @@ function AppShell() {
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/contacts/new" element={<AddContactPage />} />
         <Route path="/menu" element={<UserMenuPage />} />
+        <Route path="/menu/encryption" element={<EncryptionSettingsPage />} />
+        <Route
+          path="/menu/encryption/verify"
+          element={<EncryptionVerificationPage />}
+        />
         <Route path="/menu/:section" element={<UserMenuStubPage />} />
         <Route path="/tandem/invite" element={<TandemInvitePage />} />
         <Route path="/tandem/space/:spaceId" element={<TandemSpacePage />} />

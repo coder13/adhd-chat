@@ -214,20 +214,9 @@ export async function buildChatCatalog(
   client: MatrixClient,
   userId: string
 ): Promise<ChatCatalog> {
-  const joinedRoomsResponse = await client.getJoinedRooms();
-  const joinedRooms = joinedRoomsResponse.joined_rooms
-    .map((roomId) => client.getRoom(roomId))
-    .filter((room): room is Room => room !== null);
-
-  await Promise.all(
-    joinedRooms.map(async (room) => {
-      try {
-        await room.loadMembersIfNeeded();
-      } catch (error) {
-        console.error(`Failed to load members for room ${room.roomId}`, error);
-      }
-    })
-  );
+  const joinedRooms = client
+    .getRooms()
+    .filter((room) => room.getMyMembership() === 'join');
 
   const directRoomIds = getDirectRoomIds(client);
   const tandemRelationships = getResolvedTandemRelationships(client);

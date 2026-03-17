@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import Button from './Button';
 import type { DeviceVerificationState } from '../hooks/useMatrixClient/types';
 
@@ -16,10 +17,33 @@ function DeviceVerificationPanel({
   onConfirmSas,
   onCancel,
 }: DeviceVerificationPanelProps) {
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (verification.status !== 'idle') {
+      setIsStarting(false);
+      setStartError(null);
+    }
+  }, [verification.status]);
+
   const isBusy =
+    isStarting ||
     verification.status === 'requesting' ||
     verification.status === 'starting_sas' ||
     verification.status === 'confirming';
+
+  const handleStart = async () => {
+    setIsStarting(true);
+    setStartError(null);
+
+    try {
+      await onStart();
+    } catch (cause) {
+      setIsStarting(false);
+      setStartError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
 
   return (
     <div className="border border-gray-200 rounded-lg p-4 space-y-4">
@@ -34,7 +58,19 @@ function DeviceVerificationPanel({
       </div>
 
       {verification.status === 'idle' && (
-        <Button onClick={onStart}>Use Another Device</Button>
+        <div className="space-y-3">
+          <Button onClick={() => void handleStart()} disabled={isBusy}>
+            {isStarting ? 'Sending Request...' : 'Use Another Device'}
+          </Button>
+          {isStarting && (
+            <p className="text-sm text-gray-600">
+              Sending a verification request to your other signed-in device...
+            </p>
+          )}
+          {startError && (
+            <p className="text-sm text-red-600">{startError}</p>
+          )}
+        </div>
       )}
 
       {verification.status === 'requesting' && (
@@ -98,11 +134,6 @@ function DeviceVerificationPanel({
                 </div>
               ))}
             </div>
-          )}
-          {verification.decimals && (
-            <p className="text-sm font-medium text-gray-900">
-              {verification.decimals.join(' ')}
-            </p>
           )}
           <div className="flex justify-end space-x-3">
             <Button variant="outline" onClick={onCancel}>

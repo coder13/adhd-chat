@@ -1,4 +1,4 @@
-import { lockClosedOutline, trashOutline } from 'ionicons/icons';
+import { lockClosedOutline, pinOutline, starOutline, trashOutline } from 'ionicons/icons';
 import { RelationType, type MatrixClient, type Room } from 'matrix-js-sdk';
 import type { Dispatch, SetStateAction } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
@@ -372,6 +372,18 @@ export function useRoomPageActions({
       ? [
           { text: 'Edit topic details', handler: () => setShowIdentityModal(true) },
           { text: 'Topic notifications', handler: () => setShowTopicNotificationModal(true) },
+          {
+            text: roomMeta.pinned ? 'Unstar topic' : 'Star topic',
+            icon: starOutline,
+            handler: () => {
+              void handleUpdateRoomMeta({ pinned: !roomMeta.pinned });
+            },
+          },
+          {
+            text: 'Pinned messages',
+            icon: pinOutline,
+            handler: () => navigate(`/room/${encodeURIComponent(roomId)}/pins`),
+          },
         ]
       : []),
     ...(membershipPolicy?.supportsLeave && roomMembership === 'join'
