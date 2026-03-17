@@ -328,10 +328,10 @@ function EncryptionSettingsPage() {
                       className="flex items-center gap-4 px-4 py-4 text-left transition-colors rounded-3xl bg-elevated hover:bg-elevated/80"
                       onClick={option.onClick}
                     >
-                      <div className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white text-text">
+                      <div className="flex items-center justify-center bg-white w-11 h-11 rounded-2xl text-text">
                         <IonIcon icon={option.icon} className="text-[20px]" />
                       </div>
-                      <div className="min-w-0 flex-1">
+                      <div className="flex-1 min-w-0">
                         <p className="text-base font-semibold text-text">
                           {option.title}
                         </p>
