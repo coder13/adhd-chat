@@ -29,12 +29,13 @@ jobs:
 
       - name: Wait for Synapse
         run: |
-          for attempt in {1..30}; do
+          for attempt in {1..45}; do
             if curl --silent --show-error --fail http://localhost:8008/_matrix/client/versions >/dev/null; then
               exit 0
             fi
             sleep 2
           done
+          docker compose -f docker-compose.synapse.yml ps
           docker compose -f docker-compose.synapse.yml logs synapse
           exit 1
 

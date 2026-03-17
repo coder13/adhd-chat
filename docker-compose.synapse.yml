@@ -1,8 +1,21 @@
 services:
+  synapse-init:
+    image: ${SYNAPSE_INIT_IMAGE:-busybox:1.36}
+    container_name: adhd-chat-synapse-init
+    command:
+      - sh
+      - -c
+      - mkdir -p /data/media_store && chown -R 991:991 /data
+    volumes:
+      - synapse_data:/data
+
   synapse:
     image: ${SYNAPSE_IMAGE:-matrixdotorg/synapse:latest}
     container_name: adhd-chat-synapse
     restart: unless-stopped
+    depends_on:
+      synapse-init:
+        condition: service_completed_successfully
     environment:
       SYNAPSE_CONFIG_PATH: /config/homeserver.yaml
     ports:
