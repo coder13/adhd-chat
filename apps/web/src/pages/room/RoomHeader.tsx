@@ -13,6 +13,7 @@ interface RoomHeaderProps {
   roomName: string;
   roomDescription: string | null;
   roomIcon: string | null;
+  roomAvatarUrl: string | null;
   roomSubtitle: string | null;
   typingIndicator: string | null;
   isEncrypted: boolean;
@@ -32,6 +33,7 @@ function RoomHeader({
   roomName,
   roomDescription,
   roomIcon,
+  roomAvatarUrl,
   roomSubtitle,
   typingIndicator,
   isEncrypted,
@@ -72,6 +74,7 @@ function RoomHeader({
               <AppAvatar
                 name={roomName}
                 icon={roomIcon}
+                avatarUrl={roomAvatarUrl}
                 className="h-10 w-10"
                 textClassName="text-sm"
               />

@@ -2,6 +2,7 @@ import {
   ClientEvent,
   RoomEvent,
   RoomMemberEvent,
+  ThreadEvent,
   type MatrixClient,
   type MatrixEvent,
   type Room,
@@ -10,6 +11,12 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { RoomSnapshot } from '../../lib/matrix/roomSnapshot';
+import { getAllSnapshotMessages } from '../../lib/matrix/roomSnapshot';
+import {
+  isTypingRateLimited,
+  sendTypingState,
+  type TypingRateLimitRef,
+} from '../../lib/matrix/typingState';
 import {
   clearPendingTandemRoom,
   getPendingTandemRoom,
@@ -50,6 +57,7 @@ interface UseRoomRealtimeParams {
   scrollToLatest: (duration?: number) => void;
   outgoingTypingRef: RefObject<boolean>;
   lastTypingSentAtRef: RefObject<number>;
+  typingRateLimitUntilRef: TypingRateLimitRef;
   typingIdleTimeoutRef: RefObject<number | null>;
   lastReadReceiptEventIdRef: RefObject<string | null>;
   setOptimisticMessages: Dispatch<SetStateAction<OptimisticTimelineMessage[]>>;
@@ -84,6 +92,7 @@ export function useRoomRealtime({
   scrollToLatest,
   outgoingTypingRef,
   lastTypingSentAtRef,
+  typingRateLimitUntilRef,
   typingIdleTimeoutRef,
   lastReadReceiptEventIdRef,
   setOptimisticMessages,
@@ -176,8 +185,18 @@ export function useRoomRealtime({
       }
     };
 
+    const handleLocalEchoUpdated = (
+      _event: MatrixEvent,
+      eventRoom: MatrixRoom
+    ) => {
+      if (eventRoom.roomId === roomId) {
+        scheduleRefresh();
+      }
+    };
+
     client.on(ClientEvent.Sync, handleSync);
     client.on(RoomEvent.Timeline, handleTimeline);
+    client.on(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
     client.on(RoomEvent.Receipt, handleReceipt);
     client.on(RoomEvent.Name, updateRoomState);
     client.on(RoomEvent.MyMembership, updateRoomState);
@@ -190,6 +209,7 @@ export function useRoomRealtime({
       }
       client.off(ClientEvent.Sync, handleSync);
       client.off(RoomEvent.Timeline, handleTimeline);
+      client.off(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
       client.off(RoomEvent.Receipt, handleReceipt);
       client.off(RoomEvent.Name, updateRoomState);
       client.off(RoomEvent.MyMembership, updateRoomState);
@@ -200,15 +220,18 @@ export function useRoomRealtime({
 
   useEffect(() => {
     setOptimisticMessages((currentMessages) =>
-      reconcileOptimisticTimeline(snapshot.messages, currentMessages)
+      reconcileOptimisticTimeline(getAllSnapshotMessages(snapshot), currentMessages)
     );
-  }, [reconcileOptimisticTimeline, setOptimisticMessages, snapshot.messages]);
+  }, [reconcileOptimisticTimeline, setOptimisticMessages, snapshot]);
 
   useEffect(() => {
     setOptimisticReactionChanges((currentChanges) =>
-      reconcileOptimisticReactionChanges(snapshot.messages, currentChanges)
+      reconcileOptimisticReactionChanges(
+        getAllSnapshotMessages(snapshot),
+        currentChanges
+      )
     );
-  }, [reconcileOptimisticReactionChanges, setOptimisticReactionChanges, snapshot.messages]);
+  }, [reconcileOptimisticReactionChanges, setOptimisticReactionChanges, snapshot]);
 
   useEffect(() => {
     if (!roomId || !isPendingRoom) {
@@ -223,6 +246,28 @@ export function useRoomRealtime({
     syncPendingRoom();
     return subscribeToPendingTandemRooms(syncPendingRoom);
   }, [isPendingRoom, roomId]);
+
+  useEffect(() => {
+    if (isPendingRoom || !currentRoom || !roomId) {
+      return;
+    }
+
+    const handleThreadUpdate = () => {
+      scheduleRefresh();
+    };
+
+    currentRoom.on(ThreadEvent.New, handleThreadUpdate);
+    currentRoom.on(ThreadEvent.Update, handleThreadUpdate);
+    currentRoom.on(ThreadEvent.NewReply, handleThreadUpdate);
+    currentRoom.on(ThreadEvent.Delete, handleThreadUpdate);
+
+    return () => {
+      currentRoom.off(ThreadEvent.New, handleThreadUpdate);
+      currentRoom.off(ThreadEvent.Update, handleThreadUpdate);
+      currentRoom.off(ThreadEvent.NewReply, handleThreadUpdate);
+      currentRoom.off(ThreadEvent.Delete, handleThreadUpdate);
+    };
+  }, [currentRoom, isPendingRoom, roomId, scheduleRefresh]);
 
   useEffect(() => {
     if (!isPendingRoom || !pendingRoom?.roomId) {
@@ -333,21 +378,39 @@ export function useRoomRealtime({
       if (!activeClient || !activeRoomId) {
         return;
       }
-      void activeClient.sendTyping(activeRoomId, false, TYPING_SERVER_TIMEOUT_MS).catch((cause: unknown) => {
-        console.error('Failed to clear typing state', cause);
+      void sendTypingState({
+        client: activeClient,
+        roomId: activeRoomId,
+        isTyping: false,
+        timeoutMs: TYPING_SERVER_TIMEOUT_MS,
+        typingRateLimitUntilRef,
+        onError: (cause: unknown) => {
+          console.error('Failed to clear typing state', cause);
+        },
       });
       return;
     }
 
     const now = Date.now();
+    if (isTypingRateLimited(typingRateLimitUntilRef, now)) {
+      return;
+    }
+
     if (
       !outgoingTypingRef.current ||
       now - lastTypingSentAtRef.current >= TYPING_RENEWAL_INTERVAL_MS
     ) {
       outgoingTypingRef.current = true;
       lastTypingSentAtRef.current = now;
-      void activeClient.sendTyping(activeRoomId, true, TYPING_SERVER_TIMEOUT_MS).catch((cause: unknown) => {
-        console.error('Failed to send typing state', cause);
+      void sendTypingState({
+        client: activeClient,
+        roomId: activeRoomId,
+        isTyping: true,
+        timeoutMs: TYPING_SERVER_TIMEOUT_MS,
+        typingRateLimitUntilRef,
+        onError: (cause: unknown) => {
+          console.error('Failed to send typing state', cause);
+        },
       });
     }
 
@@ -358,8 +421,15 @@ export function useRoomRealtime({
 
       outgoingTypingRef.current = false;
       lastTypingSentAtRef.current = 0;
-      void activeClient.sendTyping(activeRoomId, false, TYPING_SERVER_TIMEOUT_MS).catch((cause: unknown) => {
-        console.error('Failed to clear typing state', cause);
+      void sendTypingState({
+        client: activeClient,
+        roomId: activeRoomId,
+        isTyping: false,
+        timeoutMs: TYPING_SERVER_TIMEOUT_MS,
+        typingRateLimitUntilRef,
+        onError: (cause: unknown) => {
+          console.error('Failed to clear typing state', cause);
+        },
       });
     }, TYPING_IDLE_TIMEOUT_MS);
 
@@ -377,6 +447,7 @@ export function useRoomRealtime({
     outgoingTypingRef,
     lastTypingSentAtRef,
     roomId,
+    typingRateLimitUntilRef,
     typingIdleTimeoutRef,
   ]);
 

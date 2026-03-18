@@ -196,7 +196,7 @@ function RoomDialogs({
             value={deleteTopicNameInput}
             onChange={(event) => setDeleteTopicNameInput(event.target.value)}
             placeholder={roomName}
-            className="w-full rounded-[18px] border border-line bg-white px-4 py-3 text-sm text-text outline-none transition-colors focus:border-accent"
+            className="w-full rounded-[18px] border border-line/70 bg-panel px-4 py-3 text-sm text-text outline-none transition-colors focus:ring-2 focus:ring-primary/20"
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}

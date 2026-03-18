@@ -22,7 +22,7 @@ function OverflowMenu({
   return (
     <Menu as="div" className="relative">
       <MenuButton
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-text transition-colors hover:bg-panel"
+        className="app-icon-button inline-flex h-10 w-10 items-center justify-center rounded-full"
         aria-label={buttonLabel}
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current">
@@ -36,7 +36,7 @@ function OverflowMenu({
         anchor={align === 'right' ? 'bottom end' : 'bottom start'}
         transition
         className={cn(
-          'z-20 mt-2 w-56 rounded-3xl border border-line bg-panel p-2 shadow-panel outline-none transition duration-150 ease-out data-[closed]:scale-95 data-[closed]:opacity-0',
+          'app-menu-surface z-20 mt-2 w-56 rounded-3xl p-2 outline-none transition duration-150 ease-out data-[closed]:scale-95 data-[closed]:opacity-0',
           align === 'right' ? 'origin-top-right' : 'origin-top-left'
         )}
       >
@@ -47,9 +47,9 @@ function OverflowMenu({
                 type="button"
                 onClick={item.onSelect}
                 className={cn(
-                  'flex w-full rounded-2xl px-4 py-3 text-left text-sm transition-colors',
-                  focus ? 'bg-elevated' : '',
-                  item.tone === 'danger' ? 'text-danger' : 'text-text'
+                  'app-interactive-menu-item flex w-full rounded-2xl px-4 py-3 text-left text-sm font-medium',
+                  focus ? 'is-active' : '',
+                  item.tone === 'danger' ? 'text-danger-strong' : 'text-text'
                 )}
               >
                 {item.label}

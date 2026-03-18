@@ -8,6 +8,7 @@ const meta = {
     inline: true,
     theme: 'light',
     align: 'right',
+    onSelect: () => undefined,
   },
   argTypes: {
     onSelect: {
@@ -30,11 +31,14 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const InlineLight: Story = {};
+export const InlineLight: Story = {
+  args: {},
+};
 
 export const InlineDark: Story = {
   args: {
     theme: 'dark',
+    onSelect: () => undefined,
   },
 };
 
@@ -42,6 +46,7 @@ export const FloatingLeft: Story = {
   args: {
     inline: false,
     align: 'left',
+    onSelect: () => undefined,
   },
   decorators: [
     (Story) => (

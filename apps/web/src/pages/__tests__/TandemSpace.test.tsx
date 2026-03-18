@@ -1,24 +1,11 @@
 /// <reference types="jest" />
 
+import { TextDecoder, TextEncoder } from 'node:util';
 import { render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
-declare const require: (id: string) => any;
+import type { ComponentType, ReactNode } from 'react';
 
-const { TextDecoder, TextEncoder } = require('util') as {
-  TextDecoder: typeof globalThis.TextDecoder;
-  TextEncoder: typeof globalThis.TextEncoder;
-};
-
-globalThis.TextEncoder = TextEncoder;
-globalThis.TextDecoder = TextDecoder;
-
-const {
-  MemoryRouter,
-  Route,
-  Routes,
-} = require('react-router-dom') as typeof import('react-router-dom');
-const TandemSpacePage =
-  require('../TandemSpace').default as typeof import('../TandemSpace').default;
+globalThis.TextEncoder = TextEncoder as unknown as typeof globalThis.TextEncoder;
+globalThis.TextDecoder = TextDecoder as unknown as typeof globalThis.TextDecoder;
 
 const mockUseMatrixClient = jest.fn();
 const mockUseTandem = jest.fn();
@@ -66,19 +53,19 @@ jest.mock('../../components', () => ({
 }));
 
 jest.mock('../../hooks/useMatrixClient', () => ({
-  useMatrixClient: () => mockUseMatrixClient(),
+  useMatrixClient: mockUseMatrixClient,
 }));
 
 jest.mock('../../hooks/useTandem', () => ({
-  useTandem: () => mockUseTandem(),
+  useTandem: mockUseTandem,
 }));
 
 jest.mock('../../hooks/useChatPreferences', () => ({
-  useChatPreferences: () => mockUseChatPreferences(),
+  useChatPreferences: mockUseChatPreferences,
 }));
 
 jest.mock('../../hooks/usePersistedResource', () => ({
-  usePersistedResource: () => mockUsePersistedResource(),
+  usePersistedResource: mockUsePersistedResource,
 }));
 
 jest.mock('../../lib/matrix/identity', () => ({
@@ -107,6 +94,19 @@ jest.mock('../../lib/matrix/tandem', () => ({
   ensureTandemSpaceLinks: jest.fn().mockResolvedValue(undefined),
   joinTandemRoom: jest.fn().mockResolvedValue(undefined),
 }));
+
+let MemoryRouter: ComponentType<{
+  children?: ReactNode;
+  initialEntries?: string[];
+}>;
+let Route: ComponentType<{
+  element: ReactNode;
+  path: string;
+}>;
+let Routes: ComponentType<{
+  children?: ReactNode;
+}>;
+let TandemSpacePage: ComponentType;
 
 describe('TandemSpacePage', () => {
   const client = {
@@ -142,6 +142,16 @@ describe('TandemSpacePage', () => {
       updateRoomNotificationMode: jest.fn(),
       resolveRoomNotificationMode: jest.fn(() => 'all'),
     });
+  });
+
+  beforeAll(async () => {
+    const reactRouterDomModule = await import('react-router-dom');
+    MemoryRouter = reactRouterDomModule.MemoryRouter;
+    Route = reactRouterDomModule.Route;
+    Routes = reactRouterDomModule.Routes;
+
+    const tandemSpaceModule = await import('../TandemSpace');
+    TandemSpacePage = tandemSpaceModule.default;
   });
 
   it('keeps rendering cached topics when the live hub room is temporarily missing', () => {

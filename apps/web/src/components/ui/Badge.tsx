@@ -9,9 +9,9 @@ interface BadgeProps
 
 const toneStyles = {
   neutral: 'bg-elevated text-text-muted border-line',
-  accent: 'bg-accent-soft text-accent-strong border-accent/20',
-  success: 'bg-success-soft text-success border-success/20',
-  warning: 'bg-warning-soft text-warning border-warning/20',
+  accent: 'bg-accent-soft text-accent-strong border-transparent',
+  success: 'bg-success-soft text-success-strong border-transparent',
+  warning: 'bg-warning-soft text-warning-strong border-transparent',
 };
 
 function Badge({

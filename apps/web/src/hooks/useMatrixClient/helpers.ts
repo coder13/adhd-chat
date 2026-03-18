@@ -6,6 +6,7 @@ import { decodeRecoveryKey } from 'matrix-js-sdk/lib/crypto-api';
 import { isInactiveMatrixSessionError } from './sessionErrors';
 
 const KEY = 'matrix.session.v1';
+const INITIAL_SYNC_LIMIT = 100;
 const SESSION_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 const SESSION_VALIDATION_TIMEOUT_MS = 10000;
 
@@ -423,7 +424,7 @@ export async function buildAuthedClient(
 
   await initRustCryptoWithRecovery(_client, cryptoStore);
 
-  await _client.startClient({ initialSyncLimit: 20 });
+  await _client.startClient({ initialSyncLimit: INITIAL_SYNC_LIMIT });
 
   const validatedSession = await validateSessionWithRecovery(
     _client,

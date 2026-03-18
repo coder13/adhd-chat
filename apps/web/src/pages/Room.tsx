@@ -1,13 +1,12 @@
 import { IonContent, IonFooter, IonPage } from '@ionic/react';
 import { MsgType } from 'matrix-js-sdk';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AuthFallbackState, Button } from '../components';
-import { MessageBubble } from '../components/chat';
 import MessageActionMenu from '../components/chat/MessageActionMenu';
-import { getEmojiQuery, getEmojiSuggestions } from '../lib/chat/emojis';
-import { createMentionCandidate, getMentionQuery } from '../lib/chat/mentions';
+import { createMentionCandidate } from '../lib/chat/mentions';
 import { cn } from '../lib/cn';
+import { shouldSuppressMissingRoomError } from '../lib/matrix/restoreErrors';
 import {
   applyOptimisticReactionChanges,
   mergeTimelineMessages,
@@ -18,6 +17,11 @@ import {
 } from '../lib/matrix/optimisticTimeline';
 import { isPendingTandemRoomId } from '../lib/matrix/pendingTandemRoom';
 import { findLatestOwnReadReceipt } from '../lib/matrix/readReceipts';
+import {
+  hasMoreRoomHistoryBack,
+  paginateRoomHistoryBack,
+} from '../lib/matrix/roomHistory';
+import { sendTypingState } from '../lib/matrix/typingState';
 import {
   buildRoomSnapshot,
   type RoomSnapshot,
@@ -39,25 +43,36 @@ import { useChatPreferences } from '../hooks/useChatPreferences';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { usePersistedResource } from '../hooks/usePersistedResource';
 import { useTandem } from '../hooks/useTandem';
+import { useCurrentUserProfileSummary } from '../hooks/useCurrentUserProfileSummary';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
 import { loadDesktopLastSelection } from '../lib/desktopShell';
 import DesktopRailHeader from './room/DesktopRailHeader';
 import DesktopRoomPanel from './room/DesktopRoomPanel';
+import KeyboardShortcutsOverlay from './room/KeyboardShortcutsOverlay';
 import RoomComposer from './room/RoomComposer';
 import DesktopTopicSidebar from './room/DesktopTopicSidebar';
 import RoomDialogs from './room/RoomDialogs';
 import RoomHeader from './room/RoomHeader';
-import type { ComposerMode, QueuedImage, RoomMessage } from './room/types';
+import ThreadTimeline from './room/ThreadTimeline';
+import TimelineMessageList from './room/TimelineMessageList';
+import type { RoomMessage } from './room/types';
 import { buildPendingRoomMessages, formatTimestamp } from './room/utils';
 import { useDesktopRoomShell } from './room/useDesktopRoomShell';
+import { useDesktopRoomShortcuts } from './room/useDesktopRoomShortcuts';
 import { useRoomComposer } from './room/useRoomComposer';
+import { useRoomComposerState } from './room/useRoomComposerState';
 import { useRoomPageActions } from './room/useRoomPageActions';
 import { useRoomRealtime } from './room/useRoomRealtime';
 import { useRoomScrollState } from './room/useRoomScrollState';
+import { useThreadComposerFocus } from './room/useThreadComposerFocus';
 
 function RoomPage() {
-  const { roomId: encodedRoomId } = useParams<{ roomId: string }>();
+  const { roomId: encodedRoomId, threadRootId: encodedThreadRootId } =
+    useParams<{ roomId: string; threadRootId?: string }>();
   const roomId = encodedRoomId ? decodeURIComponent(encodedRoomId) : null;
+  const threadRootId = encodedThreadRootId
+    ? decodeURIComponent(encodedThreadRootId)
+    : null;
   const isPendingRoom = Boolean(roomId && isPendingTandemRoomId(roomId));
   const navigate = useNavigate();
   const { client, isReady, state, user, bootstrapUserId } = useMatrixClient();
@@ -87,8 +102,10 @@ function RoomPage() {
       roomName: 'Conversation',
       roomDescription: null,
       roomIcon: null,
+      roomAvatarUrl: null,
       roomSubtitle: 'Connecting...',
       messages: [],
+      threads: [],
       isEncrypted: false,
       roomMeta: {},
     },
@@ -102,9 +119,6 @@ function RoomPage() {
     },
   });
 
-  const [draft, setDraft] = useState('');
-  const [queuedImage, setQueuedImage] = useState<QueuedImage>(null);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [enablingEncryption, setEnablingEncryption] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
@@ -112,10 +126,6 @@ function RoomPage() {
   const [showIdentityModal, setShowIdentityModal] = useState(false);
   const [showTopicNotificationModal, setShowTopicNotificationModal] =
     useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showQueuedImagePreview, setShowQueuedImagePreview] = useState(false);
-  const [selectedEmojiSuggestionIndex, setSelectedEmojiSuggestionIndex] =
-    useState(0);
   const [showDeleteTopicConfirm, setShowDeleteTopicConfirm] = useState(false);
   const [deleteTopicNameInput, setDeleteTopicNameInput] = useState('');
   const [deletingTopic, setDeletingTopic] = useState(false);
@@ -127,21 +137,22 @@ function RoomPage() {
   const [messageMenu, setMessageMenu] = useState<{
     message: RoomMessage;
     position: { x: number; y: number };
+    scope: 'room' | 'thread';
   } | null>(null);
-  const [composerMode, setComposerMode] = useState<ComposerMode>(null);
   const [optimisticMessages, setOptimisticMessages] = useState<
     OptimisticTimelineMessage[]
   >([]);
   const [optimisticReactionChanges, setOptimisticReactionChanges] = useState<
     OptimisticReactionChange[]
   >([]);
+  const [showShortcutOverlay, setShowShortcutOverlay] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const contentRef = useRef<HTMLIonContentElement>(null);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<HTMLIonTextareaElement>(null);
-  const attachmentInputRef = useRef<HTMLInputElement>(null);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const threadTimelineScrollRef = useRef<HTMLDivElement>(null);
   const outgoingTypingRef = useRef(false);
   const lastTypingSentAtRef = useRef(0);
+  const typingRateLimitUntilRef = useRef(0);
   const typingIdleTimeoutRef = useRef<number | null>(null);
   const lastReadReceiptEventIdRef = useRef<string | null>(null);
 
@@ -161,9 +172,6 @@ function RoomPage() {
             )
           )
       : [];
-  const mentionQuery = getMentionQuery(draft);
-  const emojiQuery = getEmojiQuery(draft);
-  const emojiSuggestions = getEmojiSuggestions(emojiQuery);
   const roomMembership = currentRoom?.getMyMembership() ?? 'join';
   const membershipPolicy =
     !isPendingRoom && client && currentRoom
@@ -195,12 +203,13 @@ function RoomPage() {
   const tangentRelationship =
     relationships.find((entry) => entry.sharedSpaceId === tangentSpaceId) ??
     null;
-  const currentUserProfile = user ? (client?.getUser(user.userId) ?? null) : null;
-  const currentUserName =
-    currentUserProfile?.displayName || user?.userId || 'User';
-  const currentUserAvatarUrl = currentUserProfile?.avatarUrl
-    ? (client?.mxcUrlToHttp(currentUserProfile.avatarUrl, 64, 64, 'crop') ?? null)
-    : null;
+  const currentUserProfile = useCurrentUserProfileSummary(
+    client,
+    user?.userId ?? bootstrapUserId,
+    64
+  );
+  const currentUserName = currentUserProfile.name;
+  const currentUserAvatarUrl = currentUserProfile.avatarUrl;
 
   const { data: tangentTopics, refresh: refreshTangentTopics } =
     usePersistedResource<TandemSpaceRoomSummary[]>({
@@ -219,27 +228,38 @@ function RoomPage() {
     !isPendingRoom;
   const {
     desktopRailView,
+    setDesktopRailView,
     desktopSettingsSection,
-    setDesktopSettingsSection,
+    navigateDesktopSettingsSection,
     desktopRailSearchQuery,
     setDesktopRailSearchQuery,
     showDesktopRailMenu,
     setShowDesktopRailMenu,
     desktopRoomPanelView,
+    desktopThreadRootId,
     setDesktopRoomPanelView,
     desktopRailWidth,
+    desktopRoomPanelWidth,
     isResizingDesktopRail,
+    isResizingDesktopRoomPanel,
     setIsResizingDesktopRail,
+    setIsResizingDesktopRoomPanel,
     openDesktopContacts,
+    openDesktopAddContact,
+    openDesktopHubs,
     openDesktopOtherRooms,
     openDesktopSettings,
+    closeDesktopRailMenu,
     handleDesktopRailBack,
+    stepBackDesktopRail,
     openDesktopEditPanel,
     openDesktopPinsPanel,
     openDesktopSearchPanel,
     openDesktopDetailsPanel,
+    openDesktopThreadPanel,
     closeDesktopRoomPanel,
     backToDesktopRoomDetails,
+    stepBackOrCloseDesktopRoomPanel,
   } = useDesktopRoomShell({
     isDesktopLayout,
     showDesktopSidebar,
@@ -248,12 +268,51 @@ function RoomPage() {
     userId: user?.userId,
     bootstrapUserId,
   });
+  const showDesktopRailBody =
+    isDesktopLayout &&
+    !isPendingRoom &&
+    (Boolean(tangentSpaceId) || desktopRailView !== 'topics');
+  const showDesktopRoomPanel =
+    isDesktopLayout && desktopRoomPanelView !== null;
+  const useDesktopSplitLayout = showDesktopRailBody || showDesktopRoomPanel;
+  const mobileThreadRootId = isDesktopLayout ? null : threadRootId;
+  const panelThreadRootId =
+    isDesktopLayout && desktopRoomPanelView === 'thread'
+      ? desktopThreadRootId
+      : null;
+  const activeThreadRootId = panelThreadRootId ?? mobileThreadRootId;
+  const isThreadRouteActive = mobileThreadRootId !== null;
+  const isDesktopThreadPanelOpen = panelThreadRootId !== null;
+  const desktopHeaderWidth = showDesktopRailBody
+    ? desktopRailWidth
+    : isDesktopLayout
+      ? 72
+      : 0;
   const openPinnedMessagesPath = `/room/${encodeURIComponent(roomId ?? '')}/pinned`;
   const openSearchPath = `/room/${encodeURIComponent(roomId ?? '')}/search`;
+  const openRoomPath = `/room/${encodeURIComponent(roomId ?? '')}`;
+
+  useDesktopRoomShortcuts({
+    context: {
+      isDesktopActive: isDesktopLayout && !isPendingRoom,
+      showShortcutOverlay,
+      showDesktopRailMenu,
+      desktopRailView,
+      desktopSettingsSection,
+      desktopRoomPanelView,
+      openShortcutOverlay: () => setShowShortcutOverlay(true),
+      closeShortcutOverlay: () => setShowShortcutOverlay(false),
+      openDesktopSettingsRoot: openDesktopSettings,
+      closeDesktopRailMenu,
+      stepBackDesktopRail,
+      stepBackOrCloseDesktopRoomPanel,
+    },
+  });
+
   const scrollToLatest = useCallback((duration = 250) => {
     window.requestAnimationFrame(() => {
       const timelineScrollHost = timelineScrollRef.current;
-      if (showDesktopSidebar && timelineScrollHost) {
+      if (useDesktopSplitLayout && timelineScrollHost) {
         timelineScrollHost.scrollTo({
           top: timelineScrollHost.scrollHeight,
           behavior: duration === 0 ? 'auto' : 'smooth',
@@ -263,7 +322,32 @@ function RoomPage() {
 
       void contentRef.current?.scrollToBottom(duration);
     });
-  }, [showDesktopSidebar]);
+  }, [useDesktopSplitLayout]);
+  const scrollThreadPanelToLatest = useCallback((duration = 250) => {
+    window.requestAnimationFrame(() => {
+      const threadTimelineScrollHost = threadTimelineScrollRef.current;
+      if (!threadTimelineScrollHost) {
+        return;
+      }
+
+      threadTimelineScrollHost.scrollTo({
+        top: threadTimelineScrollHost.scrollHeight,
+        behavior: duration === 0 ? 'auto' : 'smooth',
+      });
+    });
+  }, []);
+  const mainComposerState = useRoomComposerState({
+    mentionCandidates,
+  });
+  const threadComposerState = useRoomComposerState({
+    mentionCandidates,
+    resetKey: activeThreadRootId,
+  });
+  const activeTypingDraft =
+    mainComposerState.draft || threadComposerState.draft;
+  const activeFooterComposerRef = isThreadRouteActive
+    ? threadComposerState.composerRef
+    : mainComposerState.composerRef;
 
   const { pendingRoom, typingMemberNames } = useRoomRealtime({
     client,
@@ -278,12 +362,13 @@ function RoomPage() {
     canInteractWithTimeline,
     tangentRelationship,
     tangentSpaceId,
-    draft,
+    draft: activeTypingDraft,
     contentRef,
-    composerRef,
+    composerRef: activeFooterComposerRef,
     scrollToLatest,
     outgoingTypingRef,
     lastTypingSentAtRef,
+    typingRateLimitUntilRef,
     typingIdleTimeoutRef,
     lastReadReceiptEventIdRef,
     setOptimisticMessages,
@@ -305,114 +390,301 @@ function RoomPage() {
 
     outgoingTypingRef.current = false;
     lastTypingSentAtRef.current = 0;
-    void client
-      .sendTyping(roomId, false, TYPING_SERVER_TIMEOUT_MS)
-      .catch((cause: unknown) => {
+    void sendTypingState({
+      client,
+      roomId,
+      isTyping: false,
+      timeoutMs: TYPING_SERVER_TIMEOUT_MS,
+      typingRateLimitUntilRef,
+      onError: (cause: unknown) => {
         console.error('Failed to clear typing state', cause);
-      });
+      },
+    });
   };
-
-  const {
-    handleSendMessage,
-    handleAttachmentSelection,
-    handleComposerKeyDown,
-    handleComposerPaste,
-    handleDraftInput,
-    handleRetryMessage,
-    handleReplyToMessage,
-    handleEditMessage,
-    handleCancelComposerContext,
-    handleRemoveQueuedImage,
-    handleInsertEmoji,
-    setSelectedEmojiSuggestionIndex: setEmojiHighlight,
-  } = useRoomComposer({
-    client,
-    userId: user?.userId,
-    roomId: roomId ?? '',
-    isPendingRoom,
-    canInteractWithTimeline,
-    uploadingAttachment,
-    draft,
-    setDraft,
-    queuedImage,
-    setQueuedImage,
-    setShowQueuedImagePreview,
-    setUploadingAttachment,
-    setActionError,
-    composerMode,
-    setComposerMode,
-    showEmojiPicker,
-    setShowEmojiPicker,
-    selectedEmojiSuggestionIndex,
-    setSelectedEmojiSuggestionIndex,
-    emojiQuery,
-    emojiSuggestions,
-    mentionCandidates,
-    optimisticMessages,
-    setOptimisticMessages,
-    refresh,
-    scrollToLatest,
-    composerRef,
-    emojiPickerRef,
-    clearOwnTypingState,
-  });
 
   const pendingSnapshot = pendingRoom
     ? {
         roomName: pendingRoom.roomName,
         roomDescription: pendingRoom.topic ?? null,
         roomIcon: null,
+        roomAvatarUrl: null,
         roomSubtitle:
           pendingRoom.status === 'failed'
             ? 'Topic setup ran into a problem'
             : 'Setting up your new topic...',
         messages: buildPendingRoomMessages(pendingRoom),
+        threads: [],
         isEncrypted: false,
         roomMeta: {} as TandemRoomMeta,
       }
     : null;
   const activeSnapshot = pendingSnapshot ?? snapshot;
-  const {
-    roomName,
-    roomDescription,
-    roomIcon,
-    roomSubtitle,
-    messages,
-    isEncrypted,
-    roomMeta,
-  } = activeSnapshot;
-  const visibleMessages = applyOptimisticReactionChanges(
+  const roomName = activeSnapshot.roomName;
+  const roomDescription = activeSnapshot.roomDescription;
+  const roomIcon = activeSnapshot.roomIcon;
+  const roomAvatarUrl = activeSnapshot.roomAvatarUrl;
+  const roomSubtitle = activeSnapshot.roomSubtitle;
+  const messages = activeSnapshot.messages ?? [];
+  const threads = activeSnapshot.threads ?? [];
+  const isEncrypted = activeSnapshot.isEncrypted;
+  const roomMeta = activeSnapshot.roomMeta ?? ({} as TandemRoomMeta);
+  const visibleMainMessages = applyOptimisticReactionChanges(
     mergeTimelineMessages(
       messages,
-      reconcileOptimisticTimeline(messages, optimisticMessages)
+      reconcileOptimisticTimeline(
+        messages,
+        optimisticMessages.filter((message) => !message.threadRootId)
+      )
     ),
     optimisticReactionChanges
+  );
+  const activeThreadSnapshot = activeThreadRootId
+    ? threads.find((thread) => thread.rootMessageId === activeThreadRootId) ??
+      (() => {
+        const rootMessage =
+          messages.find((message) => message.id === activeThreadRootId) ?? null;
+
+        if (!rootMessage) {
+          return null;
+        }
+
+        return {
+          rootMessageId: activeThreadRootId,
+          rootMessage,
+          replies: [],
+          replyCount: 0,
+          latestReply: null,
+          hasCurrentUserParticipated: false,
+        };
+      })()
+    : null;
+  const visibleThreadMessages = activeThreadSnapshot
+    ? applyOptimisticReactionChanges(
+        [
+          ...(activeThreadSnapshot.rootMessage
+            ? [activeThreadSnapshot.rootMessage]
+            : []),
+          ...mergeTimelineMessages(
+            activeThreadSnapshot.replies,
+            reconcileOptimisticTimeline(
+              activeThreadSnapshot.replies,
+              optimisticMessages.filter(
+                (message) =>
+                  message.threadRootId === activeThreadSnapshot.rootMessageId
+              )
+            )
+          ),
+        ],
+        optimisticReactionChanges
+      )
+    : [];
+  const activeThreadRootMessage =
+    activeThreadSnapshot?.rootMessage
+      ? (visibleThreadMessages[0] ?? activeThreadSnapshot.rootMessage)
+      : null;
+  const activeThreadReplies = activeThreadRootMessage
+    ? visibleThreadMessages.slice(1)
+    : visibleThreadMessages;
+  const activeThreadMessages =
+    activeThreadRootId && activeThreadSnapshot
+      ? [
+          ...(activeThreadRootMessage ? [activeThreadRootMessage] : []),
+          ...activeThreadReplies,
+        ]
+      : [];
+  const visibleMessages =
+    isThreadRouteActive
+      ? activeThreadMessages
+      : visibleMainMessages;
+  const canLoadOlderMainTimeline =
+    !isThreadRouteActive &&
+    currentRoom !== null &&
+    hasMoreRoomHistoryBack(currentRoom);
+  const loadOlderMainTimeline = useCallback(async () => {
+    if (!client || !currentRoom || isThreadRouteActive) {
+      return;
+    }
+
+    setActionError(null);
+    setLoadingOlderMessages(true);
+
+    try {
+      const { didPaginate } = await paginateRoomHistoryBack(client, currentRoom);
+
+      if (didPaginate) {
+        await refresh();
+      }
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : String(cause));
+      throw cause;
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }, [client, currentRoom, isThreadRouteActive, refresh]);
+  const threadSummariesByRootId = new Map(
+    threads
+      .filter((thread) => thread.replyCount > 0)
+      .map((thread) => [
+        thread.rootMessageId,
+        {
+          replyCount: thread.replyCount,
+          latestReply: thread.latestReply,
+        },
+      ] as const)
   );
   const { showJumpToLatest } = useRoomScrollState({
     roomId,
     contentRef,
-    scrollElementRef: timelineScrollRef,
+    scrollElementRef: useDesktopSplitLayout
+      ? timelineScrollRef
+      : undefined,
     messageKeys: visibleMessages.map((message) => message.id),
     scrollToLatest,
+    canLoadOlderMessages: canLoadOlderMainTimeline,
+    isLoadingOlderMessages: loadingOlderMessages,
+    onLoadOlderMessages: loadOlderMainTimeline,
   });
   const visibleError =
     pendingRoom?.status === 'failed'
       ? (pendingRoom.error ?? actionError)
       : (actionError ?? error);
+  const suppressMissingRoomError = shouldSuppressMissingRoomError({
+    error: visibleError,
+    hasCachedData,
+    hasLiveRoom: Boolean(currentRoom),
+    isLoading: loading,
+    isAuthRestoring: state === 'syncing',
+  });
+  const displayError = suppressMissingRoomError ? null : visibleError;
   const typingIndicator = formatTypingIndicator(typingMemberNames);
   const pinnedMessageIds =
     currentRoom?.currentState
       .getStateEvents('m.room.pinned_events', '')
       ?.getContent<{ pinned?: string[] }>().pinned ?? [];
-  const latestOwnReadReceipt = findLatestOwnReadReceipt(visibleMessages);
-  const readReceiptMessageId = latestOwnReadReceipt?.messageId ?? null;
-  const readReceiptNames = latestOwnReadReceipt?.readerNames ?? [];
-  const mentionSuggestions =
-    emojiQuery === null && mentionQuery && mentionCandidates.length > 0
-      ? mentionCandidates.filter((candidate) =>
-          candidate.token.toLowerCase().startsWith(mentionQuery.toLowerCase())
-        )
-      : [];
+  const latestOwnMainReadReceipt = findLatestOwnReadReceipt(visibleMainMessages);
+  const mainReadReceiptMessageId = latestOwnMainReadReceipt?.messageId ?? null;
+  const mainReadReceiptNames = latestOwnMainReadReceipt?.readerNames ?? [];
+  const latestOwnThreadReadReceipt = activeThreadMessages.length
+    ? findLatestOwnReadReceipt(activeThreadMessages)
+    : null;
+  const threadReadReceiptMessageId =
+    latestOwnThreadReadReceipt?.messageId ?? null;
+  const threadReadReceiptNames = latestOwnThreadReadReceipt?.readerNames ?? [];
+  const activeThreadContextMessage = activeThreadRootMessage;
+  const requestThreadComposerFocus = useThreadComposerFocus({
+    composerRef: threadComposerState.composerRef,
+    threadContextMessage: activeThreadContextMessage,
+    canInteractWithTimeline,
+  });
+  const openThread = useCallback(
+    (rootMessageId: string) => {
+      requestThreadComposerFocus();
+      if (isDesktopLayout) {
+        openDesktopThreadPanel(rootMessageId);
+        return;
+      }
+
+      navigate(
+        `/room/${encodeURIComponent(roomId ?? '')}/thread/${encodeURIComponent(
+          rootMessageId
+        )}`
+      );
+    },
+    [
+      isDesktopLayout,
+      navigate,
+      openDesktopThreadPanel,
+      requestThreadComposerFocus,
+      roomId,
+    ]
+  );
+
+  useEffect(() => {
+    if (!isDesktopLayout || !threadRootId) {
+      return;
+    }
+
+    requestThreadComposerFocus();
+    openDesktopThreadPanel(threadRootId);
+    navigate(openRoomPath, { replace: true });
+  }, [
+    isDesktopLayout,
+    navigate,
+    openDesktopThreadPanel,
+    openRoomPath,
+    requestThreadComposerFocus,
+    threadRootId,
+  ]);
+  const mainComposer = useRoomComposer({
+    client,
+    userId: user?.userId,
+    roomId: roomId ?? '',
+    isPendingRoom,
+    canInteractWithTimeline,
+    uploadingAttachment: mainComposerState.uploadingAttachment,
+    draft: mainComposerState.draft,
+    setDraft: mainComposerState.setDraft,
+    queuedImage: mainComposerState.queuedImage,
+    setQueuedImage: mainComposerState.setQueuedImage,
+    threadContextMessage: null,
+    setShowQueuedImagePreview: mainComposerState.setShowQueuedImagePreview,
+    setUploadingAttachment: mainComposerState.setUploadingAttachment,
+    setActionError,
+    composerMode: mainComposerState.composerMode,
+    setComposerMode: mainComposerState.setComposerMode,
+    showEmojiPicker: mainComposerState.showEmojiPicker,
+    setShowEmojiPicker: mainComposerState.setShowEmojiPicker,
+    selectedEmojiSuggestionIndex:
+      mainComposerState.selectedEmojiSuggestionIndex,
+    setSelectedEmojiSuggestionIndex:
+      mainComposerState.setSelectedEmojiSuggestionIndex,
+    emojiQuery: mainComposerState.emojiQuery,
+    emojiSuggestions: mainComposerState.emojiSuggestions,
+    mentionCandidates,
+    optimisticMessages,
+    setOptimisticMessages,
+    refresh,
+    scrollToLatest,
+    composerRef: mainComposerState.composerRef,
+    emojiPickerRef: mainComposerState.emojiPickerRef,
+    clearOwnTypingState,
+  });
+  const threadComposer = useRoomComposer({
+    client,
+    userId: user?.userId,
+    roomId: roomId ?? '',
+    isPendingRoom,
+    canInteractWithTimeline,
+    uploadingAttachment: threadComposerState.uploadingAttachment,
+    draft: threadComposerState.draft,
+    setDraft: threadComposerState.setDraft,
+    queuedImage: threadComposerState.queuedImage,
+    setQueuedImage: threadComposerState.setQueuedImage,
+    threadContextMessage: activeThreadContextMessage,
+    setShowQueuedImagePreview: threadComposerState.setShowQueuedImagePreview,
+    setUploadingAttachment: threadComposerState.setUploadingAttachment,
+    setActionError,
+    composerMode: threadComposerState.composerMode,
+    setComposerMode: threadComposerState.setComposerMode,
+    showEmojiPicker: threadComposerState.showEmojiPicker,
+    setShowEmojiPicker: threadComposerState.setShowEmojiPicker,
+    selectedEmojiSuggestionIndex:
+      threadComposerState.selectedEmojiSuggestionIndex,
+    setSelectedEmojiSuggestionIndex:
+      threadComposerState.setSelectedEmojiSuggestionIndex,
+    emojiQuery: threadComposerState.emojiQuery,
+    emojiSuggestions: threadComposerState.emojiSuggestions,
+    mentionCandidates,
+    optimisticMessages,
+    setOptimisticMessages,
+    refresh,
+    scrollToLatest: isDesktopThreadPanelOpen
+      ? scrollThreadPanelToLatest
+      : scrollToLatest,
+    composerRef: threadComposerState.composerRef,
+    emojiPickerRef: threadComposerState.emojiPickerRef,
+    clearOwnTypingState,
+  });
   const {
     handleDeleteMessage,
     handleToggleReaction,
@@ -447,7 +719,17 @@ function RoomPage() {
     setCreatingTangent,
     setShowTangentModal,
     setTangentError,
-    setMessageMenu,
+    setMessageMenu: (value) => {
+      if (!value) {
+        setMessageMenu(null);
+        return;
+      }
+
+      setMessageMenu({
+        ...value,
+        scope: 'room',
+      });
+    },
     setOptimisticReactionChanges,
     canDeleteTopic,
     roomMembership,
@@ -461,6 +743,24 @@ function RoomPage() {
     refreshTangentTopics,
     navigate,
   });
+  const previewedQueuedImage = mainComposerState.showQueuedImagePreview
+    ? mainComposerState.queuedImage
+    : threadComposerState.showQueuedImagePreview
+      ? threadComposerState.queuedImage
+      : null;
+  const footerComposerState = isThreadRouteActive
+    ? threadComposerState
+    : mainComposerState;
+  const footerComposerHandlers = isThreadRouteActive
+    ? threadComposer
+    : mainComposer;
+  const footerThreadContextMessage = isThreadRouteActive
+    ? activeThreadContextMessage
+    : null;
+  const closeQueuedImagePreview = () => {
+    mainComposerState.setShowQueuedImagePreview(false);
+    threadComposerState.setShowQueuedImagePreview(false);
+  };
 
   if (!roomId) {
     return (
@@ -501,33 +801,65 @@ function RoomPage() {
         roomName={roomName}
         roomDescription={roomDescription}
         roomIcon={roomIcon}
+        roomAvatarUrl={roomAvatarUrl}
         roomSubtitle={roomSubtitle}
         typingIndicator={typingIndicator}
         isEncrypted={isEncrypted}
         isPendingRoom={isPendingRoom}
         tangentSpaceId={tangentSpaceId}
-        desktopRailWidth={showDesktopSidebar ? desktopRailWidth : 0}
+        desktopRailWidth={desktopHeaderWidth}
         desktopRailHeader={
-          showDesktopSidebar ? (
+          isDesktopLayout ? (
             <DesktopRailHeader
               view={desktopRailView}
               settingsSection={desktopSettingsSection}
               searchQuery={desktopRailSearchQuery}
               showMenu={showDesktopRailMenu}
+              showSearch={showDesktopSidebar}
               currentUserName={currentUserName}
               currentUserAvatarUrl={currentUserAvatarUrl}
               currentUserId={user?.userId ?? bootstrapUserId ?? null}
               onToggleMenu={() => setShowDesktopRailMenu((current) => !current)}
               onCloseMenu={() => setShowDesktopRailMenu(false)}
               onSearchQueryChange={setDesktopRailSearchQuery}
-              onOpenContacts={openDesktopContacts}
-              onOpenOtherRooms={openDesktopOtherRooms}
-              onOpenSettings={openDesktopSettings}
+              onOpenHubs={() => {
+                openDesktopHubs();
+              }}
+              onOpenContacts={() => {
+                if (showDesktopSidebar) {
+                  openDesktopContacts();
+                  return;
+                }
+
+                navigate('/contacts');
+              }}
+              onOpenOtherRooms={() => {
+                if (showDesktopSidebar) {
+                  openDesktopOtherRooms();
+                  return;
+                }
+
+                navigate('/other');
+              }}
+              onOpenSettings={() => {
+                if (showDesktopSidebar) {
+                  openDesktopSettings();
+                  return;
+                }
+
+                navigate('/menu');
+              }}
               onBack={handleDesktopRailBack}
             />
           ) : null
         }
-        onBack={handleBackNavigation}
+        onBack={
+          isThreadRouteActive
+            ? () => {
+                navigate(openRoomPath);
+              }
+            : handleBackNavigation
+        }
         onEditTopic={() => {
           if (isDesktopLayout) {
             openDesktopEditPanel();
@@ -575,16 +907,16 @@ function RoomPage() {
         ref={contentRef}
         fullscreen
         className="app-chat-page"
-        scrollY={!showDesktopSidebar}
+        scrollY={!useDesktopSplitLayout}
       >
         <div
           className={
-            showDesktopSidebar
+            useDesktopSplitLayout
               ? 'h-full xl:flex xl:min-h-0 xl:overflow-hidden'
               : ''
           }
         >
-          {showDesktopSidebar && tangentSpaceId ? (
+          {showDesktopRailBody ? (
             <>
               <DesktopTopicSidebar
                 width={desktopRailWidth}
@@ -596,20 +928,31 @@ function RoomPage() {
                 onSelectTopic={(topicId) => {
                   void handleSelectTopic(topicId);
                 }}
-                onSelectSettingsSection={setDesktopSettingsSection}
+                onSelectHub={(space) => {
+                  setDesktopRailSearchQuery('');
+                  setDesktopRailView('topics');
+                  if (space.mainRoomId !== roomId) {
+                    navigate(`/room/${encodeURIComponent(space.mainRoomId)}`);
+                  }
+                }}
+                onOpenAddContact={openDesktopAddContact}
+                onSelectSettingsSection={navigateDesktopSettingsSection}
                 onOpenRoute={(path) => navigate(path)}
               />
               <div
                 className={cn(
-                  'relative hidden w-3 shrink-0 xl:block',
-                  isResizingDesktopRail ? 'bg-accent/10' : ''
+                  'relative -ml-2 hidden w-4 shrink-0 xl:block',
+                  isResizingDesktopRail ? 'z-10' : ''
                 )}
               >
                 <div
                   role="separator"
                   aria-orientation="vertical"
                   aria-label="Resize left panel"
-                  className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-line"
+                  className={cn(
+                    'absolute inset-y-0 left-1/2 w-2 -translate-x-1/2 cursor-col-resize rounded-full transition-colors',
+                    isResizingDesktopRail ? 'bg-accent/30' : 'bg-transparent hover:bg-line'
+                  )}
                   onPointerDown={(event) => {
                     event.preventDefault();
                     setIsResizingDesktopRail(true);
@@ -620,14 +963,16 @@ function RoomPage() {
           ) : null}
           <div
             className={
-              showDesktopSidebar
+              useDesktopSplitLayout
                 ? 'flex min-h-0 min-w-0 flex-1 flex-col'
                 : 'flex-1 min-w-0'
             }
           >
             <div
               ref={timelineScrollRef}
-              className={showDesktopSidebar ? 'min-h-0 flex-1 overflow-y-auto' : ''}
+              className={
+                useDesktopSplitLayout ? 'min-h-0 flex-1 overflow-y-auto' : ''
+              }
             >
               <div className="px-4 pb-4 pt-6 xl:px-8">
                 {isPendingRoom ? (
@@ -648,9 +993,9 @@ function RoomPage() {
                   <div className="py-12 text-sm text-center text-text-muted">
                     Loading messages...
                   </div>
-                ) : visibleError && messages.length === 0 ? (
+                ) : displayError && messages.length === 0 ? (
                   <div className="py-6 text-sm text-center text-danger">
-                    {visibleError}
+                    {displayError}
                   </div>
                 ) : membershipPolicy && roomMembership !== 'join' ? (
                   <div className="space-y-4">
@@ -667,74 +1012,181 @@ function RoomPage() {
                 ) : visibleMessages.length === 0 ? (
                   <div className="py-12 text-center">
                     <p className="text-base font-medium text-text">
-                      No messages yet
+                      {isThreadRouteActive ? 'No replies yet' : 'No messages yet'}
                     </p>
                     <p className="mt-2 text-sm text-text-muted">
-                      Start the topic below.
+                      {isThreadRouteActive
+                        ? 'Reply below to start this thread.'
+                        : 'Start the topic below.'}
                     </p>
                   </div>
+                ) : isThreadRouteActive ? (
+                  <ThreadTimeline
+                    rootMessage={activeThreadRootMessage}
+                    replies={activeThreadReplies}
+                    accessToken={client?.getAccessToken() ?? null}
+                    viewMode={preferences.chatViewMode}
+                    mentionTargets={mentionCandidates}
+                    readReceiptMessageId={threadReadReceiptMessageId}
+                    readReceiptNames={threadReadReceiptNames}
+                    onRetry={
+                      isLiveSession ? threadComposer.handleRetryMessage : undefined
+                    }
+                    onToggleReaction={
+                      isLiveSession
+                        ? (targetMessage, reactionKey) => {
+                            void handleToggleReaction(targetMessage, reactionKey);
+                          }
+                        : undefined
+                    }
+                    onRequestActions={
+                      !isLiveSession
+                        ? undefined
+                        : (nextMessage, position) => {
+                            if (nextMessage.id.startsWith('local:')) {
+                              return;
+                            }
+
+                            setMessageMenu({
+                              message: nextMessage,
+                              position,
+                              scope: 'thread',
+                            });
+                          }
+                    }
+                  />
                 ) : (
                   <div className="space-y-3">
-                    {visibleError ? (
-                      <div className="py-2 text-sm text-center text-danger">
-                        {visibleError}
+                    {loadingOlderMessages ? (
+                      <div className="py-1 text-center text-xs text-text-muted">
+                        Loading older messages...
                       </div>
                     ) : null}
-                    {visibleMessages.map((message) => (
-                      <MessageBubble
-                        key={message.id}
-                        message={message}
-                        accessToken={client?.getAccessToken() ?? null}
-                        viewMode={preferences.chatViewMode}
-                        onRetry={isLiveSession ? handleRetryMessage : undefined}
-                        onToggleReaction={
-                          isLiveSession
-                            ? (targetMessage, reactionKey) => {
-                                void handleToggleReaction(
-                                  targetMessage,
-                                  reactionKey
-                                );
+                    {displayError ? (
+                      <div className="py-2 text-sm text-center text-danger">
+                        {displayError}
+                      </div>
+                    ) : null}
+                    <TimelineMessageList
+                      messages={visibleMessages}
+                      accessToken={client?.getAccessToken() ?? null}
+                      viewMode={preferences.chatViewMode}
+                      mentionTargets={mentionCandidates}
+                      readReceiptMessageId={mainReadReceiptMessageId}
+                      readReceiptNames={mainReadReceiptNames}
+                      onRetry={
+                        isLiveSession ? mainComposer.handleRetryMessage : undefined
+                      }
+                      onToggleReaction={
+                        isLiveSession
+                          ? (targetMessage, reactionKey) => {
+                              void handleToggleReaction(
+                                targetMessage,
+                                reactionKey
+                              );
+                            }
+                          : undefined
+                      }
+                      onRequestActions={
+                        !isLiveSession
+                          ? undefined
+                          : (nextMessage, position) => {
+                              if (nextMessage.id.startsWith('local:')) {
+                                return;
                               }
-                            : undefined
-                        }
-                        onRequestActions={
-                          !isLiveSession || message.id.startsWith('local:')
-                            ? undefined
-                            : (nextMessage, position) => {
-                                setMessageMenu({
-                                  message: nextMessage,
-                                  position,
-                                });
-                              }
-                        }
-                        mentionTargets={mentionCandidates}
-                        receiptNames={
-                          message.id === readReceiptMessageId
-                            ? readReceiptNames
-                            : null
-                        }
-                      />
-                    ))}
+
+                              setMessageMenu({
+                                message: nextMessage,
+                                position,
+                                scope: 'room',
+                              });
+                            }
+                      }
+                      onOpenThread={openThread}
+                      getThreadSummary={(message) =>
+                        threadSummariesByRootId.get(message.id) ?? null
+                      }
+                    />
                   </div>
                 )}
               </div>
             </div>
           </div>
-          {isDesktopLayout && desktopRoomPanelView ? (
-            <DesktopRoomPanel
-              view={desktopRoomPanelView}
-              roomName={roomName}
-              roomDescription={roomDescription}
-              roomIcon={roomIcon}
-              pinnedMessageIds={pinnedMessageIds}
-              messages={visibleMessages}
-              savingIdentity={savingIdentity}
-              actionError={actionError}
-              onClose={closeDesktopRoomPanel}
-              onBackToDetails={backToDesktopRoomDetails}
-              onOpenView={setDesktopRoomPanelView}
-              onSaveTopicIdentity={handleSaveTopicIdentity}
-            />
+          {showDesktopRoomPanel ? (
+            <>
+              <div
+                className={cn(
+                  'relative -mr-2 hidden w-4 shrink-0 xl:block',
+                  isResizingDesktopRoomPanel ? 'z-10' : ''
+                )}
+              >
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize right panel"
+                  className={cn(
+                    'absolute inset-y-0 left-1/2 w-2 -translate-x-1/2 cursor-col-resize rounded-full transition-colors',
+                    isResizingDesktopRoomPanel
+                      ? 'bg-accent/30'
+                      : 'bg-transparent hover:bg-line'
+                  )}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    setIsResizingDesktopRoomPanel(true);
+                  }}
+                />
+              </div>
+              <DesktopRoomPanel
+                view={desktopRoomPanelView}
+                width={desktopRoomPanelWidth}
+                roomName={roomName}
+                roomDescription={roomDescription}
+                roomIcon={roomIcon}
+                pinnedMessageIds={pinnedMessageIds}
+                messages={visibleMainMessages}
+                savingIdentity={savingIdentity}
+                actionError={actionError}
+                threadTimelineScrollRef={threadTimelineScrollRef}
+                threadPanelState={
+                  isDesktopThreadPanelOpen
+                    ? {
+                        rootMessage: activeThreadRootMessage,
+                        replies: activeThreadReplies,
+                        accessToken: client?.getAccessToken() ?? null,
+                        viewMode: preferences.chatViewMode,
+                        mentionTargets: mentionCandidates,
+                        readReceiptMessageId: threadReadReceiptMessageId,
+                        readReceiptNames: threadReadReceiptNames,
+                        onRetry: isLiveSession
+                          ? threadComposer.handleRetryMessage
+                          : undefined,
+                        onToggleReaction: isLiveSession
+                          ? (targetMessage, reactionKey) => {
+                              void handleToggleReaction(targetMessage, reactionKey);
+                            }
+                          : undefined,
+                        onRequestActions: !isLiveSession
+                          ? undefined
+                          : (nextMessage, position) => {
+                              if (nextMessage.id.startsWith('local:')) {
+                                return;
+                              }
+
+                              setMessageMenu({
+                                message: nextMessage,
+                                position,
+                                scope: 'thread',
+                              });
+                            },
+                      }
+                    : null
+                }
+                onClose={closeDesktopRoomPanel}
+                onBackToDetails={backToDesktopRoomDetails}
+                onOpenView={setDesktopRoomPanelView}
+                onSaveTopicIdentity={handleSaveTopicIdentity}
+              />
+            </>
           ) : null}
         </div>
       </IonContent>
@@ -742,56 +1194,127 @@ function RoomPage() {
       {showJumpToLatest ? (
         <button
           type="button"
-          className="fixed bottom-28 right-4 z-20 rounded-full bg-white px-4 py-2 text-sm font-medium text-text shadow-[0_18px_40px_-24px_rgba(15,23,42,0.38)]"
+          className="app-menu-surface fixed bottom-28 right-4 z-20 rounded-full px-4 py-2 text-sm font-medium text-text"
           onClick={() => scrollToLatest()}
         >
-          New messages
+          {isThreadRouteActive ? 'New replies' : 'New messages'}
         </button>
       ) : null}
 
       <IonFooter className="app-chat-footer ion-no-border">
-        <div className={showDesktopSidebar ? 'xl:flex xl:min-h-full' : ''}>
-          {showDesktopSidebar ? (
+        <div className={useDesktopSplitLayout ? 'xl:flex xl:min-h-full' : ''}>
+          {showDesktopRailBody ? (
             <div
-              className="hidden xl:block xl:shrink-0 xl:border-r xl:border-line/80 xl:bg-white/70 xl:backdrop-blur-sm"
+              className="app-glass-panel app-surface-divider-right hidden xl:block xl:shrink-0"
               style={{ width: desktopRailWidth }}
             />
           ) : null}
-          <div className={showDesktopSidebar ? 'min-w-0 flex-1' : ''}>
+          <div className={useDesktopSplitLayout ? 'min-w-0 flex-1' : ''}>
             <RoomComposer
               isPendingRoom={isPendingRoom}
               canInteractWithTimeline={canInteractWithTimeline}
-              uploadingAttachment={uploadingAttachment}
-              draft={draft}
-              queuedImage={queuedImage}
-              composerMode={composerMode}
-              mentionSuggestions={mentionSuggestions}
-              emojiSuggestions={emojiSuggestions}
-              selectedEmojiSuggestionIndex={selectedEmojiSuggestionIndex}
-              showEmojiPicker={showEmojiPicker}
-              attachmentInputRef={attachmentInputRef}
-              composerRef={composerRef}
-              emojiPickerRef={emojiPickerRef}
-              onAttachmentSelection={handleAttachmentSelection}
-              onToggleEmojiPicker={() => setShowEmojiPicker((current) => !current)}
-              onDraftInput={handleDraftInput}
-              onComposerKeyDown={handleComposerKeyDown}
-              onComposerPaste={handleComposerPaste}
+              uploadingAttachment={footerComposerState.uploadingAttachment}
+              draft={footerComposerState.draft}
+              queuedImage={footerComposerState.queuedImage}
+              composerMode={footerComposerState.composerMode}
+              threadContextMessage={footerThreadContextMessage}
+              mentionSuggestions={footerComposerState.mentionSuggestions}
+              emojiSuggestions={footerComposerState.emojiSuggestions}
+              selectedEmojiSuggestionIndex={
+                footerComposerState.selectedEmojiSuggestionIndex
+              }
+              showEmojiPicker={footerComposerState.showEmojiPicker}
+              attachmentInputRef={footerComposerState.attachmentInputRef}
+              composerRef={footerComposerState.composerRef}
+              emojiPickerRef={footerComposerState.emojiPickerRef}
+              onAttachmentSelection={footerComposerHandlers.handleAttachmentSelection}
+              onToggleEmojiPicker={() =>
+                footerComposerState.setShowEmojiPicker((current) => !current)
+              }
+              onDraftInput={footerComposerHandlers.handleDraftInput}
+              onComposerKeyDown={footerComposerHandlers.handleComposerKeyDown}
+              onComposerPaste={footerComposerHandlers.handleComposerPaste}
               onSend={() => {
-                void handleSendMessage();
+                void footerComposerHandlers.handleSendMessage();
               }}
-              onCancelComposerContext={handleCancelComposerContext}
-              onRemoveQueuedImage={handleRemoveQueuedImage}
-              onInsertEmoji={handleInsertEmoji}
-              onHighlightEmoji={setEmojiHighlight}
-              onOpenQueuedImagePreview={() => setShowQueuedImagePreview(true)}
-              setDraft={setDraft}
+              onCancelComposerContext={() => {
+                if (footerComposerState.composerMode) {
+                  footerComposerHandlers.handleCancelComposerContext();
+                  return;
+                }
+
+                if (isDesktopThreadPanelOpen) {
+                  closeDesktopRoomPanel();
+                  return;
+                }
+
+                if (isThreadRouteActive) {
+                  navigate(openRoomPath);
+                }
+              }}
+              onRemoveQueuedImage={footerComposerHandlers.handleRemoveQueuedImage}
+              onInsertEmoji={footerComposerHandlers.handleInsertEmoji}
+              onHighlightEmoji={footerComposerHandlers.setSelectedEmojiSuggestionIndex}
+              onOpenQueuedImagePreview={() =>
+                footerComposerState.setShowQueuedImagePreview(true)
+              }
+              setDraft={footerComposerState.setDraft}
             />
           </div>
+          {isDesktopThreadPanelOpen ? (
+            <div
+              className="app-glass-panel app-surface-divider-left hidden xl:block xl:shrink-0"
+              style={{ width: desktopRoomPanelWidth }}
+            >
+              <RoomComposer
+                isPendingRoom={isPendingRoom}
+                canInteractWithTimeline={canInteractWithTimeline}
+                uploadingAttachment={threadComposerState.uploadingAttachment}
+                draft={threadComposerState.draft}
+                queuedImage={threadComposerState.queuedImage}
+                composerMode={threadComposerState.composerMode}
+                threadContextMessage={activeThreadContextMessage}
+                mentionSuggestions={threadComposerState.mentionSuggestions}
+                emojiSuggestions={threadComposerState.emojiSuggestions}
+                selectedEmojiSuggestionIndex={
+                  threadComposerState.selectedEmojiSuggestionIndex
+                }
+                showEmojiPicker={threadComposerState.showEmojiPicker}
+                attachmentInputRef={threadComposerState.attachmentInputRef}
+                composerRef={threadComposerState.composerRef}
+                emojiPickerRef={threadComposerState.emojiPickerRef}
+                onAttachmentSelection={threadComposer.handleAttachmentSelection}
+                onToggleEmojiPicker={() =>
+                  threadComposerState.setShowEmojiPicker((current) => !current)
+                }
+                onDraftInput={threadComposer.handleDraftInput}
+                onComposerKeyDown={threadComposer.handleComposerKeyDown}
+                onComposerPaste={threadComposer.handleComposerPaste}
+                onSend={() => {
+                  void threadComposer.handleSendMessage();
+                }}
+                onCancelComposerContext={threadComposer.handleCancelComposerContext}
+                onRemoveQueuedImage={threadComposer.handleRemoveQueuedImage}
+                onInsertEmoji={threadComposer.handleInsertEmoji}
+                onHighlightEmoji={
+                  threadComposer.setSelectedEmojiSuggestionIndex
+                }
+                onOpenQueuedImagePreview={() =>
+                  threadComposerState.setShowQueuedImagePreview(true)
+                }
+                setDraft={threadComposerState.setDraft}
+              />
+            </div>
+          ) : showDesktopRoomPanel ? (
+            <div
+              className="app-glass-panel app-surface-divider-left hidden xl:block xl:shrink-0"
+              style={{ width: desktopRoomPanelWidth }}
+            />
+          ) : null}
         </div>
       </IonFooter>
 
-      {showQueuedImagePreview && queuedImage ? (
+      {previewedQueuedImage ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center px-6"
           role="dialog"
@@ -801,13 +1324,13 @@ function RoomPage() {
           <button
             type="button"
             className="absolute inset-0 bg-text/45"
-            onClick={() => setShowQueuedImagePreview(false)}
+            onClick={closeQueuedImagePreview}
             aria-label="Close image preview"
           />
           <div className="relative">
             <img
-              src={queuedImage.previewUrl}
-              alt={queuedImage.file.name}
+              src={previewedQueuedImage.previewUrl}
+              alt={previewedQueuedImage.file.name}
               className="max-h-[70vh] min-h-[50vh] w-auto max-w-full rounded-[28px] object-contain shadow-[0_28px_80px_-36px_rgba(15,23,42,0.45)]"
             />
           </div>
@@ -826,10 +1349,24 @@ function RoomPage() {
           }
           isPinned={pinnedMessageIds.includes(messageMenu.message.id)}
           onClose={() => setMessageMenu(null)}
-          onReply={() => handleReplyToMessage(messageMenu.message)}
+          onReply={
+            messageMenu.scope === 'thread' || isThreadRouteActive
+              ? undefined
+              : () => mainComposer.handleReplyToMessage(messageMenu.message)
+          }
+          onReplyInThread={
+            messageMenu.scope === 'thread' || isThreadRouteActive
+              ? undefined
+              : () => {
+                  openThread(messageMenu.message.id);
+                }
+          }
           onEdit={
             messageMenu.message.isOwn
-              ? () => handleEditMessage(messageMenu.message)
+              ? () =>
+                  (messageMenu.scope === 'thread' || isThreadRouteActive
+                    ? threadComposer.handleEditMessage
+                    : mainComposer.handleEditMessage)(messageMenu.message)
               : undefined
           }
           onDelete={
@@ -900,6 +1437,10 @@ function RoomPage() {
         onCreateTopic={(name) => {
           void handleCreateTangent(name);
         }}
+      />
+      <KeyboardShortcutsOverlay
+        isOpen={showShortcutOverlay}
+        onClose={() => setShowShortcutOverlay(false)}
       />
     </IonPage>
   );

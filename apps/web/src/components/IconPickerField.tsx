@@ -89,7 +89,7 @@ function IconPickerField({
         </div>
 
         {isOpen ? (
-          <div className="absolute left-0 top-full z-40 mt-2 overflow-hidden rounded-[24px] border border-line bg-white shadow-[0_20px_48px_-24px_rgba(15,23,42,0.35)]">
+          <div className="app-menu-surface absolute left-0 top-full z-40 mt-2 overflow-hidden rounded-[24px]">
             <ReactionPicker
               inline
               onSelect={(emoji) => {

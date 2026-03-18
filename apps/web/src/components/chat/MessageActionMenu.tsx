@@ -1,5 +1,6 @@
 import { IonIcon } from '@ionic/react';
 import {
+  chatbubbleEllipsesOutline,
   chevronForward,
   returnUpBackOutline,
   trashOutline,
@@ -8,6 +9,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
+import { cn } from '../../lib/cn';
 import ReactionPicker from './ReactionPicker';
 
 type MenuPosition = {
@@ -21,7 +23,8 @@ interface MessageActionMenuProps {
   canEdit: boolean;
   isPinned: boolean;
   onClose: () => void;
-  onReply: () => void;
+  onReply?: () => void;
+  onReplyInThread?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onPin: () => void;
@@ -46,9 +49,10 @@ function MenuRow({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center justify-between rounded-2xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-elevated ${
-        isDanger ? 'text-danger' : 'text-text'
-      }`}
+      className={cn(
+        'app-interactive-menu-item flex w-full items-center justify-between rounded-2xl px-3 py-2.5 text-left text-sm font-medium',
+        isDanger ? 'text-danger-strong' : 'text-text'
+      )}
     >
       <span>{label}</span>
       {trailing ? (
@@ -65,6 +69,7 @@ function MessageActionMenu({
   isPinned,
   onClose,
   onReply,
+  onReplyInThread,
   onEdit,
   onDelete,
   onPin,
@@ -73,6 +78,11 @@ function MessageActionMenu({
   const [showPicker, setShowPicker] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [menuPosition, setMenuPosition] = useState(position);
+  const pickerTheme =
+    typeof document !== 'undefined' &&
+    document.documentElement.classList.contains('dark')
+      ? 'dark'
+      : 'light';
 
   useLayoutEffect(() => {
     if (!rootRef.current || typeof window === 'undefined') {
@@ -129,10 +139,10 @@ function MessageActionMenu({
   return createPortal(
     <div
       ref={rootRef}
-      className="fixed z-[2000] w-80 overflow-hidden rounded-[24px] border border-line bg-white shadow-[0_24px_60px_-24px_rgba(15,23,42,0.28)]"
+      className="app-menu-surface fixed z-[2000] w-80 overflow-hidden rounded-[24px]"
       style={{ left: menuPosition.x, top: menuPosition.y }}
     >
-      <div className="border-b border-line px-4 py-4">
+      <div className="border-b border-line/80 px-4 py-4">
         <div className="grid grid-cols-4 gap-3">
           {QUICK_REACTIONS.map((emoji) => (
             <button
@@ -142,7 +152,7 @@ function MessageActionMenu({
                 onReact(emoji);
                 onClose();
               }}
-              className="flex h-12 items-center justify-center rounded-2xl bg-elevated text-[28px] transition-colors hover:bg-panel"
+              className="app-icon-button flex h-12 items-center justify-center rounded-[18px] text-[28px]"
             >
               {emoji}
             </button>
@@ -157,10 +167,10 @@ function MessageActionMenu({
       </div>
 
       {showPicker ? (
-        <div className="border-b border-line bg-background px-2 py-2">
+        <div className="border-b border-line/80 bg-surface-muted/60 px-2 py-2">
           <ReactionPicker
             inline
-            theme="light"
+            theme={pickerTheme}
             onSelect={(emoji) => {
               onReact(emoji);
               onClose();
@@ -170,14 +180,26 @@ function MessageActionMenu({
       ) : null}
 
       <div className="px-4 py-2">
-        <MenuRow
-          label="Reply"
-          onClick={() => {
-            onReply();
-            onClose();
-          }}
-          trailing={returnUpBackOutline}
-        />
+        {onReplyInThread ? (
+          <MenuRow
+            label="Reply in Thread"
+            onClick={() => {
+              onReplyInThread();
+              onClose();
+            }}
+            trailing={chatbubbleEllipsesOutline}
+          />
+        ) : null}
+        {onReply ? (
+          <MenuRow
+            label="Reply"
+            onClick={() => {
+              onReply();
+              onClose();
+            }}
+            trailing={returnUpBackOutline}
+          />
+        ) : null}
         {canEdit && onEdit ? (
           <MenuRow
             label="Edit"

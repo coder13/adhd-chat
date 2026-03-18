@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes } from 'react';
 import { cn } from '../lib/cn';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'tertiary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
 }
@@ -23,18 +23,19 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles =
-      'inline-flex items-center justify-center gap-2 font-medium transition-[background-color,color,border-color,transform,box-shadow] duration-200 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-2 focus:ring-offset-canvas active:scale-[0.985] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100';
+      'inline-flex items-center justify-center gap-2 font-medium transition-[background-color,color,border-color,transform,filter] duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-2 focus:ring-offset-canvas active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 disabled:hover:brightness-100';
 
     const variantStyles = {
       primary:
-        'border border-accent/15 bg-accent-soft text-accent hover:bg-accent-soft/80',
-      secondary: 'bg-panel text-text hover:bg-elevated border border-line',
-      outline:
-        'border border-line bg-transparent text-text hover:bg-elevated/80',
-      ghost:
-        'bg-transparent text-text-muted hover:bg-elevated/70 hover:text-text',
+        'bg-primary text-primary-contrast hover:brightness-95',
+      secondary:
+        'bg-secondary text-secondary-contrast hover:brightness-95',
+      tertiary:
+        'bg-tertiary text-tertiary-contrast hover:brightness-95',
+      outline: 'border border-line/70 bg-transparent text-text hover:bg-surface-muted/80',
+      ghost: 'bg-transparent text-text-muted hover:bg-surface-muted/80 hover:text-text',
       danger:
-        'border border-danger/15 bg-danger-soft text-danger hover:bg-danger-soft/80',
+        'bg-danger-soft text-danger-strong hover:brightness-95',
     };
 
     const sizeStyles = {

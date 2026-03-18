@@ -13,6 +13,11 @@ import '@ionic/react/css/flex-utils.css';
 import '@ionic/react/css/display.css';
 import '../src/index.css';
 import '../src/theme/variables.css';
+import {
+  storybookThemePresets,
+  storybookThemeToolbarItems,
+  type StorybookThemeKey,
+} from '../src/theme/storybookThemePresets';
 
 setupIonicReact();
 
@@ -24,10 +29,7 @@ const preview: Preview = {
       defaultValue: 'light',
       toolbar: {
         icon: 'mirror',
-        items: [
-          { value: 'light', title: 'Light mode' },
-          { value: 'dark', title: 'Dark mode' },
-        ],
+        items: storybookThemeToolbarItems,
         dynamicTitle: true,
       },
     },
@@ -61,15 +63,19 @@ const preview: Preview = {
     backgrounds: {
       default: 'app',
       values: [
-        { name: 'app', value: '#f5f7fb' },
-        { name: 'shell', value: '#ffffff' },
-        { name: 'night', value: '#0f172a' },
+        { name: 'app', value: '#eef2f4' },
+        { name: 'shell', value: '#fbfcfa' },
+        { name: 'night', value: '#11171d' },
       ],
     },
   },
   decorators: [
     (Story, context) => {
-      const isDark = context.globals.theme === 'dark';
+      const activeTheme =
+        storybookThemePresets[
+          (context.globals.theme as StorybookThemeKey | undefined) ?? 'light'
+        ] ?? storybookThemePresets.light;
+      const isDark = activeTheme.mode === 'dark';
 
       if (typeof document !== 'undefined') {
         document.documentElement.classList.toggle('dark', isDark);
@@ -80,6 +86,7 @@ const preview: Preview = {
         <div
           className={isDark ? 'dark' : ''}
           style={{
+            ...activeTheme.style,
             minHeight: '100vh',
             backgroundColor: 'var(--ion-background-color)',
             color: 'var(--ion-text-color)',

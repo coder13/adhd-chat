@@ -1,4 +1,4 @@
-import { IonFab, IonFabButton, IonIcon } from '@ionic/react';
+import { IonButton, IonIcon } from '@ionic/react';
 import { add } from 'ionicons/icons';
 import { ClientEvent } from 'matrix-js-sdk';
 import { useEffect, useMemo, useState } from 'react';
@@ -29,6 +29,13 @@ function Contacts() {
     enabled: Boolean(client && user && isReady),
     initialValue: [],
     load: async () => buildContactCatalog(client!, user!.userId),
+    preserveValue: (currentContacts, nextContacts) => {
+      if (nextContacts.length === 0 && currentContacts.length > 0) {
+        return currentContacts;
+      }
+
+      return nextContacts;
+    },
   });
   const scheduleRefreshContacts = useThrottledRefresh(refreshContacts);
 
@@ -63,6 +70,17 @@ function Contacts() {
   return (
     <ListPageLayout
       title="Contacts"
+      endSlot={
+        <IonButton
+          fill="clear"
+          color="dark"
+          className="text-text"
+          onClick={() => navigate('/contacts/new')}
+        >
+          <IonIcon icon={add} slot="start" />
+          Add
+        </IonButton>
+      }
       headerContent={
         <input
           value={search}
@@ -101,11 +119,6 @@ function Contacts() {
         )}
       </div>
 
-      <IonFab slot="fixed" vertical="bottom" horizontal="end">
-        <IonFabButton onClick={() => navigate('/contacts/new')}>
-          <IonIcon icon={add} />
-        </IonFabButton>
-      </IonFab>
     </ListPageLayout>
   );
 }

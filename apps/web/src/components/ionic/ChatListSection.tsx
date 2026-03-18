@@ -55,13 +55,17 @@ function ChatListSection({
           routerLink={`/room/${encodeURIComponent(chat.id)}`}
           className="app-list-item app-hover-surface"
         >
-          <AppAvatar name={chat.name} icon={chat.icon} className="h-12 w-12" />
-          <IonLabel className="py-1">
+          <AppAvatar
+            name={chat.name}
+            icon={chat.icon}
+            className="mr-3 h-12 w-12 shrink-0"
+          />
+          <IonLabel className="min-w-0 py-1">
             <div className="flex items-center justify-between gap-3">
               <h2 className="truncate text-[15px] font-semibold text-text">
                 {chat.name}
               </h2>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 {chat.unreadCount > 0 ? (
                   <IonBadge
                     color="primary"

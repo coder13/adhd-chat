@@ -15,19 +15,25 @@ type EmojiMartSelection = {
 
 function ReactionPicker({
   onSelect,
-  theme = 'light',
+  theme,
   inline = false,
   className = '',
   align = 'right',
 }: ReactionPickerProps) {
   const anchoredClass = align === 'left' ? 'left-0' : 'right-0';
+  const resolvedTheme =
+    theme ??
+    (typeof document !== 'undefined' &&
+    document.documentElement.classList.contains('dark')
+      ? 'dark'
+      : 'light');
 
   return (
     <div
       className={
         inline
           ? className
-          : `absolute ${anchoredClass} top-full z-30 mt-2 overflow-hidden rounded-[24px] border border-line bg-white shadow-[0_20px_48px_-24px_rgba(15,23,42,0.35)] ${className}`
+          : `app-menu-surface absolute ${anchoredClass} top-full z-30 mt-2 overflow-hidden rounded-[24px] ${className}`
       }
     >
       <div
@@ -37,7 +43,7 @@ function ReactionPicker({
       >
         <Picker
           data={data}
-          theme={theme}
+          theme={resolvedTheme}
           previewPosition="none"
           searchPosition="sticky"
           skinTonePosition="none"

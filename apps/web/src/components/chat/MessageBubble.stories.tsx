@@ -3,6 +3,7 @@ import MessageBubble from './MessageBubble';
 import {
   cloneStoryMessage,
   sampleFailedMessage,
+  sampleFileMessage,
   sampleImageMessage,
   sampleIncomingTextMessage,
   sampleReplyMessage,
@@ -62,6 +63,13 @@ export const BubbleReply: Story = {
 export const ImageMessage: Story = {
   args: {
     message: cloneStoryMessage(sampleImageMessage),
+  },
+};
+
+export const FileBubble: Story = {
+  args: {
+    message: cloneStoryMessage(sampleFileMessage),
+    viewMode: 'bubbles',
   },
 };
 

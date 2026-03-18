@@ -14,6 +14,8 @@ const sharedIgnores = [
   'coverage',
   '.turbo',
   'node_modules',
+  '.storybook',
+  'storybook-static',
 ];
 
 const sharedTypeCheckedRules = {

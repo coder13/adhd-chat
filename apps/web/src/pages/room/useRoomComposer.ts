@@ -1,4 +1,4 @@
-import { MsgType, RelationType, type MatrixClient } from 'matrix-js-sdk';
+import { type MatrixClient } from 'matrix-js-sdk';
 import { useEffect } from 'react';
 import type {
   ChangeEvent,
@@ -9,17 +9,25 @@ import type {
   SetStateAction,
 } from 'react';
 import { shouldSubmitComposerOnEnter } from '../../lib/chat/composerBehavior';
-import { insertEmojiQueryResult, replaceCompletedEmojiShortcodes } from '../../lib/chat/emojis';
-import { collectMentionedUserIds, type MentionCandidate } from '../../lib/chat/mentions';
+import {
+  insertEmojiQueryResult,
+  replaceCompletedEmojiShortcodes,
+} from '../../lib/chat/emojis';
+import {
+  collectMentionedUserIds,
+  type MentionCandidate,
+} from '../../lib/chat/mentions';
 import { createId } from '../../lib/id';
 import { buildMatrixMediaPayload } from '../../lib/matrix/media';
 import {
+  acknowledgeOptimisticMessage,
   createOptimisticAttachmentMessage,
   createOptimisticTextMessage,
   resolveOwnSenderName,
   type OptimisticTimelineMessage,
 } from '../../lib/matrix/optimisticTimeline';
 import { getPastedImageFile } from './mediaInput';
+import { buildTextMessageRequest } from './composerSend';
 import type { ComposerMode, QueuedImage, RoomMessage } from './types';
 
 interface UseRoomComposerParams {
@@ -33,6 +41,7 @@ interface UseRoomComposerParams {
   setDraft: Dispatch<SetStateAction<string>>;
   queuedImage: QueuedImage;
   setQueuedImage: Dispatch<SetStateAction<QueuedImage>>;
+  threadContextMessage: RoomMessage | null;
   setShowQueuedImagePreview: (value: boolean) => void;
   setUploadingAttachment: (value: boolean) => void;
   setActionError: (value: string | null) => void;
@@ -54,6 +63,41 @@ interface UseRoomComposerParams {
   clearOwnTypingState: () => void;
 }
 
+type SendMessageResponse = { event_id?: string } | string | undefined;
+type SendThreadedMessage = (
+  nextRoomId: string,
+  threadId: string | null,
+  content: Record<string, unknown>,
+  txnId?: string
+) => Promise<SendMessageResponse>;
+
+function sendMatrixMessage(
+  client: MatrixClient,
+  roomId: string,
+  threadRootId: string | null,
+  content: Record<string, unknown>,
+  transactionId: string
+) {
+  return (client.sendMessage.bind(client) as unknown as SendThreadedMessage)(
+    roomId,
+    threadRootId,
+    content,
+    transactionId
+  );
+}
+
+function getRemoteEventId(response: SendMessageResponse) {
+  if (typeof response === 'string') {
+    return response;
+  }
+
+  if (response && typeof response === 'object' && 'event_id' in response) {
+    return response.event_id ?? null;
+  }
+
+  return null;
+}
+
 export function useRoomComposer({
   client,
   userId,
@@ -65,6 +109,7 @@ export function useRoomComposer({
   setDraft,
   queuedImage,
   setQueuedImage,
+  threadContextMessage,
   setShowQueuedImagePreview,
   setUploadingAttachment,
   setActionError,
@@ -136,39 +181,37 @@ export function useRoomComposer({
 
     const transactionId = createId('txn');
     const senderName = resolveOwnSenderName(client, roomId, userId);
+    const threadRootId = threadContextMessage?.id ?? null;
     const optimisticAttachmentMessage = createOptimisticAttachmentMessage({
       file,
       senderId: userId,
       senderName,
       transactionId,
+      threadRootId,
     });
 
-    setOptimisticMessages((currentMessages) => [...currentMessages, optimisticAttachmentMessage]);
+    setOptimisticMessages((currentMessages) => [
+      ...currentMessages,
+      optimisticAttachmentMessage,
+    ]);
     setUploadingAttachment(true);
     setActionError(null);
 
     try {
       const content = await buildMatrixMediaPayload(client, file);
-      const response = (await (
-        client.sendEvent as (
-          nextRoomId: string,
-          eventType: string,
-          content: Record<string, unknown>,
-          txnId?: string
-        ) => Promise<unknown>
-      )(roomId, 'm.room.message', content, transactionId)) as
-        | { event_id?: string }
-        | string
-        | undefined;
-      const remoteEventId =
-        typeof response === 'string'
-          ? response
-          : response && typeof response === 'object' && 'event_id' in response
-            ? response.event_id ?? null
-            : null;
+      const response = await sendMatrixMessage(
+        client,
+        roomId,
+        threadRootId,
+        content,
+        transactionId
+      );
+      const remoteEventId = getRemoteEventId(response);
       setOptimisticMessages((currentMessages) =>
-        currentMessages.map((message) =>
-          message.transactionId === transactionId ? { ...message, remoteEventId } : message
+        acknowledgeOptimisticMessage(
+          currentMessages,
+          transactionId,
+          remoteEventId
         )
       );
       scrollToLatest();
@@ -194,11 +237,13 @@ export function useRoomComposer({
     optimisticMessageId,
     replyToMessage,
     editMessage,
+    threadRootIdOverride,
   }: {
     body: string;
     optimisticMessageId?: string;
     replyToMessage?: RoomMessage | null;
     editMessage?: RoomMessage | null;
+    threadRootIdOverride?: string | null;
   }) => {
     if (isPendingRoom || !canInteractWithTimeline || !body || !client || !userId) {
       return false;
@@ -207,6 +252,7 @@ export function useRoomComposer({
     const transactionId = createId('txn');
     const senderName = resolveOwnSenderName(client, roomId, userId);
     const mentionedUserIds = collectMentionedUserIds(body, mentionCandidates);
+    const threadRootId = threadRootIdOverride ?? threadContextMessage?.id ?? null;
     const nextOptimisticMessage =
       editMessage || optimisticMessageId !== undefined
         ? null
@@ -215,6 +261,7 @@ export function useRoomComposer({
             senderId: userId,
             senderName,
             transactionId,
+            threadRootId,
           });
 
     if (editMessage) {
@@ -246,51 +293,29 @@ export function useRoomComposer({
     }
 
     try {
-      const messageContent: Record<string, unknown> = editMessage
-        ? {
-            msgtype: MsgType.Text,
-            body: `* ${body}`,
-            'm.new_content': {
-              msgtype: MsgType.Text,
-              body,
-              ...(mentionedUserIds.length ? { 'm.mentions': { user_ids: mentionedUserIds } } : {}),
-            },
-            'm.relates_to': {
-              event_id: editMessage.id,
-              rel_type: RelationType.Replace,
-            },
-          }
-        : {
-            msgtype: MsgType.Text,
-            body,
-            ...(replyToMessage?.id
-              ? { 'm.relates_to': { 'm.in_reply_to': { event_id: replyToMessage.id } } }
-              : {}),
-            ...(mentionedUserIds.length ? { 'm.mentions': { user_ids: mentionedUserIds } } : {}),
-          };
+      const { content: messageContent, threadRootId: sendThreadRootId } =
+        buildTextMessageRequest({
+          body,
+          mentionedUserIds,
+          replyToMessage,
+          editMessage,
+          threadRootId,
+        });
 
-      const response = (await (
-        client.sendEvent as (
-          nextRoomId: string,
-          eventType: string,
-          content: Record<string, unknown>,
-          txnId?: string
-        ) => Promise<unknown>
-      )(roomId, 'm.room.message', messageContent, transactionId)) as
-        | { event_id?: string }
-        | string
-        | undefined;
-
-      const remoteEventId =
-        typeof response === 'string'
-          ? response
-          : response && typeof response === 'object' && 'event_id' in response
-            ? response.event_id ?? null
-            : null;
+      const response = await sendMatrixMessage(
+        client,
+        roomId,
+        sendThreadRootId,
+        messageContent,
+        transactionId
+      );
+      const remoteEventId = getRemoteEventId(response);
 
       setOptimisticMessages((currentMessages) =>
-        currentMessages.map((message) =>
-          message.transactionId === transactionId ? { ...message, remoteEventId } : message
+        acknowledgeOptimisticMessage(
+          currentMessages,
+          transactionId,
+          remoteEventId
         )
       );
       scrollToLatest();
@@ -330,15 +355,20 @@ export function useRoomComposer({
     if (queuedImage && client && userId && !isPendingRoom) {
       const transactionId = createId('txn');
       const senderName = resolveOwnSenderName(client, roomId, userId);
+      const threadRootId = threadContextMessage?.id ?? null;
       const optimisticAttachmentMessage = createOptimisticAttachmentMessage({
         file: queuedImage.file,
         senderId: userId,
         senderName,
         transactionId,
         caption: body,
+        threadRootId,
       });
 
-      setOptimisticMessages((currentMessages) => [...currentMessages, optimisticAttachmentMessage]);
+      setOptimisticMessages((currentMessages) => [
+        ...currentMessages,
+        optimisticAttachmentMessage,
+      ]);
       setUploadingAttachment(true);
       setActionError(null);
       setDraft('');
@@ -349,26 +379,19 @@ export function useRoomComposer({
         const content = await buildMatrixMediaPayload(client, queuedImage.file, {
           caption: body,
         });
-        const response = (await (
-          client.sendEvent as (
-            nextRoomId: string,
-            eventType: string,
-            content: Record<string, unknown>,
-            txnId?: string
-          ) => Promise<unknown>
-        )(roomId, 'm.room.message', content, transactionId)) as
-          | { event_id?: string }
-          | string
-          | undefined;
-        const remoteEventId =
-          typeof response === 'string'
-            ? response
-            : response && typeof response === 'object' && 'event_id' in response
-              ? response.event_id ?? null
-              : null;
+        const response = await sendMatrixMessage(
+          client,
+          roomId,
+          threadRootId,
+          content,
+          transactionId
+        );
+        const remoteEventId = getRemoteEventId(response);
         setOptimisticMessages((currentMessages) =>
-          currentMessages.map((message) =>
-            message.transactionId === transactionId ? { ...message, remoteEventId } : message
+          acknowledgeOptimisticMessage(
+            currentMessages,
+            transactionId,
+            remoteEventId
           )
         );
         scrollToLatest();
@@ -517,30 +540,25 @@ export function useRoomComposer({
       setActionError(null);
       void (async () => {
         try {
-          const response = (await (
-            client.sendEvent as (
-              nextRoomId: string,
-              eventType: string,
-              content: Record<string, unknown>,
-              txnId?: string
-            ) => Promise<unknown>
-          )(
+          const response = await sendMatrixMessage(
+            client,
             roomId,
-            'm.room.message',
+            failedMessage.threadRootId ?? null,
             await buildMatrixMediaPayload(client, retryFile, {
               caption: failedMessage.attachmentCaption ?? failedMessage.body,
             }),
             transactionId
-          )) as { event_id?: string } | string | undefined;
-          const remoteEventId =
-            typeof response === 'string'
-              ? response
-              : response && typeof response === 'object' && 'event_id' in response
-                ? response.event_id ?? null
-                : null;
+          );
+          const remoteEventId = getRemoteEventId(response);
           setOptimisticMessages((currentMessages) =>
-            currentMessages.map((message) =>
-              message.id === messageId ? { ...message, transactionId, remoteEventId } : message
+            acknowledgeOptimisticMessage(
+              currentMessages.map((message) =>
+                message.id === messageId
+                  ? { ...message, transactionId }
+                  : message
+              ),
+              transactionId,
+              remoteEventId
             )
           );
           void refresh();
@@ -565,6 +583,7 @@ export function useRoomComposer({
     void sendTextMessage({
       body: failedMessage.body,
       optimisticMessageId: failedMessage.id,
+      threadRootIdOverride: failedMessage.threadRootId ?? null,
     });
   };
 

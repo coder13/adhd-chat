@@ -14,6 +14,10 @@ const meta = {
     position: { x: 120, y: 120 },
     canEdit: true,
     isPinned: false,
+    onClose: () => undefined,
+    onReply: () => undefined,
+    onPin: () => undefined,
+    onReact: () => undefined,
   },
   argTypes: {
     message: {
@@ -54,12 +58,17 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const OwnMessage: Story = {};
+export const OwnMessage: Story = {
+  args: {},
+};
 
 export const OtherMessage: Story = {
   args: {
     message: cloneStoryMessage(sampleIncomingTextMessage),
     canEdit: false,
+    onClose: () => undefined,
+    onPin: () => undefined,
+    onReact: () => undefined,
     onEdit: undefined,
     onDelete: undefined,
   },
@@ -68,5 +77,8 @@ export const OtherMessage: Story = {
 export const Pinned: Story = {
   args: {
     isPinned: true,
+    onClose: () => undefined,
+    onPin: () => undefined,
+    onReact: () => undefined,
   },
 };

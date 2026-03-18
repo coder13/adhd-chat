@@ -58,8 +58,8 @@ function ConversationList({
             key={chat.id}
             to={`/room/${encodeURIComponent(chat.id)}`}
             className={cn(
-              'app-hover-surface flex items-center gap-3 rounded-[26px] px-3 py-3',
-              isActive ? 'bg-accent text-text-inverse' : 'hover:bg-elevated'
+              'app-interactive-list-item flex items-center gap-3 rounded-[26px] px-3 py-3',
+              isActive ? 'is-active' : ''
             )}
           >
             <Avatar name={chat.name} />
@@ -68,7 +68,7 @@ function ConversationList({
                 <p
                   className={cn(
                     'truncate text-sm font-semibold',
-                    isActive ? 'text-text-inverse' : 'text-text'
+                    isActive ? 'text-primary-strong' : 'text-text'
                   )}
                 >
                   {chat.name}
@@ -76,7 +76,7 @@ function ConversationList({
                 <p
                   className={cn(
                     'text-xs',
-                    isActive ? 'text-white/75' : 'text-text-subtle'
+                    isActive ? 'text-primary/80' : 'text-text-subtle'
                   )}
                 >
                   {formatChatTimestamp(chat.timestamp)}
@@ -86,7 +86,7 @@ function ConversationList({
                 <p
                   className={cn(
                     'truncate text-sm',
-                    isActive ? 'text-white/80' : 'text-text-muted'
+                    isActive ? 'text-primary/85' : 'text-text-muted'
                   )}
                 >
                   {chat.preview}
@@ -95,7 +95,7 @@ function ConversationList({
                   <span
                     className={cn(
                       'h-2 w-2 rounded-full',
-                      isActive ? 'bg-white/80' : 'bg-accent'
+                      isActive ? 'bg-secondary' : 'bg-secondary'
                     )}
                   />
                 )}

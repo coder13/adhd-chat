@@ -8,11 +8,18 @@ const meta = {
     roomName: 'Weekend Check-in',
     roomDescription: 'Quick updates, photos, and plans',
     roomIcon: '💬',
+    roomAvatarUrl: null,
     roomSubtitle: 'Bubble view',
     typingIndicator: null,
     isEncrypted: false,
     isPendingRoom: false,
     tangentSpaceId: 'storybook-space',
+    onBack: () => undefined,
+    onEditTopic: () => undefined,
+    onOpenPinnedMessages: () => undefined,
+    onSearch: () => undefined,
+    onCreateTopic: () => undefined,
+    onOpenMenu: () => undefined,
   },
   argTypes: {
     onBack: {
@@ -47,12 +54,21 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const Default: Story = {
+  args: {},
+};
 
 export const Typing: Story = {
   args: {
     typingIndicator: 'Alex is typing…',
     isEncrypted: true,
+    roomAvatarUrl: null,
+    onBack: () => undefined,
+    onEditTopic: () => undefined,
+    onOpenPinnedMessages: () => undefined,
+    onSearch: () => undefined,
+    onCreateTopic: () => undefined,
+    onOpenMenu: () => undefined,
   },
 };
 
@@ -61,5 +77,12 @@ export const PendingRoom: Story = {
     isPendingRoom: true,
     tangentSpaceId: null,
     roomSubtitle: 'Setting up topic',
+    roomAvatarUrl: null,
+    onBack: () => undefined,
+    onEditTopic: () => undefined,
+    onOpenPinnedMessages: () => undefined,
+    onSearch: () => undefined,
+    onCreateTopic: () => undefined,
+    onOpenMenu: () => undefined,
   },
 };

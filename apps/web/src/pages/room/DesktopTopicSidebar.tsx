@@ -1,7 +1,9 @@
-import { AppAvatar } from '../../components';
-import type { TandemSpaceRoomSummary } from '../../lib/matrix/spaceCatalog';
-import { cn } from '../../lib/cn';
+import type {
+  TandemSpaceRoomSummary,
+  TandemSpaceSummary,
+} from '../../lib/matrix/spaceCatalog';
 import DesktopDirectoryPanel, { type DesktopDirectoryView } from './DesktopDirectoryPanel';
+import DesktopRailRoomItem from './DesktopRailRoomItem';
 import DesktopSettingsPanel, { type DesktopSettingsSection } from './DesktopSettingsPanel';
 
 interface DesktopTopicSidebarProps {
@@ -12,6 +14,8 @@ interface DesktopTopicSidebarProps {
   currentRoomId: string;
   topics: TandemSpaceRoomSummary[];
   onSelectTopic: (topicId: string) => void;
+  onSelectHub?: (space: TandemSpaceSummary) => void;
+  onOpenAddContact?: () => void;
   onSelectSettingsSection: (section: Exclude<DesktopSettingsSection, 'menu'>) => void;
   onOpenRoute: (path: string) => void;
 }
@@ -24,6 +28,8 @@ export default function DesktopTopicSidebar({
   currentRoomId,
   topics,
   onSelectTopic,
+  onSelectHub,
+  onOpenAddContact,
   onSelectSettingsSection,
   onOpenRoute,
 }: DesktopTopicSidebarProps) {
@@ -45,7 +51,7 @@ export default function DesktopTopicSidebar({
 
   return (
     <aside
-      className="hidden xl:flex xl:shrink-0 xl:flex-col xl:border-r xl:border-line/80 xl:bg-white/70 xl:backdrop-blur-sm"
+      className="app-glass-panel app-surface-divider-right hidden xl:flex xl:shrink-0 xl:flex-col"
       style={{ width }}
     >
       {view === 'topics' ? (
@@ -56,48 +62,18 @@ export default function DesktopTopicSidebar({
               const canOpen = topic.membership === 'join';
 
               return (
-                <button
+                <DesktopRailRoomItem
                   key={topic.id}
-                  type="button"
                   onClick={() => onSelectTopic(topic.id)}
-                  className={cn(
-                    'w-full rounded-[22px] border px-3 py-3 text-left transition-colors',
-                    isActive
-                      ? 'border-blue-200 bg-blue-50'
-                      : 'border-transparent bg-transparent hover:border-line hover:bg-panel/80'
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <AppAvatar
-                      name={topic.name}
-                      icon={topic.icon}
-                      className="mt-0.5 h-10 w-10 shrink-0"
-                      textClassName="text-sm"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <div className="truncate text-sm font-semibold text-text">
-                          {topic.name}
-                        </div>
-                        {topic.unreadCount > 0 ? (
-                          <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-text-inverse">
-                            {topic.unreadCount}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-1 truncate text-xs text-text-muted">
-                        {topic.description || topic.preview}
-                      </div>
-                      <div className="mt-2 text-[11px] text-text-subtle">
-                        {isActive
-                          ? 'Open now'
-                          : canOpen
-                            ? 'Switch topic'
-                            : 'Join topic'}
-                      </div>
-                    </div>
-                  </div>
-                </button>
+                  name={topic.name}
+                  icon={topic.icon}
+                  preview={topic.description || topic.preview}
+                  unreadCount={topic.unreadCount}
+                  footerLabel={
+                    isActive ? 'Open now' : canOpen ? 'Switch topic' : 'Join topic'
+                  }
+                  isActive={isActive}
+                />
               );
             })}
             {visibleTopics.length === 0 ? (
@@ -118,10 +94,15 @@ export default function DesktopTopicSidebar({
         <DesktopSettingsPanel
           section={settingsSection}
           onSelectSection={onSelectSettingsSection}
-          onOpenRoute={onOpenRoute}
         />
       ) : (
-        <DesktopDirectoryPanel view={view} />
+        <DesktopDirectoryPanel
+          view={view}
+          onSelectHub={onSelectHub}
+          onOpenRoute={onOpenRoute}
+          onOpenAddContact={onOpenAddContact}
+          currentRoomId={currentRoomId}
+        />
       )}
     </aside>
   );

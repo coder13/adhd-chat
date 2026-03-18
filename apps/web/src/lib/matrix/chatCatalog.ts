@@ -12,18 +12,15 @@ import {
 } from './tandem';
 import { getRoomIcon } from './identity';
 import {
-  buildReactionIndex,
-  buildReplacementIndex,
-  isVisibleTimelineMessage,
-  resolveTimelineEvent,
   type TimelineReaction,
   type TimelineReply,
 } from './timelineRelations';
 import {
-  getRoomTimelineEvents,
   getTimelineEventContent,
+  getRoomTimelineEvents,
   isRenderableTimelineMessage,
 } from './timelineEvents';
+import { resolveTimelineMessagesFromEvents } from './timelineMessageResolver';
 
 const ADHD_CHAT_SPACE_EVENT_TYPE = 'dev.adhd-chat.space';
 const ROOM_CREATE_EVENT_TYPE = 'm.room.create';
@@ -83,6 +80,8 @@ export type TimelineMessage = {
   replyTo?: TimelineReply | null;
   reactions?: TimelineReaction[];
   mentionedUserIds?: string[] | null;
+  threadRootId?: string | null;
+  isThreadRoot?: boolean;
 };
 
 function asArray<T>(value: T | T[] | null | undefined): T[] {
@@ -295,66 +294,44 @@ export function getTimelineMessages(
   currentUserId: string
 ): TimelineMessage[] {
   const events = getRoomTimelineEvents(room);
-  const eventById = new Map(
+  const resolvedMessages = resolveTimelineMessagesFromEvents(
+    client,
+    room,
+    currentUserId,
     events
-      .map((event) => [event.getId(), event] as const)
-      .filter((entry): entry is [string, MatrixEvent] => Boolean(entry[0]))
   );
-  const replacementsByTarget = buildReplacementIndex(events);
-  const reactionsByTarget = buildReactionIndex(events, room, currentUserId);
+  const readByNamesByEventId = new Map<string, string[]>();
 
-  return events
-    .filter(isVisibleTimelineMessage)
-    .map((event) => {
-      const readByNames = event
-        .getId()
-        ? room
-            .getUsersReadUpTo(event)
-            .filter((readerId) => {
-              if (readerId === currentUserId) {
-                return false;
-              }
+  events.forEach((event) => {
+    const eventId = event.getId();
+    if (!eventId) {
+      return;
+    }
 
-              const member = room.getMember(readerId);
-              return member?.membership === 'join';
-            })
-            .map((readerId) => {
-              const member = room.getMember(readerId);
-              return member?.name || member?.rawDisplayName || readerId;
-            })
-            .sort((left, right) => left.localeCompare(right))
-        : [];
-      const resolvedMessage = resolveTimelineEvent(event, {
-        currentUserId,
-        room,
-        replacementsByTarget,
-        reactionsByTarget,
-        eventById,
-      });
+    readByNamesByEventId.set(
+      eventId,
+      room
+        .getUsersReadUpTo(event)
+        .filter((readerId) => {
+          if (readerId === currentUserId) {
+            return false;
+          }
 
-      return {
-        ...resolvedMessage,
-        mediaUrl: resolvedMessage.mediaUrl
-          ? (client.mxcUrlToHttp(
-              resolvedMessage.mediaUrl,
-              undefined,
-              undefined,
-              undefined,
-              false,
-              true,
-              true
-            ) ?? null)
-          : null,
-        readByNames,
-      };
-    })
-    .filter(
-      (message) =>
-        message.isDeleted ||
-        message.body.trim().length > 0 ||
-        Boolean(message.mediaUrl)
-    )
-    .sort((a, b) => a.timestamp - b.timestamp);
+          const member = room.getMember(readerId);
+          return member?.membership === 'join';
+        })
+        .map((readerId) => {
+          const member = room.getMember(readerId);
+          return member?.name || member?.rawDisplayName || readerId;
+        })
+        .sort((left, right) => left.localeCompare(right))
+    );
+  });
+
+  return resolvedMessages.map((message) => ({
+    ...message,
+    readByNames: readByNamesByEventId.get(message.id) ?? [],
+  }));
 }
 
 export async function buildContactCatalog(

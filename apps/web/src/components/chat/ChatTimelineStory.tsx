@@ -144,6 +144,7 @@ function ChatTimelineStory({
             roomName={title}
             roomDescription={subtitle}
             roomIcon="💬"
+            roomAvatarUrl={null}
             roomSubtitle={viewMode === 'bubbles' ? 'Bubble view' : 'Timeline view'}
             typingIndicator={typingIndicator}
             isEncrypted={isEncrypted}
@@ -151,6 +152,7 @@ function ChatTimelineStory({
             tangentSpaceId="storybook-space"
             onBack={() => undefined}
             onEditTopic={() => undefined}
+            onOpenPinnedMessages={() => undefined}
             onSearch={() => undefined}
             onCreateTopic={() => undefined}
             onOpenMenu={() => undefined}

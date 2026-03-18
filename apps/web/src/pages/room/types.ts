@@ -1,6 +1,6 @@
-import type { RoomSnapshot } from '../../lib/matrix/roomSnapshot';
+import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
 
-export type RoomMessage = RoomSnapshot['messages'][number];
+export type RoomMessage = TimelineMessage;
 
 export type ComposerMode =
   | { type: 'reply' | 'edit'; message: RoomMessage }

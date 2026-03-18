@@ -4,6 +4,10 @@ export function isMissingTandemSpaceError(error: string | null) {
   );
 }
 
+export function isMissingRoomError(error: string | null) {
+  return error === 'Conversation not found';
+}
+
 export function shouldSuppressMissingTandemSpaceError({
   error,
   hasCachedData,
@@ -22,4 +26,24 @@ export function shouldSuppressMissingTandemSpaceError({
   }
 
   return hasCachedData || hasRelationship || isAuthRestoring;
+}
+
+export function shouldSuppressMissingRoomError({
+  error,
+  hasCachedData,
+  hasLiveRoom,
+  isLoading,
+  isAuthRestoring,
+}: {
+  error: string | null;
+  hasCachedData: boolean;
+  hasLiveRoom: boolean;
+  isLoading: boolean;
+  isAuthRestoring: boolean;
+}) {
+  if (!isMissingRoomError(error) || hasLiveRoom) {
+    return false;
+  }
+
+  return hasCachedData || isLoading || isAuthRestoring;
 }

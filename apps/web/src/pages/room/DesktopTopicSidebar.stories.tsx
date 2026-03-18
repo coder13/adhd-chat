@@ -9,9 +9,7 @@ const meta = {
     width: 320,
     view: 'topics',
     settingsSection: 'menu',
-    currentUserName: 'Cailyn',
-    currentUserAvatarUrl: null,
-    currentUserId: '@cailyn:matrix.org',
+    searchQuery: '',
     currentRoomId: '!room-2:adhd.chat',
     topics: [
       {
@@ -54,6 +52,9 @@ const meta = {
         isArchived: false,
       },
     ],
+    onSelectTopic: () => undefined,
+    onSelectSettingsSection: () => undefined,
+    onOpenRoute: () => undefined,
   },
   argTypes: {
     onSelectTopic: {
@@ -101,7 +102,9 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const Default: Story = {
+  args: {},
+};
 
 export const DenseUnreadState: Story = {
   args: {
@@ -147,5 +150,9 @@ export const DenseUnreadState: Story = {
         isArchived: false,
       },
     ],
+    searchQuery: '',
+    onSelectTopic: () => undefined,
+    onSelectSettingsSection: () => undefined,
+    onOpenRoute: () => undefined,
   },
 };

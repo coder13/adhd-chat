@@ -19,6 +19,7 @@ import {
 } from 'ionicons/icons';
 import { useNavigate } from 'react-router-dom';
 import { AppAvatar } from '../components';
+import { useCurrentUserProfileSummary } from '../hooks/useCurrentUserProfileSummary';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 
 const menuItems = [
@@ -39,7 +40,7 @@ const menuItems = [
   },
   {
     icon: phonePortraitOutline,
-    title: 'Manage devices',
+    title: 'Sessions',
     path: '/menu/devices',
   },
   {
@@ -52,15 +53,9 @@ const menuItems = [
 function UserMenuPage() {
   const navigate = useNavigate();
   const { client, user } = useMatrixClient();
-  const currentUserProfile = user
-    ? (client?.getUser(user.userId) ?? null)
-    : null;
-  const currentUserName =
-    currentUserProfile?.displayName || user?.userId || 'User';
-  const currentUserAvatarUrl = currentUserProfile?.avatarUrl
-    ? (client?.mxcUrlToHttp(currentUserProfile.avatarUrl, 96, 96, 'crop') ??
-      null)
-    : null;
+  const currentUserProfile = useCurrentUserProfileSummary(client, user?.userId, 96);
+  const currentUserName = currentUserProfile.name;
+  const currentUserAvatarUrl = currentUserProfile.avatarUrl;
 
   return (
     <IonPage className="app-shell">
@@ -98,14 +93,11 @@ function UserMenuPage() {
               <button
                 type="button"
                 key={item.path}
-                className="flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left transition-colors hover:bg-elevated/70"
+                className="app-interactive-list-item flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left"
                 onClick={() => navigate(item.path)}
               >
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-elevated text-text-muted">
-                  <IonIcon
-                    icon={item.icon}
-                    className="text-[18px]"
-                  />
+                <div className="app-icon-button flex h-9 w-9 items-center justify-center rounded-full text-primary-strong">
+                  <IonIcon icon={item.icon} className="text-[18px]" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-[15px] font-medium text-text">

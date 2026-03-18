@@ -9,6 +9,7 @@ jest.mock('matrix-js-sdk', () => ({
 }));
 
 import {
+  acknowledgeOptimisticMessage,
   applyOptimisticReactionChanges,
   createOptimisticAttachmentMessage,
   createOptimisticTextMessage,
@@ -188,6 +189,31 @@ describe('optimistic timeline helpers', () => {
     );
 
     expect(reconciled).toEqual([]);
+  });
+
+  it('marks acknowledged optimistic messages as sent immediately', () => {
+    const optimisticMessage = createOptimisticTextMessage({
+      body: 'pending',
+      senderId: '@me:matrix.org',
+      senderName: 'Me',
+      transactionId: 'txn-5',
+      timestamp: 20,
+    });
+
+    const acknowledged = acknowledgeOptimisticMessage(
+      [optimisticMessage],
+      'txn-5',
+      '$event-5'
+    );
+
+    expect(acknowledged).toEqual([
+      expect.objectContaining({
+        transactionId: 'txn-5',
+        remoteEventId: '$event-5',
+        deliveryStatus: 'sent',
+        errorText: null,
+      }),
+    ]);
   });
 
   it('applies optimistic reaction additions immediately', () => {

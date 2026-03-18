@@ -3,12 +3,14 @@ import {
   arrowBack,
   chatbubbleOutline,
   chevronForwardOutline,
+  gridOutline,
   menuOutline,
   peopleOutline,
   searchOutline,
   settingsOutline,
 } from 'ionicons/icons';
-import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState } from 'react';
 import { AppAvatar } from '../../components';
 import type { DesktopSettingsSection } from './DesktopSettingsPanel';
 import type { DesktopDirectoryView } from './DesktopDirectoryPanel';
@@ -18,12 +20,14 @@ interface DesktopRailHeaderProps {
   settingsSection: DesktopSettingsSection;
   searchQuery: string;
   showMenu: boolean;
+  showSearch?: boolean;
   currentUserName: string;
   currentUserAvatarUrl: string | null;
   currentUserId: string | null;
   onToggleMenu: () => void;
   onCloseMenu: () => void;
   onSearchQueryChange: (value: string) => void;
+  onOpenHubs: () => void;
   onOpenContacts: () => void;
   onOpenOtherRooms: () => void;
   onOpenSettings: () => void;
@@ -43,9 +47,9 @@ function MenuAction({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-elevated/70"
+      className="app-interactive-list-item flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left"
     >
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-elevated text-text-muted">
+      <div className="app-icon-button flex h-9 w-9 items-center justify-center rounded-full text-primary-strong">
         <IonIcon icon={icon} className="text-[18px]" />
       </div>
       <div className="min-w-0 flex-1 text-[15px] font-medium text-text">{label}</div>
@@ -56,6 +60,8 @@ function MenuAction({
 
 function getSettingsTitle(section: DesktopSettingsSection) {
   switch (section) {
+    case 'profile':
+      return 'Profile';
     case 'notifications':
       return 'Notifications';
     case 'encryption':
@@ -63,7 +69,9 @@ function getSettingsTitle(section: DesktopSettingsSection) {
     case 'account':
       return 'Manage account';
     case 'devices':
-      return 'Manage devices';
+      return 'Sessions';
+    case 'unverified-devices':
+      return 'Unverified devices';
     case 'chat-appearance':
       return 'Chat appearance';
     default:
@@ -75,8 +83,16 @@ function getTitle(
   view: 'topics' | 'settings' | DesktopDirectoryView,
   settingsSection: DesktopSettingsSection
 ) {
+  if (view === 'hubs') {
+    return 'Select hub';
+  }
+
   if (view === 'contacts') {
     return 'Contacts';
+  }
+
+  if (view === 'add-contact') {
+    return 'Add contact';
   }
 
   if (view === 'other') {
@@ -91,28 +107,68 @@ export default function DesktopRailHeader({
   settingsSection,
   searchQuery,
   showMenu,
+  showSearch = true,
   currentUserName,
   currentUserAvatarUrl,
   currentUserId,
   onToggleMenu,
   onCloseMenu,
   onSearchQueryChange,
+  onOpenHubs,
   onOpenContacts,
   onOpenOtherRooms,
   onOpenSettings,
   onBack,
 }: DesktopRailHeaderProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
+
+  useEffect(() => {
+    if (!showMenu || !triggerRef.current || typeof window === 'undefined') {
+      return;
+    }
+
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+
+      setMenuPosition({
+        left: rect.left,
+        top: rect.bottom - 2,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [showMenu]);
 
   useEffect(() => {
     if (!showMenu) {
+      setMenuPosition(null);
       return;
     }
 
     const handlePointerDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        onCloseMenu();
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
       }
+
+      if (menuRef.current?.contains(target) || triggerRef.current?.contains(target)) {
+        return;
+      }
+
+      onCloseMenu();
     };
 
     window.addEventListener('mousedown', handlePointerDown);
@@ -124,34 +180,37 @@ export default function DesktopRailHeader({
   return (
     <div
       className="relative z-40 flex min-w-0 flex-1 items-center gap-2 overflow-visible px-3 py-3"
-      ref={menuRef}
+      ref={containerRef}
     >
       {view === 'topics' ? (
         <>
           <button
+            ref={triggerRef}
             type="button"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-panel text-text transition-colors hover:bg-elevated"
+            className="app-icon-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
             onClick={onToggleMenu}
             aria-label="Open app menu"
           >
             <IonIcon icon={menuOutline} className="text-xl" />
           </button>
-          <label className="flex min-w-0 flex-1 items-center gap-3 rounded-full bg-panel px-4 py-3 text-text-muted transition-colors focus-within:ring-2 focus-within:ring-accent/30">
-            <IonIcon icon={searchOutline} className="text-lg shrink-0" />
-            <input
-              value={searchQuery}
-              onChange={(event) => onSearchQueryChange(event.target.value)}
-              placeholder="Search rooms"
-              className="min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-text-subtle"
-              aria-label="Search visible rooms"
-            />
-          </label>
+          {showSearch ? (
+            <label className="flex min-w-0 flex-1 items-center gap-3 rounded-full bg-panel px-4 py-3 text-text-muted transition-colors focus-within:ring-2 focus-within:ring-accent/30">
+              <IonIcon icon={searchOutline} className="text-lg shrink-0" />
+              <input
+                value={searchQuery}
+                onChange={(event) => onSearchQueryChange(event.target.value)}
+                placeholder="Search rooms"
+                className="min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-text-subtle"
+                aria-label="Search visible rooms"
+              />
+            </label>
+          ) : null}
         </>
       ) : (
         <>
           <button
             type="button"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-panel text-text transition-colors hover:bg-elevated"
+            className="app-icon-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
             onClick={onBack}
             aria-label={settingsSection === 'menu' ? 'Back to topics' : 'Back to settings'}
           >
@@ -165,44 +224,65 @@ export default function DesktopRailHeader({
           </>
       )}
 
-      {showMenu ? (
-        <div className="absolute left-3 top-[calc(100%-2px)] z-50 w-[288px] rounded-[28px] border border-line/80 bg-white/95 p-3 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.45)] backdrop-blur-xl">
-          <div className="mb-2 flex items-center gap-3 rounded-[22px] px-2 py-2">
-            <AppAvatar
-              name={currentUserName}
-              avatarUrl={currentUserAvatarUrl}
-              className="h-11 w-11"
-              textClassName="text-sm"
-            />
-            <div className="min-w-0">
-              <div className="truncate text-base font-semibold text-text">
-                {currentUserName}
+      {showMenu && menuPosition
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="app-menu-surface fixed z-[120] w-[288px] rounded-[28px] p-3"
+              style={{
+                left: menuPosition.left,
+                top: menuPosition.top,
+              }}
+            >
+              <div className="mb-2 flex items-center gap-3 rounded-[22px] px-2 py-2">
+                <button
+                  type="button"
+                  className="app-interactive-list-item flex min-w-0 flex-1 items-center gap-3 rounded-[22px] px-2 py-2 text-left"
+                  onClick={onOpenSettings}
+                >
+                  <AppAvatar
+                    name={currentUserName}
+                    avatarUrl={currentUserAvatarUrl}
+                    className="h-11 w-11"
+                    textClassName="text-sm"
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate text-base font-semibold text-text">
+                      {currentUserName}
+                    </div>
+                    {currentUserId ? (
+                      <div className="truncate text-xs text-text-muted">{currentUserId}</div>
+                    ) : null}
+                  </div>
+                </button>
               </div>
-              {currentUserId ? (
-                <div className="truncate text-xs text-text-muted">{currentUserId}</div>
-              ) : null}
-            </div>
-          </div>
 
-          <div className="space-y-1">
-            <MenuAction
-              icon={peopleOutline}
-              label="Contacts"
-              onClick={onOpenContacts}
-            />
-            <MenuAction
-              icon={chatbubbleOutline}
-              label="Other rooms"
-              onClick={onOpenOtherRooms}
-            />
-            <MenuAction
-              icon={settingsOutline}
-              label="Settings"
-              onClick={onOpenSettings}
-            />
-          </div>
-        </div>
-      ) : null}
+              <div className="space-y-1">
+                <MenuAction
+                  icon={gridOutline}
+                  label="Select hub"
+                  onClick={onOpenHubs}
+                />
+                <MenuAction
+                  icon={peopleOutline}
+                  label="Contacts"
+                  onClick={onOpenContacts}
+                />
+                <MenuAction
+                  icon={chatbubbleOutline}
+                  label="Other rooms"
+                  onClick={onOpenOtherRooms}
+                />
+                <MenuAction
+                  icon={settingsOutline}
+                  label="Settings"
+                  onClick={onOpenSettings}
+                />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

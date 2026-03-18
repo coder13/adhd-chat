@@ -5,7 +5,7 @@ import type { TimelineReaction } from './timelineRelations';
 export type OptimisticTimelineMessage = TimelineMessage & {
   localId: string;
   transactionId: string;
-  deliveryStatus: 'sending' | 'failed';
+  deliveryStatus: 'sending' | 'failed' | 'sent';
   errorText?: string | null;
   remoteEventId?: string | null;
   retryFile?: File | null;
@@ -24,6 +24,7 @@ export function createOptimisticTextMessage(options: {
   senderId: string;
   senderName: string;
   transactionId: string;
+  threadRootId?: string | null;
   timestamp?: number;
 }): OptimisticTimelineMessage {
   const timestamp = options.timestamp ?? Date.now();
@@ -46,6 +47,8 @@ export function createOptimisticTextMessage(options: {
     replyTo: null,
     reactions: [],
     mentionedUserIds: [],
+    threadRootId: options.threadRootId ?? null,
+    isThreadRoot: false,
   };
 }
 
@@ -55,6 +58,7 @@ export function createOptimisticAttachmentMessage(options: {
   senderName: string;
   transactionId: string;
   caption?: string | null;
+  threadRootId?: string | null;
   timestamp?: number;
 }) {
   const timestamp = options.timestamp ?? Date.now();
@@ -86,6 +90,8 @@ export function createOptimisticAttachmentMessage(options: {
     replyTo: null,
     reactions: [],
     mentionedUserIds: [],
+    threadRootId: options.threadRootId ?? null,
+    isThreadRoot: false,
   } satisfies OptimisticTimelineMessage;
 }
 
@@ -119,6 +125,23 @@ export function reconcileOptimisticTimeline(
 
     return true;
   });
+}
+
+export function acknowledgeOptimisticMessage(
+  optimisticMessages: OptimisticTimelineMessage[],
+  transactionId: string,
+  remoteEventId: string | null
+) {
+  return optimisticMessages.map((message) =>
+    message.transactionId === transactionId
+      ? {
+          ...message,
+          remoteEventId,
+          deliveryStatus: 'sent' as const,
+          errorText: null,
+        }
+      : message
+  );
 }
 
 export function resolveOwnSenderName(

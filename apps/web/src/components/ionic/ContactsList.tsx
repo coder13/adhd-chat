@@ -39,7 +39,10 @@ function ContactsList({ contacts }: ContactsListProps) {
           routerLink={`/room/${encodeURIComponent(contact.roomId)}`}
           className="app-list-item app-hover-surface"
         >
-          <AppAvatar name={contact.displayName} className="h-12 w-12" />
+          <AppAvatar
+            name={contact.displayName}
+            className="mr-3 h-12 w-12"
+          />
           <IonLabel>
             <div className="flex items-center justify-between gap-3">
               <h2 className="truncate text-[15px] font-semibold text-text">

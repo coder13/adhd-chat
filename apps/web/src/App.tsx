@@ -19,6 +19,7 @@ import UserMenuPage from './pages/UserMenu';
 import UserMenuStubPage from './pages/UserMenuStub';
 import EncryptionSettingsPage from './pages/settings/EncryptionSettingsPage';
 import EncryptionVerificationPage from './pages/settings/EncryptionVerificationPage';
+import SessionsSettingsPage from './pages/settings/SessionsSettingsPage';
 import {
   BrowserInteractiveAuthModal,
   InteractiveAuthModal,
@@ -73,6 +74,7 @@ function AppShell() {
         <Route path="/contacts/new" element={<AddContactPage />} />
         <Route path="/menu" element={<UserMenuPage />} />
         <Route path="/menu/encryption" element={<EncryptionSettingsPage />} />
+        <Route path="/menu/devices" element={<SessionsSettingsPage />} />
         <Route
           path="/menu/encryption/verify"
           element={<EncryptionVerificationPage />}
@@ -88,6 +90,7 @@ function AppShell() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/room/:roomId" element={<Room />} />
+        <Route path="/room/:roomId/thread/:threadRootId" element={<Room />} />
         <Route path="/room/:roomId/pins" element={<RoomPinnedMessages />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
       </Routes>

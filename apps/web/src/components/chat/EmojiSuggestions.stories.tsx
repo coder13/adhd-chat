@@ -8,6 +8,8 @@ const meta = {
   args: {
     suggestions: storyEmojiSuggestions,
     selectedIndex: 0,
+    onSelect: () => undefined,
+    onHighlight: () => undefined,
   },
   argTypes: {
     suggestions: {
@@ -36,10 +38,14 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const FirstSelected: Story = {};
+export const FirstSelected: Story = {
+  args: {},
+};
 
 export const ThirdSelected: Story = {
   args: {
     selectedIndex: 2,
+    onSelect: () => undefined,
+    onHighlight: () => undefined,
   },
 };

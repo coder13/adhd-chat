@@ -10,8 +10,8 @@ jest.mock('matrix-js-sdk', () => ({
 import { buildMatrixMediaPayload } from '../media';
 
 describe('buildMatrixMediaPayload', () => {
-  const originalCreateObjectUrl = URL.createObjectURL;
-  const originalRevokeObjectUrl = URL.revokeObjectURL;
+  const originalCreateObjectUrl = URL.createObjectURL?.bind(URL);
+  const originalRevokeObjectUrl = URL.revokeObjectURL?.bind(URL);
   const originalImage = globalThis.Image;
 
   beforeEach(() => {
@@ -33,8 +33,8 @@ describe('buildMatrixMediaPayload', () => {
   });
 
   afterEach(() => {
-    URL.createObjectURL = originalCreateObjectUrl;
-    URL.revokeObjectURL = originalRevokeObjectUrl;
+    URL.createObjectURL = originalCreateObjectUrl ?? jest.fn();
+    URL.revokeObjectURL = originalRevokeObjectUrl ?? jest.fn();
     globalThis.Image = originalImage;
   });
 
@@ -50,17 +50,11 @@ describe('buildMatrixMediaPayload', () => {
       caption: 'Look at this',
     });
 
-    expect(payload).toEqual(
-      expect.objectContaining({
-        msgtype: 'm.image',
-        body: 'Look at this',
-        filename: 'photo.png',
-        url: 'mxc://example.org/image',
-        info: expect.objectContaining({
-          w: 1200,
-          h: 800,
-        }),
-      })
-    );
+    expect(payload.msgtype).toBe('m.image');
+    expect(payload.body).toBe('Look at this');
+    expect(payload.filename).toBe('photo.png');
+    expect(payload.url).toBe('mxc://example.org/image');
+    expect(payload.info?.w).toBe(1200);
+    expect(payload.info?.h).toBe(800);
   });
 });

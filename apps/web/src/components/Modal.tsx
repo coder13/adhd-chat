@@ -63,6 +63,7 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
       aria-labelledby="modal-title"
       role="dialog"
       aria-modal="true"
+      data-blocking-dialog="true"
     >
       <div
         className={cn(

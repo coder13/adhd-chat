@@ -2,7 +2,7 @@ import { IonButton, IonIcon, IonSearchbar } from '@ionic/react';
 import { ClientEvent, RoomEvent } from 'matrix-js-sdk';
 import { searchOutline } from 'ionicons/icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AppAvatar, AuthFallbackState, Button, Card } from '../components';
 import { ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
@@ -56,6 +56,7 @@ function Home() {
     isRecoveringRelationships,
   } = useTandem(client, cacheUserId);
   const navigate = useNavigate();
+  const location = useLocation();
   const isDesktopLayout = useMediaQuery('(min-width: 1280px)');
   const [search, setSearch] = useState('');
   const cacheKey = cacheUserId ? `tandem-spaces:${cacheUserId}` : null;
@@ -170,9 +171,18 @@ function Home() {
   const canRenderCachedHome =
     state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
   const isRestoring = !isReady || !user;
+  const isHubPickerMode = useMemo(() => {
+    return new URLSearchParams(location.search).get('select-hub') === '1';
+  }, [location.search]);
 
   useEffect(() => {
-    if (!isDesktopLayout || !client || !user || displaySpaces.length === 0) {
+    if (
+      !isDesktopLayout ||
+      isHubPickerMode ||
+      !client ||
+      !user ||
+      displaySpaces.length === 0
+    ) {
       return;
     }
 
@@ -187,7 +197,7 @@ function Home() {
     }
 
     navigate(`/room/${encodeURIComponent(target.roomId)}`, { replace: true });
-  }, [client, displaySpaces, isDesktopLayout, navigate, user]);
+  }, [client, displaySpaces, isDesktopLayout, isHubPickerMode, navigate, user]);
 
   if (isRestoring && !canRenderCachedHome) {
     return (

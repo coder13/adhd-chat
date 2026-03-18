@@ -12,6 +12,7 @@ const meta = {
   args: {
     mode: 'reply',
     message: cloneStoryMessage(sampleReplyMessage),
+    onCancel: () => undefined,
   },
   argTypes: {
     message: {
@@ -37,7 +38,9 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Reply: Story = {};
+export const Reply: Story = {
+  args: {},
+};
 
 export const EditDeleted: Story = {
   args: {
@@ -47,5 +50,6 @@ export const EditDeleted: Story = {
       isDeleted: true,
       body: 'Original message deleted',
     },
+    onCancel: () => undefined,
   },
 };

@@ -1,7 +1,7 @@
 import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
 
 interface ComposerContextBarProps {
-  mode: 'reply' | 'edit';
+  mode: 'reply' | 'edit' | 'thread';
   message: TimelineMessage;
   onCancel: () => void;
 }
@@ -15,7 +15,11 @@ function ComposerContextBar({
     <div className="mb-2 flex items-start justify-between gap-3 rounded-2xl border border-line bg-panel/90 px-3 py-2">
       <div className="min-w-0">
         <p className="text-xs font-semibold text-text">
-          {mode === 'reply' ? `Replying to ${message.senderName}` : 'Editing message'}
+          {mode === 'reply'
+            ? `Replying to ${message.senderName}`
+            : mode === 'thread'
+              ? `Replying in ${message.senderName}'s thread`
+              : 'Editing message'}
         </p>
         <p className="truncate text-xs text-text-muted">
           {message.isDeleted ? 'Message deleted' : message.body}

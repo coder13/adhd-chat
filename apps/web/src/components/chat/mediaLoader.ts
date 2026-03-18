@@ -20,8 +20,8 @@ function touchCacheEntry(key: string, objectUrl: string) {
   });
 
   while (mediaCache.size > MAX_CACHED_MEDIA_ENTRIES) {
-    const oldestKey = mediaCache.keys().next().value as string | undefined;
-    if (!oldestKey) {
+    const oldestKey = mediaCache.keys().next().value;
+    if (typeof oldestKey !== 'string') {
       break;
     }
 

@@ -71,6 +71,8 @@ export type ResolvedTimelineEvent = {
   replyTo: TimelineReply | null;
   reactions: TimelineReaction[];
   mentionedUserIds: string[];
+  threadRootId: string | null;
+  isThreadRoot: boolean;
 };
 
 type ReactionAggregate = {
@@ -319,6 +321,8 @@ export function resolveTimelineEvent(
         : null,
     reactions: reactionsByTarget.get(eventId) ?? [],
     mentionedUserIds: effectiveContent['m.mentions']?.user_ids ?? [],
+    threadRootId: event.threadRootId ?? null,
+    isThreadRoot: Boolean(event.isThreadRoot),
   };
 }
 

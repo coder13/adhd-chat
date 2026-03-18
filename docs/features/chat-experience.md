@@ -48,7 +48,8 @@ surfaces with a lightweight Ionic shell.
 
 ## Design Notes
 
-- The app shell stays mobile-first even on desktop.
+- Mobile and desktop intentionally use different navigation models. See
+  [Navigation Model](../architecture/navigation-model.md).
 - Persisted local caches help pages render without flashing empty states during
   Matrix reloads.
 - Theme usage should prefer semantic tokens over hardcoded gray palettes.

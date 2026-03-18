@@ -8,7 +8,7 @@ interface CardProps extends HTMLAttributes<HTMLDivElement>, PropsWithChildren {
 const toneStyles = {
   default: 'bg-panel border-line',
   muted: 'bg-elevated/80 border-line',
-  accent: 'bg-accent-soft/70 border-accent/20',
+  accent: 'bg-accent-soft/70 border-transparent',
 };
 
 function Card({ tone = 'default', className, children, ...props }: CardProps) {

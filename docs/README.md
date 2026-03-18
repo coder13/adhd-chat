@@ -7,6 +7,11 @@ mix of root-level notes.
 
 - [Architecture](./architecture/monorepo.md): repo shape, workspace boundaries,
   and shared tooling.
+- [Matrix Shared Data Protocol](./architecture/matrix-shared-data-protocol.md):
+  Matrix-native schema and lifecycle rules for notes, tasks, calendar items,
+  reminders, room state, and account data.
+- [Navigation Model](./architecture/navigation-model.md): mobile page navigation
+  versus desktop shell navigation, including left-rail and right-rail rules.
 - [Web Client Runtime](./architecture/web-client-runtime.md): startup,
   bootstrap, caching, Tandem derivation, encryption behavior, and migration
   notes.

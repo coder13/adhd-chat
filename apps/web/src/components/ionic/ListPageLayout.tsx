@@ -10,6 +10,7 @@ import {
 import type { PropsWithChildren, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppAvatar } from '..';
+import { useCurrentUserProfileSummary } from '../../hooks/useCurrentUserProfileSummary';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import BottomNav from '../navigation/BottomNav';
 
@@ -29,15 +30,9 @@ function ListPageLayout({
 }: ListPageLayoutProps) {
   const navigate = useNavigate();
   const { client, user } = useMatrixClient();
-  const currentUserProfile = user
-    ? (client?.getUser(user.userId) ?? null)
-    : null;
-  const currentUserName =
-    currentUserProfile?.displayName || user?.userId || 'User';
-  const currentUserAvatarUrl = currentUserProfile?.avatarUrl
-    ? (client?.mxcUrlToHttp(currentUserProfile.avatarUrl, 80, 80, 'crop') ??
-      null)
-    : null;
+  const currentUserProfile = useCurrentUserProfileSummary(client, user?.userId, 80);
+  const currentUserName = currentUserProfile.name;
+  const currentUserAvatarUrl = currentUserProfile.avatarUrl;
 
   return (
     <IonPage className="app-shell">

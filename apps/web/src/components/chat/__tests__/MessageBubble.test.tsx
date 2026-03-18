@@ -20,19 +20,19 @@ import { clearResolvedMediaCache } from '../mediaLoader';
 
 describe('MessageBubble', () => {
   const originalFetch = globalThis.fetch;
-  const originalCreateObjectUrl = URL.createObjectURL;
-  const originalRevokeObjectUrl = URL.revokeObjectURL;
+  const originalCreateObjectUrl = URL.createObjectURL?.bind(URL);
+  const originalRevokeObjectUrl = URL.revokeObjectURL?.bind(URL);
 
   beforeEach(() => {
-    clearResolvedMediaCache();
     URL.createObjectURL = jest.fn(() => 'blob:cached-media');
     URL.revokeObjectURL = jest.fn();
+    clearResolvedMediaCache();
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    URL.createObjectURL = originalCreateObjectUrl;
-    URL.revokeObjectURL = originalRevokeObjectUrl;
+    URL.createObjectURL = originalCreateObjectUrl ?? jest.fn();
+    URL.revokeObjectURL = originalRevokeObjectUrl ?? jest.fn();
   });
 
   it('renders emoji-only text messages in the default timeline view', () => {
@@ -312,5 +312,41 @@ describe('MessageBubble', () => {
 
     await screen.findByRole('button', { name: 'Expand image' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a thread summary chip and opens the thread when clicked', () => {
+    const onOpenThread = jest.fn();
+
+    render(
+      <MessageBubble
+        message={{
+          id: 'thread-root',
+          senderId: '@alex:matrix.org',
+          senderName: 'Alex',
+          body: "Let's keep this separate",
+          timestamp: Date.UTC(2026, 2, 15, 10, 40),
+          isOwn: false,
+          msgtype: 'm.text',
+        }}
+        threadSummary={{
+          replyCount: 2,
+          latestReply: {
+            id: 'thread-reply',
+            senderId: '@me:matrix.org',
+            senderName: 'Me',
+            body: 'Following up in thread',
+            timestamp: Date.UTC(2026, 2, 15, 10, 41),
+            isOwn: true,
+            msgtype: 'm.text',
+          },
+        }}
+        onOpenThread={onOpenThread}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /2 replies/i }));
+
+    expect(screen.getByText('Me: Following up in thread')).toBeInTheDocument();
+    expect(onOpenThread).toHaveBeenCalledWith('thread-root');
   });
 });

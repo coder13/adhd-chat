@@ -6,6 +6,7 @@ import { cn } from '../../lib/cn';
 import { resolveMediaUrl } from './mediaLoader';
 import { renderLinkedMessageText } from './linkSegments';
 import MessageLinkPreview from './MessageLinkPreview';
+import ThreadSummaryChip from './ThreadSummaryChip';
 
 function formatMessageTimestamp(timestamp: number) {
   return new Intl.DateTimeFormat(undefined, {
@@ -63,10 +64,15 @@ function getImageCaption(message: TimelineMessage) {
 
 interface MessageBubbleProps {
   message: TimelineMessage;
+  threadSummary?: {
+    replyCount: number;
+    latestReply: TimelineMessage | null;
+  } | null;
   accessToken?: string | null;
   viewMode?: ChatViewMode;
   onRetry?: (messageId: string) => void;
   onToggleReaction?: (message: TimelineMessage, reactionKey: string) => void;
+  onOpenThread?: (rootMessageId: string) => void;
   receiptNames?: string[] | null;
   mentionTargets?: Array<{ userId: string; displayName: string }>;
   onRequestActions?: (
@@ -77,10 +83,12 @@ interface MessageBubbleProps {
 
 function MessageBubble({
   message,
+  threadSummary = null,
   accessToken = null,
   viewMode = 'timeline',
   onRetry,
   onToggleReaction,
+  onOpenThread,
   receiptNames = null,
   mentionTargets = [],
   onRequestActions,
@@ -228,10 +236,10 @@ function MessageBubble({
           type="button"
           onClick={() => onToggleReaction?.(message, reaction.key)}
           className={cn(
-            'inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-colors',
+            'inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs transition-colors',
             reaction.isOwn
-              ? 'border-accent/30 bg-accent/10 text-accent hover:bg-accent/15'
-              : 'border-line bg-panel/70 text-text-subtle hover:bg-panel'
+              ? 'bg-primary-soft text-primary-strong hover:bg-primary-soft/90'
+              : 'bg-panel/70 text-text-subtle hover:bg-panel'
           )}
           aria-label={`${reaction.key} ${reaction.count}`}
           title={reaction.senderNames.join(', ')}
@@ -242,6 +250,14 @@ function MessageBubble({
       ))}
     </div>
   ) : null;
+  const threadSummaryChip =
+    threadSummary && onOpenThread ? (
+      <ThreadSummaryChip
+        replyCount={threadSummary.replyCount}
+        latestReply={threadSummary.latestReply}
+        onOpenThread={() => onOpenThread(message.id)}
+      />
+    ) : null;
   const bubbleMeta = (
     <>
       {formatMessageTimestamp(message.timestamp)}
@@ -326,6 +342,8 @@ function MessageBubble({
       {retryMediaLoadButton}
     </div>
   );
+  const fileCardBaseClass =
+    'mt-2 flex max-w-[320px] items-center justify-between gap-3 rounded-2xl bg-panel/70 px-3 py-3 text-text transition-colors';
 
   const fileCard =
     message.msgtype === 'm.file' ? (
@@ -335,19 +353,24 @@ function MessageBubble({
           target="_blank"
           rel="noreferrer"
           download={message.body || 'attachment'}
-          className="mt-2 flex max-w-[320px] items-center justify-between gap-3 rounded-2xl border border-line bg-elevated px-3 py-3 text-text transition-colors hover:bg-panel"
+          className={cn(
+            fileCardBaseClass,
+            'hover:bg-panel/85 focus:outline-none focus:ring-2 focus:ring-accent/30'
+          )}
         >
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{message.body}</p>
             <p className="mt-1 text-xs text-text-subtle">
               {mediaMeta || 'File'}
             </p>
-            <p className="mt-2 text-xs font-medium text-accent">Open file</p>
+            <p className="mt-2 text-xs font-medium text-primary-strong">Open file</p>
           </div>
-          <span className="text-xs font-medium text-accent">Open</span>
+          <span className="shrink-0 rounded-full bg-primary-soft/80 px-2.5 py-1 text-[11px] font-semibold text-primary-strong">
+            Open
+          </span>
         </a>
       ) : (
-        <div className="mt-2 flex max-w-[320px] items-center justify-between gap-3 rounded-2xl border border-line bg-elevated px-3 py-3 text-text">
+        <div className={cn(fileCardBaseClass, 'bg-panel/65')}>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{message.body}</p>
             <p className="mt-1 text-xs text-text-subtle">
@@ -430,6 +453,7 @@ function MessageBubble({
                 compact
               />
             ) : null}
+            {threadSummaryChip}
             {reactionBar}
             {isFailed && onRetry ? (
               <div className="mt-1 flex justify-end">
@@ -526,6 +550,7 @@ function MessageBubble({
               isOwn={message.isOwn}
             />
           ) : null}
+          {threadSummaryChip}
           {reactionBar}
           <div className="mt-2 flex items-center gap-2 text-[11px] text-text-subtle">
             {receiptAvatars}

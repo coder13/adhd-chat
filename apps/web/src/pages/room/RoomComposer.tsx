@@ -12,7 +12,7 @@ import ComposerContextBar from '../../components/chat/ComposerContextBar';
 import EmojiSuggestions from '../../components/chat/EmojiSuggestions';
 import ReactionPicker from '../../components/chat/ReactionPicker';
 import { insertMentionToken, type MentionCandidate } from '../../lib/chat/mentions';
-import type { ComposerMode, QueuedImage } from './types';
+import type { ComposerMode, QueuedImage, RoomMessage } from './types';
 
 interface RoomComposerProps {
   isPendingRoom: boolean;
@@ -21,6 +21,7 @@ interface RoomComposerProps {
   draft: string;
   queuedImage: QueuedImage;
   composerMode: ComposerMode;
+  threadContextMessage?: RoomMessage | null;
   mentionSuggestions: MentionCandidate[];
   emojiSuggestions: Array<{ shortcode: string; emoji: string; name: string; keywords: string[]; score: number }>;
   selectedEmojiSuggestionIndex: number;
@@ -49,6 +50,7 @@ function RoomComposer({
   draft,
   queuedImage,
   composerMode,
+  threadContextMessage = null,
   mentionSuggestions,
   emojiSuggestions,
   selectedEmojiSuggestionIndex,
@@ -126,12 +128,12 @@ function RoomComposer({
                   onHighlight={onHighlightEmoji}
                 />
               ) : mentionSuggestions.length > 0 ? (
-                <div className="flex flex-wrap gap-2 rounded-2xl border border-line bg-white px-3 py-2 shadow-[0_20px_48px_-32px_rgba(15,23,42,0.32)]">
+                <div className="app-menu-surface flex flex-wrap gap-2 rounded-2xl px-3 py-2">
                   {mentionSuggestions.map((candidate) => (
                     <button
                       key={candidate.userId}
                       type="button"
-                      className="rounded-full bg-elevated px-3 py-1 text-xs font-medium text-text transition-colors hover:bg-panel"
+                      className="app-interactive-menu-item rounded-full bg-elevated px-3 py-1 text-xs font-medium text-text"
                       onClick={() => {
                         setDraft((currentDraft) =>
                           insertMentionToken(currentDraft, candidate.token)
@@ -192,6 +194,8 @@ function RoomComposer({
                   ? 'Start typing while the topic finishes setting up'
                   : composerMode?.type === 'edit'
                     ? 'Edit message'
+                    : threadContextMessage
+                      ? 'Message'
                     : queuedImage
                       ? 'Add a message (optional)'
                     : canInteractWithTimeline
