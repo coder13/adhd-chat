@@ -1,5 +1,4 @@
 import {
-  MsgType,
   NotificationCountType,
   type MatrixClient,
   type MatrixEvent,
@@ -13,11 +12,7 @@ import {
 } from './tandem';
 import { getRoomDisplayName } from './chatCatalog';
 import { getRoomIcon, getRoomTopic } from './identity';
-import {
-  getRoomTimelineEvents,
-  getTimelineEventContent,
-  isRenderableTimelineMessage,
-} from './timelineEvents';
+import { getRoomTimelineSummary } from './roomTimelineSummary';
 import {
   getPendingTandemRoomsForSpace,
   type PendingTandemRoomRecord,
@@ -72,49 +67,21 @@ function isSpaceRoom(room: Room) {
   return getRoomType(room) === SPACE_ROOM_TYPE;
 }
 
-function getLatestMessageEvent(room: Room) {
-  const events = getRoomTimelineEvents(room);
-
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (!isRenderableTimelineMessage(event)) {
-      continue;
-    }
-    return event;
+function hasLinkedParent(
+  client: MatrixClient,
+  spaceRoom: Room,
+  childRoomId: string
+) {
+  const childRoom = client.getRoom(childRoomId);
+  if (!childRoom) {
+    return false;
   }
 
-  return null;
+  return getTandemRoomMeta(childRoom).hidden !== true &&
+    childRoom.currentState.getStateEvents('m.space.parent', spaceRoom.roomId) !== null;
 }
 
-function getPreviewText(room: Room) {
-  const latestMessageEvent = getLatestMessageEvent(room);
-  if (!latestMessageEvent) {
-    return 'No messages yet';
-  }
-
-  const content = getTimelineEventContent(latestMessageEvent);
-
-  switch (content.msgtype) {
-    case MsgType.Image:
-      return 'Photo';
-    case MsgType.File:
-      return 'File';
-    case MsgType.Audio:
-      return 'Audio';
-    case MsgType.Video:
-      return 'Video';
-    case MsgType.Emote:
-      return content.body?.trim() ? `* ${content.body.trim()}` : 'Emote';
-    default:
-      return content.body?.trim() || 'No messages yet';
-  }
-}
-
-function getLatestTimestamp(room: Room) {
-  return getLatestMessageEvent(room)?.getTs() ?? 0;
-}
-
-function getChildRoomIds(spaceRoom: Room) {
+function getChildRoomIds(client: MatrixClient, spaceRoom: Room) {
   return asArray(
     spaceRoom.currentState.getStateEvents(SPACE_CHILD_EVENT_TYPE) as
       | MatrixEvent
@@ -123,18 +90,33 @@ function getChildRoomIds(spaceRoom: Room) {
   )
     .filter((event) => {
       const content = event.getContent<{ via?: string[] }>();
-      return Array.isArray(content?.via) && content.via.length > 0;
+      if (Array.isArray(content?.via) && content.via.length > 0) {
+        return true;
+      }
+
+      const childRoomId = event.getStateKey();
+      return childRoomId ? hasLinkedParent(client, spaceRoom, childRoomId) : false;
     })
     .map((event) => event.getStateKey())
     .filter((roomId): roomId is string => Boolean(roomId));
 }
 
-function compareRooms(a: TandemSpaceRoomSummary, b: TandemSpaceRoomSummary) {
+export function compareTandemSpaceRooms(
+  a: TandemSpaceRoomSummary,
+  b: TandemSpaceRoomSummary
+) {
   return (
     Number(b.isPinned) - Number(a.isPinned) ||
     b.timestamp - a.timestamp ||
     a.name.localeCompare(b.name)
   );
+}
+
+export function compareTandemSpaces(
+  a: TandemSpaceSummary,
+  b: TandemSpaceSummary
+) {
+  return b.timestamp - a.timestamp || a.name.localeCompare(b.name);
 }
 
 function relationshipBySpaceId(client: MatrixClient) {
@@ -173,19 +155,23 @@ function toPendingRoomSummary(
   };
 }
 
-function getSpaceSummary(
+export function buildTandemSpaceSummary(
   client: MatrixClient,
   spaceRoom: Room,
   relationship: TandemRelationshipRecord,
   userId: string
 ): TandemSpaceSummary {
-  const childRooms = getChildRoomIds(spaceRoom)
+  const childRoomSummaries = getChildRoomIds(client, spaceRoom)
     .map((roomId) => client.getRoom(roomId))
-    .filter((room): room is Room => room !== null);
+    .filter((room): room is Room => room !== null)
+    .map((room) => ({
+      room,
+      timelineSummary: getRoomTimelineSummary(room),
+    }));
 
   const mostRecentRoom =
-    childRooms.sort(
-      (a, b) => getLatestTimestamp(b) - getLatestTimestamp(a)
+    childRoomSummaries.sort(
+      (left, right) => right.timelineSummary.timestamp - left.timelineSummary.timestamp
     )[0] ?? null;
 
   return {
@@ -196,17 +182,43 @@ function getSpaceSummary(
     partnerUserId: relationship.partnerUserId,
     mainRoomId: relationship.mainRoomId,
     preview: mostRecentRoom
-      ? getPreviewText(mostRecentRoom)
+      ? mostRecentRoom.timelineSummary.preview
       : 'No messages yet',
-    timestamp: mostRecentRoom ? getLatestTimestamp(mostRecentRoom) : 0,
-    unreadCount: childRooms.reduce(
+    timestamp: mostRecentRoom?.timelineSummary.timestamp ?? 0,
+    unreadCount: childRoomSummaries.reduce(
       (count, room) =>
-        count + room.getUnreadNotificationCount(NotificationCountType.Total),
+        count + room.room.getUnreadNotificationCount(NotificationCountType.Total),
       0
     ),
-    roomCount: childRooms.filter((room) => !getTandemRoomMeta(room).hidden)
-      .length,
+    roomCount: childRoomSummaries.filter(
+      ({ room }) => !getTandemRoomMeta(room).hidden
+    ).length,
   };
+}
+
+export function buildTandemSpaceRoomSummary(
+  room: Room,
+  userId: string
+): TandemSpaceRoomSummary | null {
+  const timelineSummary = getRoomTimelineSummary(room);
+  const meta = getTandemRoomMeta(room);
+  if (meta.hidden) {
+    return null;
+  }
+
+  return {
+    id: room.roomId,
+    name: getRoomDisplayName(room, userId),
+    icon: getRoomIcon(room),
+    description: getRoomTopic(room),
+    preview: timelineSummary.preview,
+    timestamp: timelineSummary.timestamp,
+    unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
+    memberCount: room.getJoinedMemberCount(),
+    membership: room.getMyMembership(),
+    isPinned: Boolean(meta.pinned),
+    isArchived: Boolean(meta.archived),
+  } satisfies TandemSpaceRoomSummary;
 }
 
 export async function buildTandemSpaceCatalog(
@@ -228,10 +240,10 @@ export async function buildTandemSpaceCatalog(
         return null;
       }
 
-      return getSpaceSummary(client, spaceRoom, relationship, userId);
+      return buildTandemSpaceSummary(client, spaceRoom, relationship, userId);
     })
     .filter((space): space is TandemSpaceSummary => space !== null)
-    .sort((a, b) => b.timestamp - a.timestamp || a.name.localeCompare(b.name));
+    .sort(compareTandemSpaces);
 }
 
 export async function buildTandemSpaceRoomCatalog(
@@ -239,43 +251,32 @@ export async function buildTandemSpaceRoomCatalog(
   userId: string,
   spaceId: string
 ): Promise<TandemSpaceRoomSummary[]> {
+  return buildTandemSpaceRoomCatalogFromLocalState(client, userId, spaceId);
+}
+
+export function buildTandemSpaceRoomCatalogFromLocalState(
+  client: MatrixClient,
+  userId: string,
+  spaceId: string
+): TandemSpaceRoomSummary[] {
   const spaceRoom = client.getRoom(spaceId);
   if (!spaceRoom) {
     throw new Error('Tandem space not found.');
   }
 
-  const childRoomIds = getChildRoomIds(spaceRoom);
+  const childRoomIds = getChildRoomIds(client, spaceRoom);
 
-  const rooms = await Promise.all(
-    childRoomIds.map(async (roomId) => {
-      const room = client.getRoom(roomId);
-      if (!room) {
-        return null;
-      }
+  const rooms = childRoomIds.map((roomId) => {
+    const room = client.getRoom(roomId);
+    if (!room) {
+      return null;
+    }
 
-      const meta = getTandemRoomMeta(room);
-      if (meta.hidden) {
-        return null;
-      }
-
-      return {
-        id: room.roomId,
-        name: getRoomDisplayName(room, userId),
-        icon: getRoomIcon(room),
-        description: getRoomTopic(room),
-        preview: getPreviewText(room),
-        timestamp: getLatestTimestamp(room),
-        unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
-        memberCount: room.getJoinedMemberCount(),
-        membership: room.getMyMembership(),
-        isPinned: Boolean(meta.pinned),
-        isArchived: Boolean(meta.archived),
-      } satisfies TandemSpaceRoomSummary;
-    })
-  );
+    return buildTandemSpaceRoomSummary(room, userId);
+  });
 
   return rooms
     .filter((room): room is TandemSpaceRoomSummary => room !== null)
     .concat(getPendingTandemRoomsForSpace(spaceId).map(toPendingRoomSummary))
-    .sort(compareRooms);
+    .sort(compareTandemSpaceRooms);
 }

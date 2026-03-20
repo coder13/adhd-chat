@@ -1,4 +1,4 @@
-import type { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
+import type { MatrixClient, MatrixEvent, Room, Thread } from 'matrix-js-sdk';
 import type { TimelineMessage } from './chatCatalog';
 import { resolveTimelineMessagesFromEvents } from './timelineMessageResolver';
 
@@ -10,6 +10,15 @@ export type RoomThreadSnapshot = {
   latestReply: TimelineMessage | null;
   hasCurrentUserParticipated: boolean;
 };
+
+function compareThreadSnapshots(left: RoomThreadSnapshot, right: RoomThreadSnapshot) {
+  const rightTimestamp =
+    right.latestReply?.timestamp ?? right.rootMessage?.timestamp ?? 0;
+  const leftTimestamp =
+    left.latestReply?.timestamp ?? left.rootMessage?.timestamp ?? 0;
+
+  return rightTimestamp - leftTimestamp;
+}
 
 type BundledThreadRelation = {
   count?: number;
@@ -63,6 +72,56 @@ function getBundledThreadRelation(event: MatrixEvent | undefined) {
   return relation as BundledThreadRelation;
 }
 
+export function buildRoomThreadSnapshot(
+  client: MatrixClient,
+  room: Room,
+  currentUserId: string,
+  thread: Thread
+): RoomThreadSnapshot | null {
+  const rootEvent = thread.rootEvent ?? room.findEventById(thread.id) ?? null;
+  const threadEvents = uniqueEventsById(thread.events);
+  const relatedEvents = uniqueEventsById([rootEvent, ...threadEvents]);
+  const rootMessage = resolveFirstMessage(
+    client,
+    room,
+    currentUserId,
+    rootEvent,
+    relatedEvents
+  );
+  const replyEvents = threadEvents.filter((event) => event.getId() !== thread.id);
+  const replies = resolveTimelineMessagesFromEvents(
+    client,
+    room,
+    currentUserId,
+    replyEvents,
+    relatedEvents
+  );
+  const latestReplyEvent = thread.lastReply() ?? null;
+  const latestReply =
+    replies.find((message) => message.id === latestReplyEvent?.getId()) ?? null;
+  const bundledRelation = getBundledThreadRelation(rootEvent ?? undefined);
+  const replyCount = Math.max(
+    replies.length,
+    thread.length,
+    bundledRelation?.count ?? 0
+  );
+
+  if (!rootMessage) {
+    return null;
+  }
+
+  return {
+    rootMessageId: thread.id,
+    rootMessage,
+    replies,
+    replyCount,
+    latestReply,
+    hasCurrentUserParticipated:
+      thread.hasCurrentUserParticipated ||
+      Boolean(bundledRelation?.current_user_participated),
+  } satisfies RoomThreadSnapshot;
+}
+
 export function getRoomThreadSnapshots(
   client: MatrixClient,
   room: Room,
@@ -70,55 +129,7 @@ export function getRoomThreadSnapshots(
 ): RoomThreadSnapshot[] {
   return room
     .getThreads()
-    .map((thread) => {
-      const rootEvent =
-        thread.rootEvent ?? room.findEventById(thread.id) ?? null;
-      const threadEvents = uniqueEventsById(thread.events);
-      const relatedEvents = uniqueEventsById([rootEvent, ...threadEvents]);
-      const rootMessage = resolveFirstMessage(
-        client,
-        room,
-        currentUserId,
-        rootEvent,
-        relatedEvents
-      );
-      const replyEvents = threadEvents.filter((event) => event.getId() !== thread.id);
-      const replies = resolveTimelineMessagesFromEvents(
-        client,
-        room,
-        currentUserId,
-        replyEvents,
-        relatedEvents
-      );
-      const latestReplyEvent = thread.lastReply() ?? null;
-      const latestReply =
-        replies.find((message) => message.id === latestReplyEvent?.getId()) ??
-        null;
-      const bundledRelation = getBundledThreadRelation(rootEvent ?? undefined);
-      const replyCount = Math.max(
-        replies.length,
-        thread.length,
-        bundledRelation?.count ?? 0
-      );
-
-      return {
-        rootMessageId: thread.id,
-        rootMessage,
-        replies,
-        replyCount,
-        latestReply,
-        hasCurrentUserParticipated:
-          thread.hasCurrentUserParticipated ||
-          Boolean(bundledRelation?.current_user_participated),
-      } satisfies RoomThreadSnapshot;
-    })
-    .filter((thread) => thread.rootMessage !== null)
-    .sort((left, right) => {
-      const rightTimestamp =
-        right.latestReply?.timestamp ?? right.rootMessage?.timestamp ?? 0;
-      const leftTimestamp =
-        left.latestReply?.timestamp ?? left.rootMessage?.timestamp ?? 0;
-
-      return rightTimestamp - leftTimestamp;
-    });
+    .map((thread) => buildRoomThreadSnapshot(client, room, currentUserId, thread))
+    .filter((thread): thread is RoomThreadSnapshot => thread !== null)
+    .sort(compareThreadSnapshots);
 }

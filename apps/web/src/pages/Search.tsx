@@ -6,6 +6,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { AppAvatar, Button } from '../components';
 import { ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+import { usePersistedResource } from '../hooks/usePersistedResource';
 import { getRoomDisplayName } from '../lib/matrix/chatCatalog';
 import { getRoomIcon } from '../lib/matrix/identity';
 import {
@@ -62,13 +63,22 @@ function SearchPage() {
   const scopedRoomId = encodedRoomId ? decodeURIComponent(encodedRoomId) : null;
   const { client, isReady, user } = useMatrixClient();
   const [query, setQuery] = useState('');
-  const [index, setIndex] = useState<TandemSearchIndex | null>(null);
   const [results, setResults] = useState<TandemMessageSearchResult[]>([]);
   const [rawResults, setRawResults] = useState<ISearchResults | null>(null);
-  const [isLoadingIndex, setIsLoadingIndex] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
+  const {
+    data: index,
+    error: indexError,
+    isLoading: isLoadingIndex,
+  } = usePersistedResource<TandemSearchIndex | null>({
+    cacheKey: user?.userId ? `search-index:${user.userId}` : null,
+    enabled: Boolean(client && user && isReady),
+    initialValue: null,
+    storage: 'indexeddb',
+    load: async () => buildTandemSearchIndex(client!, user!.userId),
+  });
   const scopedRoom = scopedRoomId ? client?.getRoom(scopedRoomId) ?? null : null;
   const scopedRoomName =
     scopedRoom && user ? getRoomDisplayName(scopedRoom, user.userId) : 'Current room';
@@ -76,37 +86,6 @@ function SearchPage() {
   const scopedRoomIsEncrypted = Boolean(
     scopedRoom?.currentState.getStateEvents('m.room.encryption', '')
   );
-
-  useEffect(() => {
-    if (!client || !user || !isReady) {
-      setIndex(null);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoadingIndex(true);
-
-    void buildTandemSearchIndex(client, user.userId)
-      .then((nextIndex) => {
-        if (!cancelled) {
-          setIndex(nextIndex);
-        }
-      })
-      .catch((cause) => {
-        if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : String(cause));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingIndex(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [client, isReady, user]);
 
   useEffect(() => {
     if (!client || !user || !isReady || !index) {
@@ -127,11 +106,8 @@ function SearchPage() {
     const timeoutId = window.setTimeout(() => {
       setIsSearching(true);
       setError(null);
-      const localEncryptedResults = searchLoadedEncryptedMessages(
-        client,
-        index,
-        trimmedQuery
-      ).filter((result) => (scopedRoomId ? result.roomId === scopedRoomId : true));
+      const localEncryptedResults = searchLoadedEncryptedMessages(index, trimmedQuery)
+        .filter((result) => (scopedRoomId ? result.roomId === scopedRoomId : true));
 
       if (index.encryptedRoomCount > 0 && !scopedRoomId) {
         setSearchNotice(
@@ -218,11 +194,9 @@ function SearchPage() {
 
     try {
       const nextResults = await client.backPaginateRoomEventsSearch(rawResults);
-      const localEncryptedResults = searchLoadedEncryptedMessages(
-        client,
-        index,
-        query
-      ).filter((result) => (scopedRoomId ? result.roomId === scopedRoomId : true));
+      const localEncryptedResults = searchLoadedEncryptedMessages(index, query).filter(
+        (result) => (scopedRoomId ? result.roomId === scopedRoomId : true)
+      );
       setRawResults(nextResults);
       setResults(
         mergeTandemSearchResults(
@@ -277,6 +251,7 @@ function SearchPage() {
           <div className="text-sm text-text-muted">{encryptedRoomsNote}</div>
         ) : null}
 
+        {indexError ? <div className="text-sm text-danger">{indexError}</div> : null}
         {error ? <div className="text-sm text-danger">{error}</div> : null}
 
         {searchNotice ? (

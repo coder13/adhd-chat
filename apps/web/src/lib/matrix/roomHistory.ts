@@ -1,5 +1,6 @@
 import type { MatrixClient, Room } from 'matrix-js-sdk';
 import { getRoomTimelineEvents } from './timelineEvents';
+import { startMatrixPerfTimer } from './performanceMetrics';
 
 const DEFAULT_HISTORY_PAGE_SIZE = 50;
 
@@ -23,7 +24,16 @@ export async function paginateRoomHistoryBack(
   room: Room,
   limit = DEFAULT_HISTORY_PAGE_SIZE
 ): Promise<RoomHistoryPaginationResult> {
+  const timer = startMatrixPerfTimer('matrix.room.history.paginate_back', {
+    roomId: room.roomId,
+    limit,
+  });
   if (!hasMoreRoomHistoryBack(room)) {
+    timer.end({
+      didPaginate: false,
+      hasMore: false,
+      addedEventCount: 0,
+    });
     return {
       didPaginate: false,
       hasMore: false,
@@ -35,9 +45,19 @@ export async function paginateRoomHistoryBack(
   await client.scrollback(room, limit);
 
   const nextEventCount = getRoomTimelineEvents(room).length;
+  const didPaginate = nextEventCount > previousEventCount;
+  const hasMore = hasMoreRoomHistoryBack(room);
+
+  timer.end({
+    didPaginate,
+    hasMore,
+    previousEventCount,
+    nextEventCount,
+    addedEventCount: Math.max(0, nextEventCount - previousEventCount),
+  });
 
   return {
-    didPaginate: nextEventCount > previousEventCount,
-    hasMore: hasMoreRoomHistoryBack(room),
+    didPaginate,
+    hasMore,
   };
 }

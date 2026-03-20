@@ -5,11 +5,11 @@ import { render, screen } from '@testing-library/react';
 import TimelineMessageList from '../TimelineMessageList';
 
 jest.mock('../../../components/chat', () => ({
-  MessageBubble: ({
+  ChatMessage: ({
     message,
   }: {
     message: { id: string; body: string };
-  }) => <div data-testid={`message-bubble:${message.id}`}>{message.body}</div>,
+  }) => <div data-testid={`chat-message:${message.id}`}>{message.body}</div>,
 }));
 
 function localTimestamp(
@@ -73,13 +73,13 @@ describe('TimelineMessageList', () => {
 
     expect(screen.getByText('Yesterday')).toBeInTheDocument();
     expect(screen.getByText('Today')).toBeInTheDocument();
-    expect(screen.getByTestId('message-bubble:yesterday-1')).toHaveTextContent(
+    expect(screen.getByTestId('chat-message:yesterday-1')).toHaveTextContent(
       'Yesterday one'
     );
-    expect(screen.getByTestId('message-bubble:yesterday-2')).toHaveTextContent(
+    expect(screen.getByTestId('chat-message:yesterday-2')).toHaveTextContent(
       'Yesterday two'
     );
-    expect(screen.getByTestId('message-bubble:today-1')).toHaveTextContent(
+    expect(screen.getByTestId('chat-message:today-1')).toHaveTextContent(
       'Today one'
     );
   });

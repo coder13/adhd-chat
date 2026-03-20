@@ -8,46 +8,20 @@ import {
   IonToolbar,
 } from '@ionic/react';
 import { arrowBack } from 'ionicons/icons';
-import { ClientEvent, type RoomMember } from 'matrix-js-sdk';
+import { ClientEvent, RoomEvent, RoomMemberEvent } from 'matrix-js-sdk';
 import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AppAvatar, AuthFallbackState, Card } from '../components';
 import { usePersistedResource } from '../hooks/usePersistedResource';
-import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
 import { useTandem } from '../hooks/useTandem';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { shouldSuppressMissingTandemSpaceError } from '../lib/matrix/restoreErrors';
+import {
+  buildTandemSpaceMemberSummaries,
+  loadTandemSpaceMemberSummaries,
+  type TandemSpaceMemberSummary,
+} from '../lib/matrix/tandemSpaceMembers';
 import { getTandemPartnerSummary } from '../lib/matrix/tandemPresentation';
-
-interface TandemSpaceMemberSummary {
-  userId: string;
-  displayName: string;
-  membership: string;
-}
-
-async function buildTandemSpaceMembers(
-  spaceId: string,
-  client: NonNullable<ReturnType<typeof useMatrixClient>['client']>
-) {
-  const room = client.getRoom(spaceId);
-  if (!room) {
-    throw new Error('Tandem hub not found.');
-  }
-
-  await room.loadMembersIfNeeded();
-
-  return room
-    .getMembers()
-    .filter(
-      (member) => member.membership !== 'leave' && member.membership !== 'ban'
-    )
-    .map((member: RoomMember) => ({
-      userId: member.userId,
-      displayName: member.name || member.userId,
-      membership: member.membership || 'join',
-    }))
-    .sort((a, b) => a.displayName.localeCompare(b.displayName));
-}
 
 function getMemberStatusLabel(membership: string) {
   switch (membership) {
@@ -74,6 +48,7 @@ function TandemSpaceMembersPage() {
     error,
     isLoading,
     refresh,
+    updateData: updateMembers,
     hasCachedData,
   } = usePersistedResource<TandemSpaceMemberSummary[]>({
     cacheKey:
@@ -82,9 +57,9 @@ function TandemSpaceMembersPage() {
         : null,
     enabled: Boolean(client && user && isReady && spaceId),
     initialValue: [],
-    load: async () => buildTandemSpaceMembers(spaceId!, client!),
+    storage: 'indexeddb',
+    load: async () => loadTandemSpaceMemberSummaries(spaceId!, client!),
   });
-  const scheduleRefresh = useThrottledRefresh(refresh);
   const relationship =
     relationships.find((entry) => entry.sharedSpaceId === spaceId) ?? null;
   const partner = relationship
@@ -109,15 +84,71 @@ function TandemSpaceMembersPage() {
       return;
     }
 
-    const handleSync = () => {
-      scheduleRefresh();
-    };
-    client.on(ClientEvent.Sync, handleSync);
+    const syncMembers = () => {
+      const room = client.getRoom(spaceId);
+      if (!room) {
+        return;
+      }
 
+      updateMembers(buildTandemSpaceMemberSummaries(room));
+    };
+
+    const handleMembership = (
+      _event: unknown,
+      member: { roomId: string }
+    ) => {
+      if (member.roomId !== spaceId) {
+        return;
+      }
+
+      syncMembers();
+    };
+
+    const handleName = (_event: unknown, member: { roomId: string }) => {
+      if (member.roomId !== spaceId) {
+        return;
+      }
+
+      syncMembers();
+    };
+
+    const handleMyMembership = (room: { roomId: string }) => {
+      if (room.roomId !== spaceId) {
+        return;
+      }
+
+      syncMembers();
+    };
+
+    client.on(RoomMemberEvent.Membership, handleMembership);
+    client.on(RoomMemberEvent.Name, handleName);
+    client.on(RoomEvent.MyMembership, handleMyMembership);
+
+    return () => {
+      client.off(RoomMemberEvent.Membership, handleMembership);
+      client.off(RoomMemberEvent.Name, handleName);
+      client.off(RoomEvent.MyMembership, handleMyMembership);
+    };
+  }, [client, isReady, spaceId, updateMembers, user]);
+
+  useEffect(() => {
+    if (!client || !user || !isReady || !spaceId || client.getRoom(spaceId)) {
+      return;
+    }
+
+    const handleSync = () => {
+      if (!client.getRoom(spaceId)) {
+        return;
+      }
+
+      void refresh();
+    };
+
+    client.on(ClientEvent.Sync, handleSync);
     return () => {
       client.off(ClientEvent.Sync, handleSync);
     };
-  }, [client, isReady, scheduleRefresh, spaceId, user]);
+  }, [client, isReady, refresh, spaceId, user]);
 
   if (!spaceId) {
     return (

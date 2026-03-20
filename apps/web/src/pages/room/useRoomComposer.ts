@@ -56,7 +56,6 @@ interface UseRoomComposerParams {
   mentionCandidates: MentionCandidate[];
   optimisticMessages: OptimisticTimelineMessage[];
   setOptimisticMessages: Dispatch<SetStateAction<OptimisticTimelineMessage[]>>;
-  refresh: () => Promise<unknown>;
   scrollToLatest: (duration?: number) => void;
   composerRef: RefObject<HTMLIonTextareaElement | null>;
   emojiPickerRef: RefObject<HTMLDivElement | null>;
@@ -124,7 +123,6 @@ export function useRoomComposer({
   mentionCandidates,
   optimisticMessages,
   setOptimisticMessages,
-  refresh,
   scrollToLatest,
   composerRef,
   emojiPickerRef,
@@ -215,7 +213,6 @@ export function useRoomComposer({
         )
       );
       scrollToLatest();
-      void refresh();
     } catch (cause) {
       console.error(cause);
       const errorText = cause instanceof Error ? cause.message : String(cause);
@@ -322,7 +319,6 @@ export function useRoomComposer({
       if (editMessage) {
         setComposerMode(null);
       }
-      void refresh();
       return true;
     } catch (cause) {
       console.error(cause);
@@ -395,7 +391,6 @@ export function useRoomComposer({
           )
         );
         scrollToLatest();
-        void refresh();
         didSend = true;
       } catch (cause) {
         console.error(cause);
@@ -561,7 +556,6 @@ export function useRoomComposer({
               remoteEventId
             )
           );
-          void refresh();
         } catch (cause) {
           console.error(cause);
           const errorText = cause instanceof Error ? cause.message : String(cause);

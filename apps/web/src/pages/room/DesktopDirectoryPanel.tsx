@@ -1,20 +1,11 @@
-import { ClientEvent } from 'matrix-js-sdk';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { EmptyState } from '../../components';
 import { ContactsList } from '../../components/ionic';
-import { usePersistedResource } from '../../hooks/usePersistedResource';
-import { useThrottledRefresh } from '../../hooks/useThrottledRefresh';
+import { useContactCatalogStore } from '../../hooks/useContactCatalogStore';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import {
-  buildChatCatalog,
-  buildContactCatalog,
-  type ChatSummary,
-  type ContactSummary,
-} from '../../lib/matrix/chatCatalog';
-import {
-  buildTandemSpaceCatalog,
-  type TandemSpaceSummary,
-} from '../../lib/matrix/spaceCatalog';
+import { useOtherChatCatalogStore } from '../../hooks/useOtherChatCatalogStore';
+import { useTandemSpaceCatalogStore } from '../../hooks/useTandemSpaceCatalogStore';
+import { type TandemSpaceSummary } from '../../lib/matrix/spaceCatalog';
 import { formatTopicCountLabel } from '../../lib/matrix/tandemPresentation';
 import AddContactPanel from './AddContactPanel';
 import DesktopRailRoomItem from './DesktopRailRoomItem';
@@ -36,93 +27,38 @@ function DesktopDirectoryPanel({
   onOpenAddContact,
   currentRoomId,
 }: DesktopDirectoryPanelProps) {
-  const { client, isReady, user, bootstrapUserId } = useMatrixClient();
-  const cacheUserId = user?.userId ?? bootstrapUserId;
+  const { client, isReady, user } = useMatrixClient();
 
   const {
     data: contacts,
-    refresh: refreshContacts,
     isLoading: isLoadingContacts,
-  } = usePersistedResource<ContactSummary[]>({
-    cacheKey:
-      view === 'contacts' && cacheUserId ? `contacts:${cacheUserId}` : null,
-    enabled: view === 'contacts' && Boolean(client && user && isReady),
-    initialValue: [],
-    load: async () => buildContactCatalog(client!, user!.userId),
-    preserveValue: (currentContacts, nextContacts) => {
-      if (nextContacts.length === 0 && currentContacts.length > 0) {
-        return currentContacts;
-      }
-
-      return nextContacts;
-    },
+  } = useContactCatalogStore({
+    client,
+    enabled: view === 'contacts' && Boolean(user),
+    isReady,
+    userId: user?.userId ?? null,
   });
-  const scheduleRefreshContacts = useThrottledRefresh(refreshContacts);
 
   const {
     data: hubs,
-    refresh: refreshHubs,
     isLoading: isLoadingHubs,
-  } = usePersistedResource<TandemSpaceSummary[]>({
-    cacheKey:
-      view === 'hubs' && cacheUserId ? `tandem-spaces:${cacheUserId}` : null,
-    enabled: view === 'hubs' && Boolean(client && user && isReady),
-    initialValue: [],
-    load: async () => buildTandemSpaceCatalog(client!, user!.userId),
+  } = useTandemSpaceCatalogStore({
+    client,
+    enabled: view === 'hubs' && Boolean(user),
+    isReady,
+    relationships: [],
+    userId: user?.userId ?? null,
   });
-  const scheduleRefreshHubs = useThrottledRefresh(refreshHubs);
 
   const {
     data: otherChats,
-    refresh: refreshOtherRooms,
     isLoading: isLoadingOtherRooms,
-  } = usePersistedResource<ChatSummary[]>({
-    cacheKey:
-      view === 'other' && cacheUserId
-        ? `desktop-other-rooms:${cacheUserId}`
-        : null,
-    enabled: view === 'other' && Boolean(client && user && isReady),
-    initialValue: [],
-    load: async () => {
-      const catalog = await buildChatCatalog(client!, user!.userId);
-      return catalog.otherChats;
-    },
-  });
-  const scheduleRefreshOtherRooms = useThrottledRefresh(refreshOtherRooms);
-
-  useEffect(() => {
-    if (!client || !user || !isReady) {
-      return;
-    }
-
-    const handleSync = () => {
-      if (view === 'contacts') {
-        scheduleRefreshContacts();
-        return;
-      }
-
-      if (view === 'hubs') {
-        scheduleRefreshHubs();
-        return;
-      }
-
-      scheduleRefreshOtherRooms();
-    };
-
-    client.on(ClientEvent.Sync, handleSync);
-
-    return () => {
-      client.off(ClientEvent.Sync, handleSync);
-    };
-  }, [
+  } = useOtherChatCatalogStore({
     client,
+    enabled: view === 'other' && Boolean(user),
     isReady,
-    scheduleRefreshContacts,
-    scheduleRefreshHubs,
-    scheduleRefreshOtherRooms,
-    user,
-    view,
-  ]);
+    userId: user?.userId ?? null,
+  });
 
   const body = useMemo(() => {
     if (view === 'add-contact') {

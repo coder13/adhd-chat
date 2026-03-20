@@ -14,6 +14,7 @@ jest.mock('../../../lib/desktopShell', () => ({
     lastHubId: null,
     lastRoomId: null,
   }),
+  saveDesktopRailState: jest.fn(),
   saveDesktopLastSelection: jest.fn(),
 }));
 
@@ -23,15 +24,17 @@ function expectText(testId: string, value: string) {
 
 function ShortcutHarness({
   showBlockingDialog = false,
+  tangentSpaceId = '!space:example.com',
 }: {
   showBlockingDialog?: boolean;
+  tangentSpaceId?: string | null;
 }) {
   const [showShortcutOverlay, setShowShortcutOverlay] = useState(false);
   const shell = useDesktopRoomShell({
     isDesktopLayout: true,
     showDesktopSidebar: true,
     roomId: '!room:example.com',
-    tangentSpaceId: '!space:example.com',
+    tangentSpaceId,
     userId: '@me:example.com',
     bootstrapUserId: '@me:example.com',
   });
@@ -250,6 +253,12 @@ describe('desktop keyboard shortcuts', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expectText('rail-view', 'topics');
+  });
+
+  it('defaults non-tandem desktop rooms to the other-rooms rail', () => {
+    render(<ShortcutHarness tangentSpaceId={null} />);
+
+    expectText('rail-view', 'other');
   });
 
   it('opens settings with ctrl/cmd comma', () => {

@@ -1,57 +1,26 @@
 import { IonButton, IonIcon } from '@ionic/react';
 import { add } from 'ionicons/icons';
-import { ClientEvent } from 'matrix-js-sdk';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EmptyState } from '../components';
 import { ContactsList, ListPageLayout } from '../components/ionic';
-import { usePersistedResource } from '../hooks/usePersistedResource';
-import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
+import { useContactCatalogStore } from '../hooks/useContactCatalogStore';
 import { useMatrixClient } from '../hooks/useMatrixClient';
-import {
-  buildContactCatalog,
-  type ContactSummary,
-} from '../lib/matrix/chatCatalog';
 
 function Contacts() {
-  const { client, isReady, user, error, bootstrapUserId } = useMatrixClient();
+  const { client, isReady, user, error } = useMatrixClient();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const cacheUserId = user?.userId ?? bootstrapUserId;
-  const cacheKey = cacheUserId ? `contacts:${cacheUserId}` : null;
   const {
     data: contacts,
     error: contactsError,
-    refresh: refreshContacts,
     isLoading,
-  } = usePersistedResource<ContactSummary[]>({
-    cacheKey,
-    enabled: Boolean(client && user && isReady),
-    initialValue: [],
-    load: async () => buildContactCatalog(client!, user!.userId),
-    preserveValue: (currentContacts, nextContacts) => {
-      if (nextContacts.length === 0 && currentContacts.length > 0) {
-        return currentContacts;
-      }
-
-      return nextContacts;
-    },
+  } = useContactCatalogStore({
+    client,
+    enabled: Boolean(user),
+    isReady,
+    userId: user?.userId ?? null,
   });
-  const scheduleRefreshContacts = useThrottledRefresh(refreshContacts);
-
-  useEffect(() => {
-    if (!client || !user || !isReady) {
-      return;
-    }
-    const handleSync = () => {
-      scheduleRefreshContacts();
-    };
-    client.on(ClientEvent.Sync, handleSync);
-
-    return () => {
-      client.off(ClientEvent.Sync, handleSync);
-    };
-  }, [client, isReady, scheduleRefreshContacts, user]);
 
   const visibleContacts = useMemo(() => {
     const searchValue = search.trim().toLowerCase();

@@ -34,7 +34,17 @@ jest.mock('../threadCatalog', () => ({
   getRoomThreadSnapshots: jest.fn(() => []),
 }));
 
+const mockEndMatrixPerfTimer = jest.fn();
+const mockStartMatrixPerfTimer = jest.fn(() => ({
+  end: mockEndMatrixPerfTimer,
+}));
+
+jest.mock('../performanceMetrics', () => ({
+  startMatrixPerfTimer: mockStartMatrixPerfTimer,
+}));
+
 import { getRoomThreadSnapshots } from '../threadCatalog';
+import { startMatrixPerfTimer } from '../performanceMetrics';
 import { ensureRoomThreadsLoaded } from '../roomThreads';
 import { getTandemSpaceIdForRoom } from '../tandem';
 import { buildRoomSnapshot, getAllSnapshotMessages } from '../roomSnapshot';
@@ -73,6 +83,10 @@ describe('getAllSnapshotMessages', () => {
 
 describe('buildRoomSnapshot', () => {
   beforeEach(() => {
+    mockEndMatrixPerfTimer.mockClear();
+    (
+      startMatrixPerfTimer as jest.MockedFunction<typeof startMatrixPerfTimer>
+    ).mockClear();
     (
       getTandemSpaceIdForRoom as jest.MockedFunction<
         typeof getTandemSpaceIdForRoom
@@ -107,6 +121,14 @@ describe('buildRoomSnapshot', () => {
       room,
       '@me:example.com'
     );
+    expect(startMatrixPerfTimer).toHaveBeenCalledWith(
+      'matrix.room.snapshot.build',
+      { roomId: '!room:example.com' }
+    );
+    expect(mockEndMatrixPerfTimer).toHaveBeenCalledWith({
+      messageCount: 0,
+      threadCount: 0,
+    });
     expect(
       ensureRoomThreadsLoadedMock.mock.invocationCallOrder[0]
     ).toBeLessThan(getRoomThreadSnapshotsMock.mock.invocationCallOrder[0]);

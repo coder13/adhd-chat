@@ -5,11 +5,11 @@ import { render, screen } from '@testing-library/react';
 import ThreadTimeline from '../ThreadTimeline';
 
 jest.mock('../../../components/chat', () => ({
-  MessageBubble: ({
+  ChatMessage: ({
     message,
   }: {
     message: { id: string; body: string };
-  }) => <div data-testid={`message-bubble:${message.id}`}>{message.body}</div>,
+  }) => <div data-testid={`chat-message:${message.id}`}>{message.body}</div>,
 }));
 
 describe('ThreadTimeline', () => {
@@ -55,10 +55,10 @@ describe('ThreadTimeline', () => {
     expect(screen.queryByText('Thread starter')).not.toBeInTheDocument();
     expect(screen.getByText('Yesterday')).toBeInTheDocument();
     expect(screen.getByText('Today')).toBeInTheDocument();
-    expect(screen.getByTestId('message-bubble:root')).toHaveTextContent(
+    expect(screen.getByTestId('chat-message:root')).toHaveTextContent(
       'Thread root'
     );
-    expect(screen.getByTestId('message-bubble:reply-1')).toHaveTextContent(
+    expect(screen.getByTestId('chat-message:reply-1')).toHaveTextContent(
       'Reply body'
     );
   });

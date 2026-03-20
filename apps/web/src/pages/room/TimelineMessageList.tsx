@@ -1,4 +1,4 @@
-import { MessageBubble } from '../../components/chat';
+import { ChatMessage } from '../../components/chat';
 import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
 import type { ChatViewMode } from '../../lib/matrix/preferences';
 import TimelineDaySeparator from './TimelineDaySeparator';
@@ -48,12 +48,15 @@ function TimelineMessageList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className={viewMode === 'bubbles' ? 'space-y-3' : 'space-y-2'}>
       {sections.map((section) => (
-        <div key={section.dayStart} className="space-y-3">
+        <div
+          key={section.dayStart}
+          className={viewMode === 'bubbles' ? 'space-y-3' : 'space-y-2'}
+        >
           <TimelineDaySeparator label={section.label} />
           {section.messages.map((message) => (
-            <MessageBubble
+            <ChatMessage
               key={message.id}
               message={message}
               accessToken={accessToken}

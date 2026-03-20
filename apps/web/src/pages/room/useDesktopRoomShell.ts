@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   loadDesktopLastSelection,
+  saveDesktopRailState,
   saveDesktopLastSelection,
 } from '../../lib/desktopShell';
 import { loadPersistedValue, savePersistedValue } from '../../lib/persistence';
@@ -93,6 +94,24 @@ function sanitizePersistedDesktopRailState(
   };
 }
 
+function resolveDesktopRailViewForRoom(params: {
+  isDesktopLayout: boolean;
+  roomId: string | null;
+  tangentSpaceId: string | null;
+  railView: DesktopRailView;
+}) {
+  const { isDesktopLayout, roomId, tangentSpaceId, railView } = params;
+  if (!isDesktopLayout || !roomId) {
+    return railView;
+  }
+
+  if (tangentSpaceId) {
+    return railView === 'other' ? 'topics' : railView;
+  }
+
+  return railView === 'topics' ? 'other' : railView;
+}
+
 export function useDesktopRoomShell({
   isDesktopLayout,
   showDesktopSidebar,
@@ -154,6 +173,20 @@ export function useDesktopRoomShell({
   }, [isDesktopLayout]);
 
   useEffect(() => {
+    if (!isDesktopLayout || !roomId) {
+      return;
+    }
+    setDesktopRailView((currentView) =>
+      resolveDesktopRailViewForRoom({
+        isDesktopLayout,
+        roomId,
+        tangentSpaceId,
+        railView: currentView,
+      })
+    );
+  }, [isDesktopLayout, roomId, tangentSpaceId]);
+
+  useEffect(() => {
     setDesktopThreadRootId(null);
     setDesktopRoomPanelView((currentView) =>
       currentView === 'thread' ? null : currentView
@@ -192,17 +225,25 @@ export function useDesktopRoomShell({
       return;
     }
 
-    setDesktopRailView(persistedState.railView);
+    setDesktopRailView(
+      resolveDesktopRailViewForRoom({
+        isDesktopLayout,
+        roomId,
+        tangentSpaceId,
+        railView: persistedState.railView,
+      })
+    );
     setDesktopSettingsSection(persistedState.settingsSection);
     setDesktopSettingsHistory(persistedState.settingsHistory);
-  }, [desktopRailStateStorageKey, isDesktopLayout]);
+  }, [desktopRailStateStorageKey, isDesktopLayout, roomId, tangentSpaceId]);
 
   useEffect(() => {
     if (!desktopRailStateStorageKey || !isDesktopLayout) {
       return;
     }
 
-    savePersistedValue<PersistedDesktopRailState>(desktopRailStateStorageKey, {
+    saveDesktopRailState({
+      userId: persistedUserId,
       railView: desktopRailView,
       settingsSection: desktopSettingsSection,
       settingsHistory: desktopSettingsHistory,
@@ -213,6 +254,7 @@ export function useDesktopRoomShell({
     desktopSettingsHistory,
     desktopSettingsSection,
     isDesktopLayout,
+    persistedUserId,
   ]);
 
   useEffect(() => {

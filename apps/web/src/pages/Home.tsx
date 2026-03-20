@@ -1,20 +1,15 @@
 import { IonButton, IonIcon, IonSearchbar } from '@ionic/react';
-import { ClientEvent, RoomEvent } from 'matrix-js-sdk';
 import { searchOutline } from 'ionicons/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AppAvatar, AuthFallbackState, Button, Card } from '../components';
 import { ListPageLayout } from '../components/ionic';
 import { useMatrixClient } from '../hooks/useMatrixClient';
-import { usePersistedResource } from '../hooks/usePersistedResource';
-import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
 import { useTandem } from '../hooks/useTandem';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useTandemSpaceCatalogStore } from '../hooks/useTandemSpaceCatalogStore';
 import { resolveDesktopHomeTarget } from '../lib/desktopShell';
-import {
-  buildTandemSpaceCatalog,
-  type TandemSpaceSummary,
-} from '../lib/matrix/spaceCatalog';
+import { type TandemSpaceSummary } from '../lib/matrix/spaceCatalog';
 import {
   formatTopicCountLabel,
   getTandemPartnerSummary,
@@ -59,64 +54,20 @@ function Home() {
   const location = useLocation();
   const isDesktopLayout = useMediaQuery('(min-width: 1280px)');
   const [search, setSearch] = useState('');
-  const cacheKey = cacheUserId ? `tandem-spaces:${cacheUserId}` : null;
   const {
     data: spaces,
     error: catalogError,
-    refresh: refreshSpaces,
     isLoading: isLoadingSpaces,
     isRefreshing: isRefreshingSpaces,
     hasCachedData,
-  } = usePersistedResource<TandemSpaceSummary[]>({
-    cacheKey,
-    enabled: Boolean(client && user),
-    initialValue: [],
-    load: async () => buildTandemSpaceCatalog(client!, user!.userId),
-    preserveValue: (currentSpaces, nextSpaces) =>
-      nextSpaces.length > 0 || currentSpaces.length === 0
-        ? nextSpaces
-        : currentSpaces,
+  } = useTandemSpaceCatalogStore({
+    client,
+    enabled: Boolean(user),
+    isReady,
+    relationships,
+    userId: user?.userId ?? null,
   });
   const [stableSpaces, setStableSpaces] = useState<TandemSpaceSummary[]>([]);
-  const scheduleRefreshSpaces = useThrottledRefresh(refreshSpaces);
-
-  useEffect(() => {
-    if (!client || !user) {
-      return;
-    }
-    const handleSync = () => {
-      scheduleRefreshSpaces();
-    };
-    client.on(ClientEvent.Sync, handleSync);
-
-    return () => {
-      client.off(ClientEvent.Sync, handleSync);
-    };
-  }, [client, scheduleRefreshSpaces, user, incomingInvites]);
-
-  useEffect(() => {
-    if (!client || !user) {
-      return;
-    }
-
-    const handleMembershipChange = () => {
-      void refreshSpaces();
-    };
-
-    client.on(RoomEvent.MyMembership, handleMembershipChange);
-
-    return () => {
-      client.off(RoomEvent.MyMembership, handleMembershipChange);
-    };
-  }, [client, refreshSpaces, user]);
-
-  useEffect(() => {
-    if (!client || !user || relationships.length === 0) {
-      return;
-    }
-
-    scheduleRefreshSpaces(true);
-  }, [client, scheduleRefreshSpaces, relationships, isRecoveringRelationships, user]);
 
   useEffect(() => {
     if (spaces.length > 0) {
@@ -313,6 +264,11 @@ function Home() {
             {(error || catalogError) && (
               <div className="text-sm text-danger">{error || catalogError}</div>
             )}
+
+            {displaySpaces.length > 0 &&
+            (isRefreshingSpaces || isRecoveringRelationships) ? (
+              <div className="text-xs text-text-muted">Updating hubs...</div>
+            ) : null}
 
             {displaySpaces.length === 0 &&
             (isRecoveringRelationships || relationships.length > 0) &&

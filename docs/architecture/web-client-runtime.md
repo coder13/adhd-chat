@@ -19,7 +19,7 @@ There are four overlapping runtime layers:
 
 1. Session and auth bootstrap
 2. Matrix client and crypto initialization
-3. App-specific data shaping for Tandem, rooms, preferences, and search
+3. Centralized app-owned Matrix view store and action layer
 4. Local UI caching and optimistic state to keep the app feeling stable
 
 The app is not fully offline-first yet. It is better described as:
@@ -74,6 +74,11 @@ The normal refresh/startup path is:
 5. Initialize crypto
 6. Start client sync
 7. Mark the app `ready`
+
+The client no longer performs a second startup-only `getJoinedRooms()` session
+validation request after sync starts. Expired sessions are still refreshed
+before client bootstrap, and inactive-token failures still surface through the
+normal bootstrap/login error path.
 
 Relevant files:
 
@@ -152,12 +157,78 @@ the app’s generic cache layer.
 This is a major reason encrypted sessions survive refresh better than other
 Matrix-derived UI state.
 
+#### Durable Matrix Room/Event Store
+
+Authenticated clients now also attempt to use the SDK `IndexedDBStore` for
+room, account-data, and sync state persistence.
+
+- File: `apps/web/src/hooks/useMatrixClient/helpers.ts`
+
+The startup behavior is:
+
+1. create the Matrix client with the durable room store when IndexedDB exists
+2. start the durable store
+3. fall back to the in-memory store if durable startup fails
+
+That fallback is intentional. The app prefers durable restore when available,
+but it will not block startup on a broken browser IndexedDB store.
+
 #### UI Resource Caches
 
-The app also stores selected rendered data in `localStorage` using:
+The app stores selected rendered data through a centralized Matrix view store
+plus the lower-level persistence helpers.
 
+- `apps/web/src/lib/matrix/store/matrixViewStore.ts`
+- `apps/web/src/lib/matrix/store/matrixViewActions.ts`
 - `apps/web/src/hooks/usePersistedResource.ts`
+- `apps/web/src/lib/asyncPersistence.ts`
 - `apps/web/src/lib/persistence.ts`
+
+Heavy Matrix-derived caches now use an async IndexedDB-backed layer with a
+small metadata shim in `localStorage` so the UI can tell whether durable cache
+exists before hydration finishes.
+
+The ownership split is:
+
+- `matrix-js-sdk` remains authoritative for sync, crypto, room state, and
+  events
+- the Matrix view store owns persisted room/hub projections used for rendering
+- the action layer applies Matrix-driven and user-driven updates to those
+  projections
+- the normalized room entity store under
+  `apps/web/src/lib/matrix/store/normalizedRoomStore.ts` persists room
+  metadata, main-timeline message entities, and ordering for active-room
+  hydration beneath the higher-level room snapshot projection
+- components should prefer store-backed hooks instead of wiring persistence and
+  Matrix room events individually
+
+The shared app database is bucketed so different persistence concerns do not
+share one opaque keyspace:
+
+- `resources`: room snapshots, catalogs, search metadata, members, and other
+  heavy Matrix-derived UI caches
+- `drafts`: room composer draft text
+- `pending-actions`: pending Tandem room creation and similar reload-sensitive
+  client-side actions
+- `shared-data`: reserved for future local mirrors of Matrix Shared Data
+  Protocol records
+
+Tiny bootstrap-critical values still use direct `localStorage`.
+
+Legacy localStorage support remains as a fallback path if IndexedDB is
+unavailable or fails.
+
+Examples that now hydrate from IndexedDB:
+
+- home hub catalog
+- room snapshot
+- tangent topic catalog
+- pinned messages
+- contacts and members
+- search metadata/index
+
+The old synchronous-only cache layer still exists for lightweight settings and
+bootstrap values.
 
 These caches are not authoritative Matrix state. They are last-known UI
 snapshots used to avoid empty or broken-looking transitions.
@@ -171,16 +242,23 @@ Examples:
 - contacts
 - preferences
 - Tandem relationship state
+- search index metadata
+- room drafts and pending-room bootstrap state
 
 ### What Is Not Persisted Well Enough Yet
 
 Another hard-earned lesson:
 
-- the app persists session and crypto state
-- it does not persist a full Matrix room/event store
+- the app persists session, crypto state, and now a durable Matrix room store
+- the app now has a centralized room/hub view-store layer for shared
+  projections
+- the active room path now also has a normalized room entity layer beneath the
+  room snapshot projection
+- but it still does not maintain its own normalized full event database for
+  app-specific derived state
 
 That means refresh still depends heavily on rebuilding state from the live
-client. The service worker does not fix this.
+client for some higher-level views. The service worker does not fix this.
 
 For a native migration, this is one of the biggest architectural choices to
 make up front:
@@ -198,11 +276,12 @@ This hook is the main local-cache abstraction:
 
 - `apps/web/src/hooks/usePersistedResource.ts`
 
-It does three things:
+It now does four things:
 
-1. reads a cached value synchronously from `localStorage`
-2. exposes it immediately
-3. refreshes it asynchronously when live loading is enabled
+1. checks whether durable cached data exists
+2. exposes any immediately available bootstrap value
+3. hydrates durable cached data asynchronously when needed
+4. refreshes it asynchronously when live loading is enabled
 
 Two details matter:
 
@@ -223,6 +302,17 @@ with an empty transient result during sync.
 That is not just an optimization. It prevents the UI from thrashing during
 reloads and membership churn.
 
+#### IndexedDB Mode vs LocalStorage Mode
+
+`usePersistedResource` now has two storage modes:
+
+- `localStorage` for tiny, synchronous bootstrap values
+- `indexeddb` for larger Matrix-derived caches
+
+The IndexedDB mode is now the default choice for heavy room, hub, member, and
+search surfaces because synchronous `localStorage` serialization was causing
+avoidable main-thread work during live updates.
+
 ### Current Limits of the Cache Model
 
 The current cache layer is:
@@ -234,6 +324,18 @@ The current cache layer is:
 - not a durable event timeline store
 
 It helps with perceived stability, but it is not full offline support.
+
+### Search and Draft Persistence
+
+Two user-facing restore paths now persist outside the live sync path:
+
+- search metadata and loaded encrypted-message index entries
+- room composer drafts
+
+This improves cold-start and reload behavior in two ways:
+
+- search can render from the last durable index before rebuilding
+- room compose state survives refresh without waiting for Matrix sync
 
 ## PWA and Offline Reality
 

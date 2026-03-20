@@ -3,12 +3,14 @@ import type { MatrixClient, TokenRefreshFunction } from 'matrix-js-sdk';
 import { initAsync as initCryptoWasm } from '@matrix-org/matrix-sdk-crypto-wasm';
 import type { MatrixSession } from './types';
 import { decodeRecoveryKey } from 'matrix-js-sdk/lib/crypto-api';
-import { isInactiveMatrixSessionError } from './sessionErrors';
+import {
+  incrementMatrixPerfCounter,
+  timeMatrixPerf,
+} from '../../lib/matrix/performanceMetrics';
 
 const KEY = 'matrix.session.v1';
 const INITIAL_SYNC_LIMIT = 100;
 const SESSION_REFRESH_BUFFER_MS = 5 * 60 * 1000;
-const SESSION_VALIDATION_TIMEOUT_MS = 10000;
 
 export const keyCache = new Map<
   string,
@@ -211,40 +213,6 @@ async function refreshSessionIfNeeded(
   return refreshMatrixSession(session, session.refreshToken, onPersist);
 }
 
-async function validateSessionWithRecovery(
-  client: MatrixClient,
-  session: MatrixSession,
-  onPersist: (s: MatrixSession) => void
-) {
-  try {
-    await Promise.race([
-      client.getJoinedRooms(),
-      new Promise<never>((_, reject) => {
-        window.setTimeout(() => {
-          reject(new Error('Session validation timed out'));
-        }, SESSION_VALIDATION_TIMEOUT_MS);
-      }),
-    ]);
-    return session;
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Session validation timed out') {
-      console.warn('Session validation timed out; continuing with live client');
-      return session;
-    }
-
-    if (!session.refreshToken || !isInactiveMatrixSessionError(error)) {
-      throw error;
-    }
-
-    const refreshedSession = await refreshMatrixSession(
-      session,
-      session.refreshToken,
-      onPersist
-    );
-    return refreshedSession;
-  }
-}
-
 function createCryptoStore(session: MatrixSession) {
   if (typeof indexedDB !== 'undefined') {
     return new sdk.IndexedDBCryptoStore(
@@ -254,6 +222,26 @@ function createCryptoStore(session: MatrixSession) {
   }
 
   return new sdk.MemoryCryptoStore();
+}
+
+function createMatrixStore(session: MatrixSession) {
+  if (typeof indexedDB === 'undefined') {
+    return null;
+  }
+
+  const store = new sdk.IndexedDBStore({
+    indexedDB,
+    dbName: `adhd-chat:matrix-store:${session.userId}:${session.deviceId}`,
+  });
+
+  store.on('degraded', (error) => {
+    console.error('Matrix room store degraded to in-memory mode', error);
+  });
+  store.on('closed', () => {
+    console.warn('Matrix room store closed unexpectedly');
+  });
+
+  return store;
 }
 
 async function deleteRustCryptoStores() {
@@ -338,106 +326,136 @@ export async function buildAuthedClient(
   session: MatrixSession,
   onPersist: (s: MatrixSession) => void
 ): Promise<MatrixClient> {
-  let activeSession = await refreshSessionIfNeeded(session, onPersist);
+  return timeMatrixPerf(
+    'matrix.client.bootstrap',
+    async () => {
+      let activeSession = await refreshSessionIfNeeded(session, onPersist);
 
-  if (
-    _client &&
-    _client.getUserId() === activeSession.userId &&
-    _client.getDeviceId() === activeSession.deviceId
-  ) {
-    return _client;
-  }
-
-  if (_client) {
-    _client.stopClient();
-    _client = null;
-  }
-
-  await initCryptoWasm();
-  const cryptoStore = createCryptoStore(activeSession);
-  await cryptoStore.startup();
-
-  const tokenRefresh: TokenRefreshFunction | undefined = activeSession.refreshToken
-    ? async (refreshToken: string) => {
-        const updated = await refreshMatrixSession(
-          activeSession,
-          refreshToken,
-          onPersist
-        );
-        activeSession = updated;
-        // Update the live client
-        _client?.setAccessToken(updated.accessToken);
-        return {
-          accessToken: updated.accessToken,
-          refreshToken: updated.refreshToken,
-        };
+      if (
+        _client &&
+        _client.getUserId() === activeSession.userId &&
+        _client.getDeviceId() === activeSession.deviceId
+      ) {
+        return _client;
       }
-    : undefined;
 
-  _client = sdk.createClient({
-    baseUrl: activeSession.baseUrl,
-    accessToken: activeSession.accessToken,
-    userId: activeSession.userId,
-    deviceId: activeSession.deviceId,
-    useAuthorizationHeader: true,
-    tokenRefreshFunction: tokenRefresh,
-    cryptoStore,
+      if (_client) {
+        _client.stopClient();
+        _client = null;
+      }
 
-    cryptoCallbacks: {
-      getSecretStorageKey: async ({ keys }) => {
-        const keyId = Object.keys(keys)[0];
+      await initCryptoWasm();
+      const cryptoStore = createCryptoStore(activeSession);
+      await cryptoStore.startup();
+      const matrixStore = createMatrixStore(activeSession);
 
-        // Check if we have this key cached first
-        const cached = keyCache.get(keyId);
-        if (cached) {
-          return [keyId, cached.key];
+      const tokenRefresh: TokenRefreshFunction | undefined =
+        activeSession.refreshToken
+          ? async (refreshToken: string) => {
+              const updated = await refreshMatrixSession(
+                activeSession,
+                refreshToken,
+                onPersist
+              );
+              activeSession = updated;
+              // Update the live client
+              _client?.setAccessToken(updated.accessToken);
+              return {
+                accessToken: updated.accessToken,
+                refreshToken: updated.refreshToken,
+              };
+            }
+          : undefined;
+
+      const createClient = (store: sdk.IndexedDBStore | null) =>
+        sdk.createClient({
+          baseUrl: activeSession.baseUrl,
+          accessToken: activeSession.accessToken,
+          userId: activeSession.userId,
+          deviceId: activeSession.deviceId,
+          useAuthorizationHeader: true,
+          tokenRefreshFunction: tokenRefresh,
+          store: store ?? undefined,
+          cryptoStore,
+
+          cryptoCallbacks: {
+            getSecretStorageKey: async ({ keys }) => {
+              const keyId = Object.keys(keys)[0];
+
+              // Check if we have this key cached first
+              const cached = keyCache.get(keyId);
+              if (cached) {
+                return [keyId, cached.key];
+              }
+
+              if (primedSecretStorageKey) {
+                const key = decodeRecoveryKey(primedSecretStorageKey);
+                primedSecretStorageKey = null;
+                const primed = {
+                  keyInfo: keys[keyId],
+                  key,
+                };
+
+                keyCache.set(keyId, primed);
+                return [keyId, primed.key];
+              }
+
+              // Request the key from the UI
+              const input = await requestSecretStorageKey();
+
+              const rtrn = {
+                keyInfo: keys[keyId],
+                key: decodeRecoveryKey(input),
+              };
+
+              keyCache.set(keyId, rtrn);
+              return [keyId, rtrn.key];
+            },
+            cacheSecretStorageKey: (keyId, keyInfo, key) => {
+              keyCache.set(keyId, { keyInfo, key });
+            },
+          },
+        });
+
+      _client = createClient(matrixStore);
+
+      if (matrixStore) {
+        try {
+          await matrixStore.startup();
+        } catch (error) {
+          incrementMatrixPerfCounter('matrix.client.store_fallback', {
+            userId: activeSession.userId,
+            deviceId: activeSession.deviceId,
+            reason: 'indexeddb_store_startup_failed',
+          });
+          console.error(
+            'Failed to start durable Matrix room store, falling back to memory',
+            error
+          );
+          try {
+            await matrixStore.destroy();
+          } catch (destroyError) {
+            console.error(
+              'Failed to destroy Matrix room store after startup failure',
+              destroyError
+            );
+          }
+          _client.stopClient();
+          _client = createClient(null);
         }
+      }
 
-        if (primedSecretStorageKey) {
-          const key = decodeRecoveryKey(primedSecretStorageKey);
-          primedSecretStorageKey = null;
-          const primed = {
-            keyInfo: keys[keyId],
-            key,
-          };
+      await initRustCryptoWithRecovery(_client, cryptoStore);
 
-          keyCache.set(keyId, primed);
-          return [keyId, primed.key];
-        }
+      await _client.startClient({ initialSyncLimit: INITIAL_SYNC_LIMIT });
 
-        // Request the key from the UI
-        const input = await requestSecretStorageKey();
-
-        const rtrn = {
-          keyInfo: keys[keyId],
-          key: decodeRecoveryKey(input),
-        };
-
-        keyCache.set(keyId, rtrn);
-        return [keyId, rtrn.key];
-      },
-      cacheSecretStorageKey: (keyId, keyInfo, key) => {
-        keyCache.set(keyId, { keyInfo, key });
-      },
+      return _client;
     },
-  });
-
-  await initRustCryptoWithRecovery(_client, cryptoStore);
-
-  await _client.startClient({ initialSyncLimit: INITIAL_SYNC_LIMIT });
-
-  const validatedSession = await validateSessionWithRecovery(
-    _client,
-    activeSession,
-    onPersist
+    {
+      userId: session.userId,
+      deviceId: session.deviceId,
+    }
   );
-  if (validatedSession.accessToken !== activeSession.accessToken) {
-    _client.stopClient();
-    _client = null;
-    return buildAuthedClient(validatedSession, onPersist);
-  }
-
-  return _client;
 }
 
 export function resetAuthedClient() {

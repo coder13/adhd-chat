@@ -15,6 +15,7 @@ import {
   getTandemSpaceIdForRoom,
   type TandemRoomMeta,
 } from './tandem';
+import { startMatrixPerfTimer } from './performanceMetrics';
 
 export interface RoomSnapshot {
   roomName: string;
@@ -49,7 +50,7 @@ export function getAllSnapshotMessages(snapshot: RoomSnapshot) {
   return [...byId.values()];
 }
 
-function getRoomSubtitle(client: MatrixClient, room: Room, userId: string) {
+export function getRoomSubtitle(client: MatrixClient, room: Room, userId: string) {
   const spaceId = getTandemSpaceIdForRoom(client, room);
   const spaceRoom = spaceId ? client.getRoom(spaceId) : null;
 
@@ -65,6 +66,9 @@ export async function buildRoomSnapshot(
   room: Room,
   userId: string
 ): Promise<RoomSnapshot> {
+  const timer = startMatrixPerfTimer('matrix.room.snapshot.build', {
+    roomId: room.roomId,
+  });
   await ensureRoomThreadsLoaded(room);
   await room.loadMembersIfNeeded();
   const allTimelineMessages = getTimelineMessages(client, room, userId);
@@ -73,7 +77,7 @@ export async function buildRoomSnapshot(
     ''
   );
 
-  return {
+  const snapshot = {
     roomName: getRoomDisplayName(room, userId),
     roomDescription: getRoomTopic(room),
     roomIcon: getRoomIcon(room),
@@ -86,4 +90,11 @@ export async function buildRoomSnapshot(
     isEncrypted: Boolean(encryptionEvent),
     roomMeta: getTandemRoomMeta(room),
   };
+
+  timer.end({
+    messageCount: snapshot.messages.length,
+    threadCount: snapshot.threads.length,
+  });
+
+  return snapshot;
 }

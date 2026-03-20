@@ -124,6 +124,7 @@ export default function DesktopRailHeader({
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
+  const isMenuDrivenView = view === 'topics' || view === 'other';
 
   useEffect(() => {
     if (!showMenu || !triggerRef.current || typeof window === 'undefined') {
@@ -182,7 +183,7 @@ export default function DesktopRailHeader({
       className="relative z-40 flex min-w-0 flex-1 items-center gap-2 overflow-visible px-3 py-3"
       ref={containerRef}
     >
-      {view === 'topics' ? (
+      {isMenuDrivenView ? (
         <>
           <button
             ref={triggerRef}
@@ -193,7 +194,7 @@ export default function DesktopRailHeader({
           >
             <IonIcon icon={menuOutline} className="text-xl" />
           </button>
-          {showSearch ? (
+          {view === 'topics' && showSearch ? (
             <label className="flex min-w-0 flex-1 items-center gap-3 rounded-full bg-panel px-4 py-3 text-text-muted transition-colors focus-within:ring-2 focus-within:ring-accent/30">
               <IonIcon icon={searchOutline} className="text-lg shrink-0" />
               <input
@@ -204,7 +205,13 @@ export default function DesktopRailHeader({
                 aria-label="Search visible rooms"
               />
             </label>
-          ) : null}
+          ) : (
+            <div className="min-w-0 flex-1 px-2">
+              <div className="truncate text-lg font-semibold text-text">
+                {getTitle(view, settingsSection)}
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <>

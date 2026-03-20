@@ -10,7 +10,7 @@ globalThis.TextDecoder = TextDecoder as unknown as typeof globalThis.TextDecoder
 const mockUseMatrixClient = jest.fn();
 const mockUseTandem = jest.fn();
 const mockUseChatPreferences = jest.fn();
-const mockUsePersistedResource = jest.fn();
+const mockUseTandemSpaceRoomCatalogStore = jest.fn();
 
 jest.mock('@ionic/react', () => ({
   IonActionSheet: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
@@ -32,6 +32,15 @@ jest.mock('@ionic/react', () => ({
 jest.mock('matrix-js-sdk', () => ({
   ClientEvent: {
     Sync: 'sync',
+  },
+  RoomEvent: {
+    Timeline: 'timeline',
+    Receipt: 'receipt',
+    Name: 'name',
+    MyMembership: 'my_membership',
+    AccountData: 'account_data',
+    LocalEchoUpdated: 'local_echo_updated',
+    TimelineReset: 'timeline_reset',
   },
 }));
 
@@ -64,8 +73,8 @@ jest.mock('../../hooks/useChatPreferences', () => ({
   useChatPreferences: mockUseChatPreferences,
 }));
 
-jest.mock('../../hooks/usePersistedResource', () => ({
-  usePersistedResource: mockUsePersistedResource,
+jest.mock('../../hooks/useTandemSpaceRoomCatalogStore', () => ({
+  useTandemSpaceRoomCatalogStore: mockUseTandemSpaceRoomCatalogStore,
 }));
 
 jest.mock('../../lib/matrix/identity', () => ({
@@ -80,6 +89,7 @@ jest.mock('../../lib/matrix/chatCatalog', () => ({
 
 jest.mock('../../lib/matrix/pendingTandemRoom', () => ({
   startPendingTandemRoomCreation: jest.fn(),
+  subscribeToPendingTandemRooms: jest.fn(() => () => undefined),
 }));
 
 jest.mock('../../lib/matrix/tandemPresentation', () => ({
@@ -155,7 +165,7 @@ describe('TandemSpacePage', () => {
   });
 
   it('keeps rendering cached topics when the live hub room is temporarily missing', () => {
-    mockUsePersistedResource.mockReturnValue({
+    mockUseTandemSpaceRoomCatalogStore.mockReturnValue({
       data: [
         {
           id: '!topic:example.com',
@@ -191,7 +201,7 @@ describe('TandemSpacePage', () => {
 
   it('still shows the error for an invalid hub route with no cached state', () => {
     mockUseTandem.mockReturnValue({ relationships: [] });
-    mockUsePersistedResource.mockReturnValue({
+    mockUseTandemSpaceRoomCatalogStore.mockReturnValue({
       data: [],
       error: 'Tandem space not found.',
       isLoading: false,

@@ -1,6 +1,11 @@
 import { createId } from '../id';
 import { createTandemChildRoom, type TandemRelationshipRecord } from './tandem';
 import type { MatrixClient } from 'matrix-js-sdk';
+import {
+  clearPersistedValueAsync,
+  loadPersistedValueAsync,
+  savePersistedValueAsync,
+} from '../asyncPersistence';
 
 const STORAGE_KEY = 'tandem.pending_rooms';
 const PENDING_ROOM_PREFIX = 'pending:tandem:';
@@ -22,20 +27,21 @@ export interface PendingTandemRoomRecord {
 type PendingRoomListener = () => void;
 
 const listeners = new Set<PendingRoomListener>();
+let hydrationPromise: Promise<void> | null = null;
 
 function emitChange() {
   listeners.forEach((listener) => listener());
 }
 
-function canUseStorage() {
+function canUseSessionStorage() {
   return (
     typeof window !== 'undefined' &&
     typeof window.sessionStorage !== 'undefined'
   );
 }
 
-function readPendingRooms() {
-  if (!canUseStorage()) {
+function readPendingRoomsFromSessionStorage() {
+  if (!canUseSessionStorage()) {
     return {} as Record<string, PendingTandemRoomRecord>;
   }
 
@@ -53,13 +59,81 @@ function readPendingRooms() {
   }
 }
 
-function writePendingRooms(next: Record<string, PendingTandemRoomRecord>) {
-  if (!canUseStorage()) {
+let pendingRoomsState = readPendingRoomsFromSessionStorage();
+
+function hasPendingRooms(pendingRooms: Record<string, PendingTandemRoomRecord>) {
+  return Object.keys(pendingRooms).length > 0;
+}
+
+function persistPendingRooms(next: Record<string, PendingTandemRoomRecord>) {
+  if (hasPendingRooms(next)) {
+    void savePersistedValueAsync(STORAGE_KEY, next, {
+      bucket: 'pending-actions',
+    });
     return;
   }
 
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  void clearPersistedValueAsync(STORAGE_KEY, { bucket: 'pending-actions' });
+}
+
+function writePendingRoomsMirror(next: Record<string, PendingTandemRoomRecord>) {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+
+  try {
+    if (hasPendingRooms(next)) {
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } else {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    }
+  } catch (cause) {
+    console.error('Failed to write pending Tandem rooms session mirror', cause);
+  }
+}
+
+function writePendingRooms(next: Record<string, PendingTandemRoomRecord>) {
+  pendingRoomsState = next;
+  writePendingRoomsMirror(next);
+  persistPendingRooms(next);
   emitChange();
+}
+
+function ensurePendingRoomsHydrated() {
+  if (hydrationPromise) {
+    return hydrationPromise;
+  }
+
+  hydrationPromise = loadPersistedValueAsync<
+    Record<string, PendingTandemRoomRecord>
+  >(STORAGE_KEY, { bucket: 'pending-actions' })
+    .then((persistedPendingRooms) => {
+      if (!persistedPendingRooms || !hasPendingRooms(persistedPendingRooms)) {
+        if (hasPendingRooms(pendingRoomsState)) {
+          persistPendingRooms(pendingRoomsState);
+        }
+        return;
+      }
+
+      const mergedPendingRooms = {
+        ...persistedPendingRooms,
+        ...pendingRoomsState,
+      };
+      const nextState = JSON.stringify(mergedPendingRooms);
+      const currentState = JSON.stringify(pendingRoomsState);
+      if (nextState === currentState) {
+        return;
+      }
+
+      pendingRoomsState = mergedPendingRooms;
+      writePendingRoomsMirror(mergedPendingRooms);
+      emitChange();
+    })
+    .catch((cause) => {
+      console.error('Failed to hydrate pending Tandem rooms', cause);
+    });
+
+  return hydrationPromise;
 }
 
 function upsertPendingRoom(record: PendingTandemRoomRecord) {
@@ -82,6 +156,7 @@ export function getPendingTandemRoom(roomId: string | null) {
 
 export function subscribeToPendingTandemRooms(listener: PendingRoomListener) {
   listeners.add(listener);
+  void ensurePendingRoomsHydrated();
 
   return () => {
     listeners.delete(listener);
@@ -108,6 +183,11 @@ export function clearPendingTandemRoom(roomId: string) {
 
   delete pendingRooms[roomId];
   writePendingRooms(pendingRooms);
+}
+
+function readPendingRooms() {
+  void ensurePendingRoomsHydrated();
+  return { ...pendingRoomsState };
 }
 
 export function startPendingTandemRoomCreation(params: {

@@ -50,7 +50,7 @@ describe('MessageBubble', () => {
       />
     );
 
-    expect(screen.getAllByText('Alex')).toHaveLength(2);
+    expect(screen.getByText('Alex')).toBeInTheDocument();
     expect(screen.getByText('😀🎉🫶')).toBeInTheDocument();
   });
 

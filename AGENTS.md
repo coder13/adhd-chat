@@ -4,6 +4,15 @@
 - Do not add roadmap, milestone, or process language to user-facing surfaces.
 - Avoid adding explanatory text unless it is strictly necessary to make a flow usable; first solve the problem through interaction design and behavior.
 
+## Matrix UI State Gotchas
+
+- Chat view mode (`timeline` vs `bubbles`) must never be allowed to flash from a generic default before the user-scoped preference is known. Treat transcript layout as render-critical state.
+- Persist chat preferences in user-scoped `localStorage` for first paint, and also write them through to Matrix account data for cross-device sync. Local cache is the bootstrap source; account data is the eventual shared source.
+- Be careful with hooks that keep internal state across `cacheKey` changes. A `null -> user-scoped key` transition can briefly expose stale data from the previous render if the hook does not reset synchronously.
+- For chat preferences specifically, prefer the current user’s persisted local value over transient async resource state during hydration. Otherwise the room can render one stale frame and cause layout shift.
+- If a Matrix-backed screen can show cached data, prefer showing the cached data plus an updating indicator instead of clearing the surface while refresh is in flight.
+- When debugging Matrix UI hydration issues, use opt-in instrumentation instead of guessing. Current chat preference debug logs live under `window.__ADHD_CHAT_CHAT_PREF_DEBUG__`.
+
 <!-- BACKLOG.MD GUIDELINES START -->
 
 # Instructions for the usage of Backlog.md CLI Tool

@@ -4,16 +4,23 @@ import {
   getMentionQuery,
   type MentionCandidate,
 } from '../../lib/chat/mentions';
+import {
+  clearPersistedValueAsync,
+  loadPersistedValueAsync,
+  savePersistedValueAsync,
+} from '../../lib/asyncPersistence';
 import type { ComposerMode, QueuedImage } from './types';
 
 interface UseRoomComposerStateParams {
   mentionCandidates: MentionCandidate[];
   resetKey?: string | null;
+  storageKey?: string | null;
 }
 
 export function useRoomComposerState({
   mentionCandidates,
   resetKey,
+  storageKey,
 }: UseRoomComposerStateParams) {
   const [draft, setDraft] = useState('');
   const [queuedImage, setQueuedImage] = useState<QueuedImage>(null);
@@ -38,6 +45,46 @@ export function useRoomComposerState({
       candidate.token.toLowerCase().startsWith(mentionQuery.toLowerCase())
     );
   }, [emojiQuery, mentionCandidates, mentionQuery]);
+
+  useEffect(() => {
+    if (!storageKey) {
+      return;
+    }
+
+    let cancelled = false;
+    void loadPersistedValueAsync<string>(storageKey, {
+      bucket: 'drafts',
+    }).then((cachedDraft) => {
+      if (cancelled || typeof cachedDraft !== 'string') {
+        return;
+      }
+
+      setDraft(cachedDraft);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (draft.length === 0) {
+        void clearPersistedValueAsync(storageKey, { bucket: 'drafts' });
+        return;
+      }
+
+      void savePersistedValueAsync(storageKey, draft, { bucket: 'drafts' });
+    }, 150);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [draft, storageKey]);
 
   useEffect(() => {
     if (resetKey === undefined) {

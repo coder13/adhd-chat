@@ -3,6 +3,7 @@ import { RelationType, type MatrixClient, type Room } from 'matrix-js-sdk';
 import type { Dispatch, SetStateAction } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { updateRoomIdentity } from '../../lib/matrix/identity';
+import { patchTandemSpaceRoomCatalogEntry } from '../../lib/matrix/catalogPatches';
 import {
   deleteTandemRoom,
   joinTandemRoom,
@@ -47,8 +48,13 @@ interface UseRoomPageActionsParams {
   tangentSpaceId: string | null;
   tangentRelationship: TandemRelationshipRecord | null;
   tangentTopics: TandemSpaceRoomSummary[];
-  refresh: () => Promise<unknown>;
-  refreshTangentTopics: () => Promise<unknown>;
+  updateTangentTopics: (
+    updater:
+      | TandemSpaceRoomSummary[]
+      | ((
+          currentValue: TandemSpaceRoomSummary[]
+        ) => TandemSpaceRoomSummary[])
+  ) => TandemSpaceRoomSummary[];
   navigate: NavigateFunction;
 }
 
@@ -83,10 +89,25 @@ export function useRoomPageActions({
   tangentSpaceId,
   tangentRelationship,
   tangentTopics,
-  refresh,
-  refreshTangentTopics,
+  updateTangentTopics,
   navigate,
 }: UseRoomPageActionsParams) {
+  const patchTangentTopic = (targetRoomId = roomId) => {
+    if (!client || !userId || !tangentSpaceId) {
+      return;
+    }
+
+    updateTangentTopics((currentValue) =>
+      patchTandemSpaceRoomCatalogEntry(
+        currentValue,
+        client,
+        userId,
+        tangentSpaceId,
+        targetRoomId
+      )
+    );
+  };
+
   const handleEnableEncryption = async () => {
     if (!client) {
       return;
@@ -103,7 +124,6 @@ export function useRoomPageActions({
           stateKey: string
         ) => Promise<unknown>
       )(roomId, 'm.room.encryption', { algorithm: 'm.megolm.v1.aes-sha2' }, '');
-      await refresh();
     } catch (cause) {
       console.error(cause);
       setActionError(cause instanceof Error ? cause.message : String(cause));
@@ -120,7 +140,6 @@ export function useRoomPageActions({
     setMessageMenu(null);
     try {
       await client.redactEvent(roomId, message.id);
-      await refresh();
     } catch (cause) {
       console.error(cause);
       setActionError(cause instanceof Error ? cause.message : String(cause));
@@ -168,7 +187,6 @@ export function useRoomPageActions({
           },
         });
       }
-      await refresh();
     } catch (cause) {
       console.error(cause);
       setOptimisticReactionChanges((currentChanges) =>
@@ -199,7 +217,6 @@ export function useRoomPageActions({
           stateKey: string
         ) => Promise<unknown>
       )(roomId, 'm.room.pinned_events', { pinned: nextPinned }, '');
-      await refresh();
     } catch (cause) {
       console.error(cause);
       setActionError(cause instanceof Error ? cause.message : String(cause));
@@ -213,7 +230,7 @@ export function useRoomPageActions({
 
     try {
       await updateTandemRoomMeta(client, roomId, metaUpdate);
-      await refresh();
+      patchTangentTopic();
     } catch (cause) {
       console.error(cause);
       setActionError(cause instanceof Error ? cause.message : String(cause));
@@ -229,7 +246,7 @@ export function useRoomPageActions({
     setActionError(null);
     try {
       await deleteTandemRoom(client, currentRoom);
-      await refreshTangentTopics();
+      patchTangentTopic();
       navigate(tangentSpaceId ? `/tandem/space/${encodeURIComponent(tangentSpaceId)}` : '/other', {
         replace: true,
       });
@@ -261,8 +278,7 @@ export function useRoomPageActions({
         icon: values.icon,
       });
       setShowIdentityModal(false);
-      await refresh();
-      await refreshTangentTopics();
+      patchTangentTopic();
     } catch (cause) {
       console.error(cause);
       setActionError(cause instanceof Error ? cause.message : String(cause));
@@ -301,7 +317,7 @@ export function useRoomPageActions({
     if (topic.membership !== 'join') {
       try {
         await joinTandemRoom(client, client.getRoom(topic.id));
-        await refreshTangentTopics();
+        patchTangentTopic(topic.id);
       } catch (cause) {
         console.error(cause);
         setTangentError(cause instanceof Error ? cause.message : String(cause));
@@ -329,8 +345,7 @@ export function useRoomPageActions({
     setActionError(null);
     try {
       await joinTandemRoom(client, currentRoom);
-      await refresh();
-      await refreshTangentTopics();
+      patchTangentTopic();
     } catch (cause) {
       console.error(cause);
       setActionError(cause instanceof Error ? cause.message : String(cause));
@@ -345,7 +360,7 @@ export function useRoomPageActions({
     setActionError(null);
     try {
       await leaveTandemRoom(client, currentRoom);
-      await refreshTangentTopics();
+      patchTangentTopic();
       navigate(tangentSpaceId ? `/tandem/space/${encodeURIComponent(tangentSpaceId)}` : '/other', {
         replace: true,
       });

@@ -6,6 +6,8 @@ import { AuthFallbackState, Button } from '../components';
 import MessageActionMenu from '../components/chat/MessageActionMenu';
 import { createMentionCandidate } from '../lib/chat/mentions';
 import { cn } from '../lib/cn';
+import { recordLayoutDebugEvent } from '../lib/layoutDebug';
+import { recordChatPreferenceDebugEvent } from '../lib/matrix/chatPreferenceDebug';
 import { shouldSuppressMissingRoomError } from '../lib/matrix/restoreErrors';
 import {
   applyOptimisticReactionChanges,
@@ -17,19 +19,8 @@ import {
 } from '../lib/matrix/optimisticTimeline';
 import { isPendingTandemRoomId } from '../lib/matrix/pendingTandemRoom';
 import { findLatestOwnReadReceipt } from '../lib/matrix/readReceipts';
-import {
-  hasMoreRoomHistoryBack,
-  paginateRoomHistoryBack,
-} from '../lib/matrix/roomHistory';
+import { hasMoreRoomHistoryBack } from '../lib/matrix/roomHistory';
 import { sendTypingState } from '../lib/matrix/typingState';
-import {
-  buildRoomSnapshot,
-  type RoomSnapshot,
-} from '../lib/matrix/roomSnapshot';
-import {
-  buildTandemSpaceRoomCatalog,
-  type TandemSpaceRoomSummary,
-} from '../lib/matrix/spaceCatalog';
 import {
   getTandemMembershipPolicy,
   getTandemSpaceIdForRoom,
@@ -41,8 +32,9 @@ import {
 } from '../lib/matrix/typingIndicators';
 import { useChatPreferences } from '../hooks/useChatPreferences';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { usePersistedResource } from '../hooks/usePersistedResource';
+import { useRoomSnapshotStore } from '../hooks/useRoomSnapshotStore';
 import { useTandem } from '../hooks/useTandem';
+import { useTandemSpaceRoomCatalogStore } from '../hooks/useTandemSpaceRoomCatalogStore';
 import { useCurrentUserProfileSummary } from '../hooks/useCurrentUserProfileSummary';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
 import { loadDesktopLastSelection } from '../lib/desktopShell';
@@ -81,42 +73,25 @@ function RoomPage() {
     preferences,
     updateRoomNotificationMode,
     resolveRoomNotificationMode,
+    isLoaded: isChatPreferencesLoaded,
   } = useChatPreferences(client, cacheUserId);
   const { relationships } = useTandem(client, cacheUserId);
   const isDesktopLayout = useMediaQuery('(min-width: 1280px)');
 
-  const cacheKey =
-    !isPendingRoom && cacheUserId && roomId
-      ? `room:${cacheUserId}:${roomId}`
-      : null;
   const {
     data: snapshot,
     error,
     isLoading: loading,
+    isRefreshing: isRefreshingRoom,
     refresh,
+    updateData: updateSnapshot,
     hasCachedData,
-  } = usePersistedResource<RoomSnapshot>({
-    cacheKey,
+    paginateBack,
+  } = useRoomSnapshotStore({
+    client,
     enabled: Boolean(client && user && roomId && !isPendingRoom),
-    initialValue: {
-      roomName: 'Conversation',
-      roomDescription: null,
-      roomIcon: null,
-      roomAvatarUrl: null,
-      roomSubtitle: 'Connecting...',
-      messages: [],
-      threads: [],
-      isEncrypted: false,
-      roomMeta: {},
-    },
-    load: async () => {
-      const room = client?.getRoom(roomId ?? undefined);
-      if (!room || !client || !user) {
-        throw new Error('Conversation not found');
-      }
-
-      return buildRoomSnapshot(client, room, user.userId);
-    },
+    roomId: isPendingRoom ? null : roomId,
+    userId: isPendingRoom ? null : user?.userId ?? null,
   });
 
   const [enablingEncryption, setEnablingEncryption] = useState(false);
@@ -211,17 +186,16 @@ function RoomPage() {
   const currentUserName = currentUserProfile.name;
   const currentUserAvatarUrl = currentUserProfile.avatarUrl;
 
-  const { data: tangentTopics, refresh: refreshTangentTopics } =
-    usePersistedResource<TandemSpaceRoomSummary[]>({
-      cacheKey:
-        cacheUserId && tangentSpaceId
-          ? `space-rooms:${cacheUserId}:${tangentSpaceId}`
-          : null,
-      enabled: Boolean(client && user && isReady && tangentSpaceId),
-      initialValue: [],
-      load: async () =>
-        buildTandemSpaceRoomCatalog(client!, user!.userId, tangentSpaceId!),
-    });
+  const {
+    data: tangentTopics,
+    updateData: updateTangentTopics,
+  } = useTandemSpaceRoomCatalogStore({
+    client,
+    enabled: Boolean(user && tangentSpaceId),
+    isReady,
+    spaceId: tangentSpaceId,
+    userId: user?.userId ?? null,
+  });
   const showDesktopSidebar =
     isDesktopLayout &&
     Boolean(tangentSpaceId) &&
@@ -338,10 +312,16 @@ function RoomPage() {
   }, []);
   const mainComposerState = useRoomComposerState({
     mentionCandidates,
+    storageKey:
+      cacheUserId && roomId ? `room-draft:${cacheUserId}:${roomId}:main` : null,
   });
   const threadComposerState = useRoomComposerState({
     mentionCandidates,
     resetKey: activeThreadRootId,
+    storageKey:
+      cacheUserId && roomId && activeThreadRootId
+        ? `room-draft:${cacheUserId}:${roomId}:thread:${activeThreadRootId}`
+        : null,
   });
   const activeTypingDraft =
     mainComposerState.draft || threadComposerState.draft;
@@ -358,7 +338,8 @@ function RoomPage() {
     currentRoom,
     snapshot,
     refresh,
-    refreshTangentTopics,
+    updateSnapshot,
+    updateTangentTopics,
     canInteractWithTimeline,
     tangentRelationship,
     tangentSpaceId,
@@ -496,6 +477,7 @@ function RoomPage() {
     isThreadRouteActive
       ? activeThreadMessages
       : visibleMainMessages;
+  const previousRoomViewStateRef = useRef<string | null>(null);
   const canLoadOlderMainTimeline =
     !isThreadRouteActive &&
     currentRoom !== null &&
@@ -509,18 +491,14 @@ function RoomPage() {
     setLoadingOlderMessages(true);
 
     try {
-      const { didPaginate } = await paginateRoomHistoryBack(client, currentRoom);
-
-      if (didPaginate) {
-        await refresh();
-      }
+      await paginateBack();
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : String(cause));
       throw cause;
     } finally {
       setLoadingOlderMessages(false);
     }
-  }, [client, currentRoom, isThreadRouteActive, refresh]);
+  }, [client, currentRoom, isThreadRouteActive, paginateBack]);
   const threadSummariesByRootId = new Map(
     threads
       .filter((thread) => thread.replyCount > 0)
@@ -556,6 +534,22 @@ function RoomPage() {
     isAuthRestoring: state === 'syncing',
   });
   const displayError = suppressMissingRoomError ? null : visibleError;
+  const roomViewPhase =
+    isPendingRoom
+      ? 'pending-room'
+      : loading
+        ? 'loading'
+        : displayError && messages.length === 0
+          ? 'error'
+          : membershipPolicy && roomMembership !== 'join'
+            ? 'membership-blocked'
+            : visibleMessages.length === 0
+              ? 'empty'
+              : !isChatPreferencesLoaded
+                ? 'waiting-for-chat-preferences'
+                : isThreadRouteActive
+                  ? 'thread-transcript'
+                  : 'room-transcript';
   const typingIndicator = formatTypingIndicator(typingMemberNames);
   const pinnedMessageIds =
     currentRoom?.currentState
@@ -643,7 +637,6 @@ function RoomPage() {
     mentionCandidates,
     optimisticMessages,
     setOptimisticMessages,
-    refresh,
     scrollToLatest,
     composerRef: mainComposerState.composerRef,
     emojiPickerRef: mainComposerState.emojiPickerRef,
@@ -677,7 +670,6 @@ function RoomPage() {
     mentionCandidates,
     optimisticMessages,
     setOptimisticMessages,
-    refresh,
     scrollToLatest: isDesktopThreadPanelOpen
       ? scrollThreadPanelToLatest
       : scrollToLatest,
@@ -739,8 +731,7 @@ function RoomPage() {
     tangentSpaceId,
     tangentRelationship,
     tangentTopics,
-    refresh,
-    refreshTangentTopics,
+    updateTangentTopics,
     navigate,
   });
   const previewedQueuedImage = mainComposerState.showQueuedImagePreview
@@ -761,6 +752,63 @@ function RoomPage() {
     mainComposerState.setShowQueuedImagePreview(false);
     threadComposerState.setShowQueuedImagePreview(false);
   };
+
+  useEffect(() => {
+    const nextState = JSON.stringify({
+      chatPreferencesLoaded: isChatPreferencesLoaded,
+      cacheUserId,
+      isThreadRouteActive,
+      roomId,
+      roomViewPhase,
+      state,
+      visibleMessageCount: visibleMessages.length,
+      viewMode: preferences.chatViewMode,
+    });
+    if (previousRoomViewStateRef.current === nextState) {
+      return;
+    }
+
+    previousRoomViewStateRef.current = nextState;
+    recordChatPreferenceDebugEvent('Room.renderState', {
+      chatPreferencesLoaded: isChatPreferencesLoaded,
+      cacheUserId,
+      isThreadRouteActive,
+      roomId,
+      roomViewPhase,
+      state,
+      visibleMessageCount: visibleMessages.length,
+      viewMode: preferences.chatViewMode,
+    });
+  }, [
+    cacheUserId,
+    isChatPreferencesLoaded,
+    isThreadRouteActive,
+    preferences.chatViewMode,
+    roomId,
+    roomViewPhase,
+    state,
+    visibleMessages.length,
+  ]);
+
+  useEffect(() => {
+    recordLayoutDebugEvent('Room.desktopShell', {
+      desktopRailView,
+      isDesktopLayout,
+      roomId,
+      showDesktopRailBody,
+      showDesktopSidebar,
+      tangentSpaceId,
+      useDesktopSplitLayout,
+    });
+  }, [
+    desktopRailView,
+    isDesktopLayout,
+    roomId,
+    showDesktopRailBody,
+    showDesktopSidebar,
+    tangentSpaceId,
+    useDesktopSplitLayout,
+  ]);
 
   if (!roomId) {
     return (
@@ -1020,6 +1068,12 @@ function RoomPage() {
                         : 'Start the topic below.'}
                     </p>
                   </div>
+                ) : !isChatPreferencesLoaded ? (
+                  <div className="py-12 text-center">
+                    <p className="text-base font-medium text-text">
+                      Loading conversation...
+                    </p>
+                  </div>
                 ) : isThreadRouteActive ? (
                   <ThreadTimeline
                     rootMessage={activeThreadRootMessage}
@@ -1057,6 +1111,11 @@ function RoomPage() {
                   />
                 ) : (
                   <div className="space-y-3">
+                    {isRefreshingRoom ? (
+                      <div className="py-1 text-center text-xs text-text-muted">
+                        Updating conversation...
+                      </div>
+                    ) : null}
                     {loadingOlderMessages ? (
                       <div className="py-1 text-center text-xs text-text-muted">
                         Loading older messages...

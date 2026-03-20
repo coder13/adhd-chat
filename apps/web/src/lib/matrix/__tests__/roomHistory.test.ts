@@ -4,13 +4,30 @@ jest.mock('../timelineEvents', () => ({
   getRoomTimelineEvents: jest.fn(),
 }));
 
+const mockEndMatrixPerfTimer = jest.fn();
+const mockStartMatrixPerfTimer = jest.fn(() => ({
+  end: mockEndMatrixPerfTimer,
+}));
+
+jest.mock('../performanceMetrics', () => ({
+  startMatrixPerfTimer: mockStartMatrixPerfTimer,
+}));
+
 import { getRoomTimelineEvents } from '../timelineEvents';
+import { startMatrixPerfTimer } from '../performanceMetrics';
 import {
   hasMoreRoomHistoryBack,
   paginateRoomHistoryBack,
 } from '../roomHistory';
 
 describe('roomHistory', () => {
+  beforeEach(() => {
+    mockEndMatrixPerfTimer.mockClear();
+    (
+      startMatrixPerfTimer as jest.MockedFunction<typeof startMatrixPerfTimer>
+    ).mockClear();
+  });
+
   it('reports whether a room can paginate backward', () => {
     expect(
       hasMoreRoomHistoryBack({
@@ -53,6 +70,20 @@ describe('roomHistory', () => {
       hasMore: false,
     });
 
+    expect(startMatrixPerfTimer).toHaveBeenCalledWith(
+      'matrix.room.history.paginate_back',
+      {
+        roomId: undefined,
+        limit: 25,
+      }
+    );
+    expect(mockEndMatrixPerfTimer).toHaveBeenCalledWith({
+      didPaginate: true,
+      hasMore: false,
+      previousEventCount: 1,
+      nextEventCount: 2,
+      addedEventCount: 1,
+    });
     expect(client.scrollback).toHaveBeenCalledWith(room, 25);
   });
 });

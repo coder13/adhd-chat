@@ -17,41 +17,15 @@ import {
 import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AuthFallbackState } from '../components';
-import { MessageBubble } from '../components/chat';
+import { TimelineMessage } from '../components/chat';
 import { usePersistedResource } from '../hooks/usePersistedResource';
-import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
 import useMatrixClient from '../hooks/useMatrixClient/useMatrixClient';
+import { getRoomDisplayName } from '../lib/matrix/chatCatalog';
 import {
-  buildRoomSnapshot,
-  type RoomSnapshot,
-} from '../lib/matrix/roomSnapshot';
-
-type PinnedMessagesSnapshot = {
-  roomName: string;
-  messages: RoomSnapshot['messages'];
-};
-
-async function buildPinnedMessagesSnapshot(
-  roomId: string,
-  client: NonNullable<ReturnType<typeof useMatrixClient>['client']>,
-  userId: string
-): Promise<PinnedMessagesSnapshot> {
-  const room = client.getRoom(roomId);
-  if (!room) {
-    throw new Error('Topic not found.');
-  }
-
-  const snapshot = await buildRoomSnapshot(client, room, userId);
-  const pinnedIds =
-    room.currentState
-      .getStateEvents('m.room.pinned_events', '')
-      ?.getContent<{ pinned?: string[] }>().pinned ?? [];
-
-  return {
-    roomName: snapshot.roomName,
-    messages: snapshot.messages.filter((message) => pinnedIds.includes(message.id)),
-  };
-}
+  buildPinnedMessagesSnapshotFromRoom,
+  loadPinnedMessagesSnapshot,
+  type PinnedMessagesSnapshot,
+} from '../lib/matrix/pinnedMessages';
 
 function RoomPinnedMessagesPage() {
   const { roomId: encodedRoomId } = useParams<{ roomId: string }>();
@@ -64,6 +38,7 @@ function RoomPinnedMessagesPage() {
     error,
     isLoading,
     refresh,
+    updateData: updateSnapshot,
     hasCachedData,
   } = usePersistedResource<PinnedMessagesSnapshot>({
     cacheKey:
@@ -73,9 +48,9 @@ function RoomPinnedMessagesPage() {
       roomName: 'Topic',
       messages: [],
     },
-    load: async () => buildPinnedMessagesSnapshot(roomId!, client!, user!.userId),
+    storage: 'indexeddb',
+    load: async () => loadPinnedMessagesSnapshot(roomId!, client!, user!.userId),
   });
-  const scheduleRefreshPinnedMessages = useThrottledRefresh(refresh);
   const isLiveSession = Boolean(client && user && isReady);
   const canRenderCachedPins =
     state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
@@ -86,6 +61,15 @@ function RoomPinnedMessagesPage() {
     }
 
     const room = client.getRoom(roomId);
+    if (!room) {
+      return;
+    }
+
+    const syncPinnedMessages = () => {
+      updateSnapshot(
+        buildPinnedMessagesSnapshotFromRoom(client, room, user.userId)
+      );
+    };
 
     const handleTimeline = (
       _event: MatrixEvent,
@@ -98,7 +82,7 @@ function RoomPinnedMessagesPage() {
         return;
       }
 
-      void refresh();
+      syncPinnedMessages();
     };
 
     const handleAccountData = (
@@ -106,28 +90,67 @@ function RoomPinnedMessagesPage() {
       eventRoom: MatrixRoom
     ) => {
       if (eventRoom.roomId === roomId) {
-        void refresh();
+        syncPinnedMessages();
       }
     };
 
+    const handleLocalEchoUpdated = (
+      _event: MatrixEvent,
+      eventRoom: MatrixRoom
+    ) => {
+      if (eventRoom.roomId === roomId) {
+        syncPinnedMessages();
+      }
+    };
+
+    const handleRoomName = (eventRoom: MatrixRoom) => {
+      if (eventRoom.roomId === roomId) {
+        updateSnapshot((currentValue) => ({
+          ...currentValue,
+          roomName: getRoomDisplayName(room, user.userId),
+        }));
+      }
+    };
+
+    const handleCurrentStateUpdated = () => {
+      syncPinnedMessages();
+    };
+
+    client.on(RoomEvent.Timeline, handleTimeline);
+    client.on(RoomEvent.AccountData, handleAccountData);
+    client.on(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
+    client.on(RoomEvent.Name, handleRoomName);
+    client.on(RoomEvent.TimelineReset, handleCurrentStateUpdated);
+    room.on(RoomEvent.CurrentStateUpdated, handleCurrentStateUpdated);
+
+    return () => {
+      client.off(RoomEvent.Timeline, handleTimeline);
+      client.off(RoomEvent.AccountData, handleAccountData);
+      client.off(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
+      client.off(RoomEvent.Name, handleRoomName);
+      client.off(RoomEvent.TimelineReset, handleCurrentStateUpdated);
+      room.off(RoomEvent.CurrentStateUpdated, handleCurrentStateUpdated);
+    };
+  }, [client, isReady, roomId, updateSnapshot, user]);
+
+  useEffect(() => {
+    if (!client || !roomId || !user || !isReady || client.getRoom(roomId)) {
+      return;
+    }
+
     const handleSync = () => {
-      scheduleRefreshPinnedMessages();
+      if (!client.getRoom(roomId)) {
+        return;
+      }
+
+      void refresh();
     };
 
     client.on(ClientEvent.Sync, handleSync);
-    client.on(RoomEvent.Timeline, handleTimeline);
-    client.on(RoomEvent.AccountData, handleAccountData);
-    client.on(RoomEvent.Name, refresh);
-    room?.on(RoomEvent.CurrentStateUpdated, refresh);
-
     return () => {
       client.off(ClientEvent.Sync, handleSync);
-      client.off(RoomEvent.Timeline, handleTimeline);
-      client.off(RoomEvent.AccountData, handleAccountData);
-      client.off(RoomEvent.Name, refresh);
-      room?.off(RoomEvent.CurrentStateUpdated, refresh);
     };
-  }, [client, isReady, refresh, roomId, scheduleRefreshPinnedMessages, user]);
+  }, [client, isReady, refresh, roomId, user]);
 
   if (!roomId) {
     return (
@@ -202,11 +225,10 @@ function RoomPinnedMessagesPage() {
           ) : (
             <div className="space-y-3">
               {snapshot.messages.map((message) => (
-                <MessageBubble
+                <TimelineMessage
                   key={message.id}
                   message={message}
                   accessToken={client?.getAccessToken() ?? null}
-                  viewMode="timeline"
                 />
               ))}
             </div>

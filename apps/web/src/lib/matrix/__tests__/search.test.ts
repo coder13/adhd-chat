@@ -18,7 +18,6 @@ import {
   mergeTandemSearchResults,
   searchLoadedEncryptedMessages,
 } from '../search';
-import { getRoomTimelineEvents } from '../timelineEvents';
 
 describe('tandem search mapping', () => {
   it('maps server search results into product search results', () => {
@@ -45,6 +44,7 @@ describe('tandem search mapping', () => {
       } as never,
       {
         encryptedRoomCount: 0,
+        encryptedEntries: [],
         rooms: [
           {
             roomId: '!room:example.com',
@@ -74,22 +74,23 @@ describe('tandem search mapping', () => {
   });
 
   it('searches loaded decrypted messages in encrypted rooms locally', () => {
-    (getRoomTimelineEvents as jest.Mock).mockReturnValue([
-      {
-        getId: () => '$local',
-        getTs: () => 2345,
-        getSender: () => '@sam:example.com',
-        getContent: () => ({ body: 'Encrypted dinner plan', msgtype: 'm.text' }),
-        sender: { name: 'Sam' },
-      },
-    ]);
-
     const results = searchLoadedEncryptedMessages(
       {
-        getRoom: jest.fn(() => ({})),
-      } as never,
-      {
         encryptedRoomCount: 1,
+        encryptedEntries: [
+          {
+            id: '$local',
+            eventId: '$local',
+            roomId: '!room:example.com',
+            roomName: 'Plans',
+            roomIcon: '🍎',
+            hubName: 'Home',
+            senderName: 'Sam',
+            body: 'Encrypted dinner plan',
+            timestamp: 2345,
+            source: 'local-encrypted',
+          },
+        ],
         rooms: [
           {
             roomId: '!room:example.com',

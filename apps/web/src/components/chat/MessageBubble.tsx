@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppAvatar } from '..';
 import type { TimelineMessage } from '../../lib/matrix/chatCatalog';
-import type { ChatViewMode } from '../../lib/matrix/preferences';
 import { cn } from '../../lib/cn';
+import type { ChatMessageProps } from './types';
 import { resolveMediaUrl } from './mediaLoader';
 import { renderLinkedMessageText } from './linkSegments';
 import MessageLinkPreview from './MessageLinkPreview';
@@ -62,25 +62,6 @@ function getImageCaption(message: TimelineMessage) {
   return body;
 }
 
-interface MessageBubbleProps {
-  message: TimelineMessage;
-  threadSummary?: {
-    replyCount: number;
-    latestReply: TimelineMessage | null;
-  } | null;
-  accessToken?: string | null;
-  viewMode?: ChatViewMode;
-  onRetry?: (messageId: string) => void;
-  onToggleReaction?: (message: TimelineMessage, reactionKey: string) => void;
-  onOpenThread?: (rootMessageId: string) => void;
-  receiptNames?: string[] | null;
-  mentionTargets?: Array<{ userId: string; displayName: string }>;
-  onRequestActions?: (
-    message: TimelineMessage,
-    position: { x: number; y: number }
-  ) => void;
-}
-
 function MessageBubble({
   message,
   threadSummary = null,
@@ -92,7 +73,7 @@ function MessageBubble({
   receiptNames = null,
   mentionTargets = [],
   onRequestActions,
-}: MessageBubbleProps) {
+}: ChatMessageProps) {
   const fileSize = formatFileSize(message.fileSize);
   const isNotice = message.msgtype === 'm.notice';
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
@@ -478,38 +459,28 @@ function MessageBubble({
     <>
       <div
         className={cn(
-          'flex gap-3 rounded-2xl px-2 py-2 transition-colors',
-          message.isOwn ? 'justify-end' : '',
+          'w-full rounded-2xl px-2 py-2 transition-colors',
           'hover:bg-elevated/70'
         )}
       >
-        {!message.isOwn ? (
-          <AppAvatar
-            name={message.senderName}
-            className="h-9 w-9 shrink-0"
-            textClassName="text-sm"
-          />
-        ) : null}
         <div
-          className={cn(
-            'app-message-surface relative min-w-0 max-w-[min(100%,34rem)] px-3 py-2',
-            message.isOwn ? 'ml-auto w-fit' : 'w-fit'
-          )}
+          className="app-message-surface relative min-w-0 w-full px-4 py-3"
           onContextMenu={handleContextMenu}
           onPointerDown={handlePointerDown}
           onPointerUp={clearLongPressTimeout}
           onPointerCancel={clearLongPressTimeout}
           onPointerMove={clearLongPressTimeout}
         >
-          <div className="flex items-baseline gap-2">
+          <div className="mb-1 flex items-baseline gap-2">
             <p className="text-sm font-semibold text-text">
               {message.senderName}
             </p>
+            <p className="shrink-0 text-[11px] text-text-subtle">{bubbleMeta}</p>
           </div>
 
           {replyPreview}
           {message.msgtype === 'm.image' ? (
-            <div className="mt-2 max-w-[280px]">
+            <div className="mt-2 max-w-[min(100%,32rem)]">
               {imagePreview}
               <div className="mt-2 flex flex-wrap items-end gap-x-2 gap-y-1 text-sm leading-6 text-text">
                 {imageCaption ? (
@@ -517,9 +488,7 @@ function MessageBubble({
                     {renderLinkedMessageText(imageCaption, mentionTargets)}
                   </p>
                 ) : null}
-                <p className="shrink-0 text-[11px] text-text-subtle">
-                  {bubbleMeta}
-                </p>
+                {receiptAvatars}
               </div>
             </div>
           ) : message.msgtype === 'm.file' ? (
@@ -529,17 +498,11 @@ function MessageBubble({
               <p className="min-w-0 max-w-full flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
                 * {message.senderName} {linkedMessageBody}
               </p>
-              <p className="shrink-0 text-[11px] not-italic text-text-subtle">
-                {bubbleMeta}
-              </p>
             </div>
           ) : (
             <div className="mt-1 flex max-w-full flex-wrap items-end gap-x-2 gap-y-1 text-sm leading-6 text-text">
               <p className="min-w-0 max-w-full flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
                 {linkedMessageBody}
-              </p>
-              <p className="shrink-0 text-[11px] text-text-subtle">
-                {bubbleMeta}
               </p>
             </div>
           )}

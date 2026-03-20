@@ -15,7 +15,6 @@ import {
   peopleOutline,
   searchOutline,
 } from 'ionicons/icons';
-import { ClientEvent } from 'matrix-js-sdk';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -28,19 +27,17 @@ import {
   NotificationSettingsPanel,
   TangentModal,
 } from '../components';
-import { usePersistedResource } from '../hooks/usePersistedResource';
-import { useThrottledRefresh } from '../hooks/useThrottledRefresh';
 import { useChatPreferences } from '../hooks/useChatPreferences';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+import { useTandemSpaceRoomCatalogStore } from '../hooks/useTandemSpaceRoomCatalogStore';
 import { useTandem } from '../hooks/useTandem';
 import { getRoomIcon, getRoomTopic, updateRoomIdentity } from '../lib/matrix/identity';
-import {
-  buildTandemSpaceRoomCatalog,
-  type TandemSpaceRoomSummary,
-} from '../lib/matrix/spaceCatalog';
+import { type TandemSpaceRoomSummary } from '../lib/matrix/spaceCatalog';
 import { getRoomDisplayName } from '../lib/matrix/chatCatalog';
 import { shouldSuppressMissingTandemSpaceError } from '../lib/matrix/restoreErrors';
-import { startPendingTandemRoomCreation } from '../lib/matrix/pendingTandemRoom';
+import {
+  startPendingTandemRoomCreation,
+} from '../lib/matrix/pendingTandemRoom';
 import {
   getTandemPartnerSummary,
 } from '../lib/matrix/tandemPresentation';
@@ -72,17 +69,6 @@ function formatTimestamp(timestamp: number) {
       }).format(date);
 }
 
-function preserveRoomCatalog(
-  currentRooms: TandemSpaceRoomSummary[],
-  nextRooms: TandemSpaceRoomSummary[]
-) {
-  if (nextRooms.length > 0 || currentRooms.length === 0) {
-    return nextRooms;
-  }
-
-  return currentRooms;
-}
-
 function TandemSpacePage() {
   const { spaceId: encodedSpaceId } = useParams<{ spaceId: string }>();
   const spaceId = encodedSpaceId ? decodeURIComponent(encodedSpaceId) : null;
@@ -95,23 +81,20 @@ function TandemSpacePage() {
     resolveRoomNotificationMode,
   } = useChatPreferences(client, cacheUserId);
   const { relationships } = useTandem(client, cacheUserId);
-  const cacheKey =
-    cacheUserId && spaceId ? `space-rooms:${cacheUserId}:${spaceId}` : null;
   const {
     data: rooms,
     error,
     isLoading: loading,
-    refresh,
+    isRefreshing: isRefreshingRooms,
+    refresh: refreshRooms,
     hasCachedData,
-  } = usePersistedResource<TandemSpaceRoomSummary[]>({
-    cacheKey,
-    enabled: Boolean(client && user && isReady && spaceId),
-    initialValue: [],
-    load: async () =>
-      buildTandemSpaceRoomCatalog(client!, user!.userId, spaceId!),
-    preserveValue: preserveRoomCatalog,
+  } = useTandemSpaceRoomCatalogStore({
+    client,
+    enabled: Boolean(user && spaceId),
+    isReady,
+    spaceId,
+    userId: user?.userId ?? null,
   });
-  const scheduleRefresh = useThrottledRefresh(refresh);
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
   const [showTangentModal, setShowTangentModal] = useState(false);
   const [creatingTangent, setCreatingTangent] = useState(false);
@@ -122,6 +105,7 @@ function TandemSpacePage() {
   const [savingHubIdentity, setSavingHubIdentity] = useState(false);
   const [showArchivedRooms, setShowArchivedRooms] = useState(false);
   const [spaceNotice, setSpaceNotice] = useState<string | null>(null);
+  const [stableRooms, setStableRooms] = useState<TandemSpaceRoomSummary[]>([]);
   const currentHub = client?.getRoom(spaceId ?? undefined) ?? null;
   const hubName =
     currentHub && user ? getRoomDisplayName(currentHub, user.userId) : null;
@@ -134,10 +118,6 @@ function TandemSpacePage() {
   const partner = relationship
     ? getTandemPartnerSummary(client, relationship.partnerUserId)
     : null;
-  const archivedRooms = useMemo(
-    () => rooms.filter((room) => room.isArchived),
-    [rooms]
-  );
   const isLiveSession = Boolean(client && user && isReady);
   const canRenderCachedSpace =
     state === 'syncing' && Boolean(cacheUserId) && hasCachedData;
@@ -149,30 +129,46 @@ function TandemSpacePage() {
     isAuthRestoring: state === 'syncing',
   });
   const visibleError = suppressMissingSpaceError ? null : error;
-  const isRestoringTopics =
-    loading || (suppressMissingSpaceError && rooms.length === 0);
-  const pinnedRooms = useMemo(
-    () => rooms.filter((room) => room.isPinned && !room.isArchived),
-    [rooms]
-  );
-  const unpinnedRooms = useMemo(
-    () => rooms.filter((room) => !room.isPinned && !room.isArchived),
-    [rooms]
-  );
 
   useEffect(() => {
-    if (!client || !user || !isReady || !spaceId) {
+    if (rooms.length > 0) {
+      setStableRooms(rooms);
       return;
     }
-    const handleSync = () => {
-      scheduleRefresh();
-    };
-    client.on(ClientEvent.Sync, handleSync);
 
-    return () => {
-      client.off(ClientEvent.Sync, handleSync);
-    };
-  }, [client, isReady, scheduleRefresh, spaceId, user]);
+    if (!hasCachedData && !loading && !isRefreshingRooms) {
+      setStableRooms([]);
+    }
+  }, [hasCachedData, isRefreshingRooms, loading, rooms]);
+
+  const displayRooms = useMemo(() => {
+    if (rooms.length > 0) {
+      return rooms;
+    }
+
+    if (stableRooms.length > 0 && (loading || isRefreshingRooms || hasCachedData)) {
+      return stableRooms;
+    }
+
+    return rooms;
+  }, [hasCachedData, isRefreshingRooms, loading, rooms, stableRooms]);
+
+  const isRestoringTopics =
+    displayRooms.length === 0 &&
+    (loading || (suppressMissingSpaceError && rooms.length === 0));
+  const isUpdatingTopics = !isRestoringTopics && (loading || isRefreshingRooms);
+  const pinnedRooms = useMemo(
+    () => displayRooms.filter((room) => room.isPinned && !room.isArchived),
+    [displayRooms]
+  );
+  const unpinnedRooms = useMemo(
+    () => displayRooms.filter((room) => !room.isPinned && !room.isArchived),
+    [displayRooms]
+  );
+  const archivedRooms = useMemo(
+    () => displayRooms.filter((room) => room.isArchived),
+    [displayRooms]
+  );
 
   useEffect(() => {
     if (!client || !user || !relationship) {
@@ -180,7 +176,7 @@ function TandemSpacePage() {
     }
 
     const roomIds = Array.from(
-      new Set([relationship.mainRoomId, ...rooms.map((room) => room.id)])
+      new Set([relationship.mainRoomId, ...displayRooms.map((room) => room.id)])
     );
     if (roomIds.length === 0) {
       return;
@@ -194,7 +190,7 @@ function TandemSpacePage() {
     }).catch((cause) => {
       console.error('Failed to repair Tandem hub links', cause);
     });
-  }, [client, relationship, rooms, user]);
+  }, [client, displayRooms, relationship, user]);
 
   if (!spaceId) {
     return (
@@ -239,7 +235,7 @@ function TandemSpacePage() {
   };
 
   const handleJoinRoom = async (roomId: string) => {
-    if (!client) {
+    if (!client || !user || !spaceId) {
       return;
     }
 
@@ -248,7 +244,7 @@ function TandemSpacePage() {
     try {
       const room = client.getRoom(roomId);
       await joinTandemRoom(client, room);
-      await refresh();
+      await refreshRooms();
       navigate(`/room/${encodeURIComponent(roomId)}`);
     } catch (cause) {
       console.error(cause);
@@ -297,7 +293,7 @@ function TandemSpacePage() {
         icon: values.icon,
       });
       setShowHubIdentityModal(false);
-      await refresh();
+      await refreshRooms();
     } catch (cause) {
       console.error(cause);
       setSpaceNotice(cause instanceof Error ? cause.message : String(cause));
@@ -307,7 +303,7 @@ function TandemSpacePage() {
   };
 
   const handleSelectTopic = async (topicId: string) => {
-    const topic = rooms.find((room) => room.id === topicId);
+    const topic = displayRooms.find((room) => room.id === topicId);
     if (!topic) {
       return;
     }
@@ -411,10 +407,11 @@ function TandemSpacePage() {
               </div>
               <div className="text-xs truncate text-text-muted">
                 {partner
-                  ? `Shared with ${partner.displayName} • ${rooms.length} ${
-                      rooms.length === 1 ? 'topic' : 'topics'
+                  ? `Shared with ${partner.displayName} • ${displayRooms.length} ${
+                      displayRooms.length === 1 ? 'topic' : 'topics'
                     }`
-                  : hubDescription || `${rooms.length} ${rooms.length === 1 ? 'topic' : 'topics'}`}
+                  : hubDescription ||
+                    `${displayRooms.length} ${displayRooms.length === 1 ? 'topic' : 'topics'}`}
               </div>
             </div>
           </div>
@@ -463,13 +460,17 @@ function TandemSpacePage() {
             <div className="text-sm text-text-muted">{spaceNotice}</div>
           )}
 
+          {isUpdatingTopics && displayRooms.length > 0 ? (
+            <div className="text-xs text-text-muted">Updating topics...</div>
+          ) : null}
+
           {isRestoringTopics ? (
             <div className="py-12 text-sm text-center text-text-muted">
               Restoring topics...
             </div>
           ) : visibleError ? (
             <div className="py-6 text-sm text-center text-danger">{visibleError}</div>
-          ) : rooms.length === 0 ? (
+          ) : displayRooms.length === 0 ? (
             <Card>
               <h3 className="text-base font-semibold text-text">No topics yet</h3>
               <div className="mt-4">
@@ -543,7 +544,7 @@ function TandemSpacePage() {
             setTangentError(null);
           }
         }}
-        topics={rooms}
+        topics={displayRooms}
         onSelectTopic={handleSelectTopic}
         onCreateTopic={handleCreateTangent}
         isSubmitting={creatingTangent}

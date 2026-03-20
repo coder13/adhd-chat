@@ -13,6 +13,17 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { RoomSnapshot } from '../../lib/matrix/roomSnapshot';
 import { getAllSnapshotMessages } from '../../lib/matrix/roomSnapshot';
 import {
+  patchRoomSnapshotMetadata,
+  patchRoomSnapshotFromTimeline,
+  patchRoomSnapshotReadReceipts,
+  patchRoomSnapshotWithThreadEvent,
+  patchRoomSnapshotWithTimelineEvent,
+} from '../../lib/matrix/roomSnapshotPatch';
+import {
+  patchTandemSpaceRoomCatalogEntry,
+  replaceTandemSpaceRoomCatalog,
+} from '../../lib/matrix/catalogPatches';
+import {
   isTypingRateLimited,
   sendTypingState,
   type TypingRateLimitRef,
@@ -23,7 +34,7 @@ import {
   subscribeToPendingTandemRooms,
   type PendingTandemRoomRecord,
 } from '../../lib/matrix/pendingTandemRoom';
-import { getRoomTimelineEvents, isTimelineMessageEvent } from '../../lib/matrix/timelineEvents';
+import { getTandemSpaceIdForRoom } from '../../lib/matrix/tandem';
 import {
   getTypingMemberNames,
   TYPING_IDLE_TIMEOUT_MS,
@@ -31,12 +42,25 @@ import {
   TYPING_SERVER_TIMEOUT_MS,
 } from '../../lib/matrix/typingIndicators';
 import { ensureTandemSpaceLinks } from '../../lib/matrix/tandem';
+import { useMatrixRoomEvents } from '../../hooks/useMatrixRoomEvents';
 import { useThrottledRefresh } from '../../hooks/useThrottledRefresh';
 import type { MatrixClientContextValue } from '../../hooks/useMatrixClient/context';
 import type { OptimisticReactionChange, OptimisticTimelineMessage } from '../../lib/matrix/optimisticTimeline';
 import { prefersDesktopComposerShortcuts } from '../../lib/chat/composerBehavior';
+import type { TandemSpaceRoomSummary } from '../../lib/matrix/spaceCatalog';
+import {
+  incrementMatrixPerfCounter,
+  startMatrixPerfTimer,
+} from '../../lib/matrix/performanceMetrics';
 
 const ROOM_LOAD_TIMEOUT_MS = 15000;
+const ROOM_METADATA_TIMELINE_EVENT_TYPES = new Set([
+  'm.room.topic',
+  'm.room.encryption',
+  'm.space.parent',
+  'com.tandem.identity',
+  'com.tandem.room',
+]);
 
 interface UseRoomRealtimeParams {
   client: MatrixClient | null;
@@ -47,7 +71,16 @@ interface UseRoomRealtimeParams {
   currentRoom: Room | null;
   snapshot: RoomSnapshot;
   refresh: () => Promise<unknown>;
-  refreshTangentTopics: () => Promise<unknown>;
+  updateSnapshot: (
+    updater: RoomSnapshot | ((currentValue: RoomSnapshot) => RoomSnapshot)
+  ) => RoomSnapshot;
+  updateTangentTopics: (
+    updater:
+      | TandemSpaceRoomSummary[]
+      | ((
+          currentValue: TandemSpaceRoomSummary[]
+        ) => TandemSpaceRoomSummary[])
+  ) => TandemSpaceRoomSummary[];
   canInteractWithTimeline: boolean;
   tangentRelationship: { sharedSpaceId: string; partnerUserId: string } | null;
   tangentSpaceId: string | null;
@@ -82,7 +115,8 @@ export function useRoomRealtime({
   currentRoom,
   snapshot,
   refresh,
-  refreshTangentTopics,
+  updateSnapshot,
+  updateTangentTopics,
   canInteractWithTimeline,
   tangentRelationship,
   tangentSpaceId,
@@ -102,13 +136,74 @@ export function useRoomRealtime({
   navigate,
 }: UseRoomRealtimeParams) {
   const [typingMemberNames, setTypingMemberNames] = useState<string[]>([]);
-  const scheduleRefresh = useThrottledRefresh(refresh, { intervalMs: 400 });
-  const scheduleRefreshTangentTopics = useThrottledRefresh(refreshTangentTopics);
   const [pendingRoom, setPendingRoom] = useState<PendingTandemRoomRecord | null>(() =>
     getPendingTandemRoom(roomId)
   );
   const baselineViewportHeightRef = useRef<number | null>(null);
   const keyboardOpenRef = useRef(false);
+  const lastReceiptEventRef = useRef<MatrixEvent | null>(null);
+  const fullTimelinePatchReasonRef = useRef<string>('manual');
+  const patchRoomTimeline = useThrottledRefresh(
+    async () => {
+      if (!client || !user || !roomId) {
+        return;
+      }
+
+      const room = client.getRoom(roomId);
+      if (!room) {
+        return;
+      }
+
+      const timer = startMatrixPerfTimer('matrix.room.realtime.full_timeline_patch', {
+        roomId,
+        reason: fullTimelinePatchReasonRef.current,
+      });
+      updateSnapshot((currentValue) =>
+        patchRoomSnapshotFromTimeline(currentValue, client, room, user.userId)
+      );
+      timer.end();
+    },
+    { intervalMs: 400 }
+  );
+  const patchRoomReceipts = useThrottledRefresh(
+    async () => {
+      if (!client || !user || !roomId) {
+        return;
+      }
+
+      const room = client.getRoom(roomId);
+      if (!room) {
+        return;
+      }
+
+      updateSnapshot((currentValue) =>
+        patchRoomSnapshotReadReceipts(
+          currentValue,
+          room,
+          user.userId,
+          lastReceiptEventRef.current
+        )
+      );
+    },
+    { intervalMs: 200 }
+  );
+  const patchRoomMetadata = useThrottledRefresh(
+    async () => {
+      if (!client || !user || !roomId) {
+        return;
+      }
+
+      const room = client.getRoom(roomId);
+      if (!room) {
+        return;
+      }
+
+      updateSnapshot((currentValue) =>
+        patchRoomSnapshotMetadata(currentValue, client, room, user.userId)
+      );
+    },
+    { intervalMs: 200 }
+  );
 
   useEffect(() => {
     if (isPendingRoom || !client || !user || !roomId) {
@@ -161,7 +256,7 @@ export function useRoomRealtime({
     void updateRoomState();
 
     const handleTimeline = (
-      _event: MatrixEvent,
+      event: MatrixEvent,
       eventRoom: MatrixRoom | undefined,
       _toStartOfTimeline: boolean | undefined,
       _removed: boolean,
@@ -170,27 +265,121 @@ export function useRoomRealtime({
       if (!data.liveEvent || eventRoom?.roomId !== roomId) {
         return;
       }
-      void updateRoomState();
+      let patchedIncrementally = false;
+      updateSnapshot((currentValue) => {
+        const patchedSnapshot = patchRoomSnapshotWithTimelineEvent(
+          currentValue,
+          client,
+          eventRoom,
+          user.userId,
+          event
+        );
+        if (!patchedSnapshot) {
+          return currentValue;
+        }
+
+        patchedIncrementally = true;
+        return patchedSnapshot;
+      });
+
+      if (!patchedIncrementally) {
+        const eventType =
+          typeof event.getType === 'function' ? event.getType() : undefined;
+        fullTimelinePatchReasonRef.current = 'timeline_fallback';
+        incrementMatrixPerfCounter(
+          'matrix.room.realtime.full_timeline_patch_requested',
+          {
+            roomId,
+            reason: 'timeline_fallback',
+            eventType,
+          }
+        );
+        patchRoomTimeline();
+      }
+
+      if (
+        event.getStateKey() !== undefined &&
+        ROOM_METADATA_TIMELINE_EVENT_TYPES.has(event.getType())
+      ) {
+        patchRoomMetadata();
+      }
     };
 
     const handleRoomAccountData = (_event: MatrixEvent, eventRoom: MatrixRoom) => {
       if (eventRoom.roomId === roomId) {
-        void updateRoomState();
+        patchRoomMetadata();
       }
     };
 
-    const handleReceipt = (_event: MatrixEvent, eventRoom: MatrixRoom) => {
+    const handleReceipt = (event: MatrixEvent, eventRoom: MatrixRoom) => {
       if (eventRoom.roomId === roomId) {
-        scheduleRefresh();
+        lastReceiptEventRef.current = event;
+        patchRoomReceipts();
       }
     };
 
     const handleLocalEchoUpdated = (
-      _event: MatrixEvent,
+      event: MatrixEvent,
       eventRoom: MatrixRoom
     ) => {
       if (eventRoom.roomId === roomId) {
-        scheduleRefresh();
+        const eventType =
+          typeof event.getType === 'function' ? event.getType() : undefined;
+        let patchedIncrementally = false;
+        updateSnapshot((currentValue) => {
+          const patchedSnapshot = patchRoomSnapshotWithTimelineEvent(
+            currentValue,
+            client,
+            eventRoom,
+            user.userId,
+            event
+          );
+          if (!patchedSnapshot) {
+            return currentValue;
+          }
+
+          patchedIncrementally = true;
+          return patchedSnapshot;
+        });
+
+        if (!patchedIncrementally) {
+          fullTimelinePatchReasonRef.current = 'local_echo_fallback';
+          incrementMatrixPerfCounter(
+            'matrix.room.realtime.full_timeline_patch_requested',
+            {
+              roomId,
+              reason: 'local_echo_fallback',
+              eventType,
+            }
+          );
+          patchRoomTimeline();
+        }
+      }
+    };
+
+    const handleRoomName = (eventRoom: MatrixRoom) => {
+      if (eventRoom.roomId === roomId || eventRoom.roomId === tangentSpaceId) {
+        patchRoomMetadata();
+      }
+    };
+
+    const handleRoomMembership = (eventRoom: MatrixRoom) => {
+      if (eventRoom.roomId === roomId) {
+        patchRoomMetadata();
+      }
+    };
+
+    const handleTimelineReset = (eventRoom: MatrixRoom | undefined) => {
+      if (eventRoom?.roomId === roomId) {
+        fullTimelinePatchReasonRef.current = 'timeline_reset';
+        incrementMatrixPerfCounter(
+          'matrix.room.realtime.full_timeline_patch_requested',
+          {
+            roomId,
+            reason: 'timeline_reset',
+          }
+        );
+        patchRoomTimeline();
       }
     };
 
@@ -198,10 +387,10 @@ export function useRoomRealtime({
     client.on(RoomEvent.Timeline, handleTimeline);
     client.on(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
     client.on(RoomEvent.Receipt, handleReceipt);
-    client.on(RoomEvent.Name, updateRoomState);
-    client.on(RoomEvent.MyMembership, updateRoomState);
+    client.on(RoomEvent.Name, handleRoomName);
+    client.on(RoomEvent.MyMembership, handleRoomMembership);
     client.on(RoomEvent.AccountData, handleRoomAccountData);
-    client.on(RoomEvent.TimelineReset, updateRoomState);
+    client.on(RoomEvent.TimelineReset, handleTimelineReset);
 
     return () => {
       if (roomLoadTimeoutId !== null) {
@@ -211,12 +400,24 @@ export function useRoomRealtime({
       client.off(RoomEvent.Timeline, handleTimeline);
       client.off(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
       client.off(RoomEvent.Receipt, handleReceipt);
-      client.off(RoomEvent.Name, updateRoomState);
-      client.off(RoomEvent.MyMembership, updateRoomState);
+      client.off(RoomEvent.Name, handleRoomName);
+      client.off(RoomEvent.MyMembership, handleRoomMembership);
       client.off(RoomEvent.AccountData, handleRoomAccountData);
-      client.off(RoomEvent.TimelineReset, updateRoomState);
+      client.off(RoomEvent.TimelineReset, handleTimelineReset);
     };
-  }, [client, contentRef, isPendingRoom, refresh, roomId, scheduleRefresh, user]);
+  }, [
+    client,
+    contentRef,
+    isPendingRoom,
+    patchRoomMetadata,
+    patchRoomReceipts,
+    patchRoomTimeline,
+    refresh,
+    roomId,
+    tangentSpaceId,
+    updateSnapshot,
+    user,
+  ]);
 
   useEffect(() => {
     setOptimisticMessages((currentMessages) =>
@@ -252,22 +453,50 @@ export function useRoomRealtime({
       return;
     }
 
-    const handleThreadUpdate = () => {
-      scheduleRefresh();
+    const patchThreadSnapshot = (
+      thread: { id: string },
+      options?: { remove?: boolean }
+    ) => {
+      updateSnapshot((currentValue) =>
+        patchRoomSnapshotWithThreadEvent(
+          currentValue,
+          client!,
+          currentRoom,
+          user!.userId,
+          thread,
+          options
+        )
+      );
     };
 
-    currentRoom.on(ThreadEvent.New, handleThreadUpdate);
+    const handleThreadNew = (thread: { id: string }) => {
+      patchThreadSnapshot(thread);
+    };
+
+    const handleThreadUpdate = (thread: { id: string }) => {
+      patchThreadSnapshot(thread);
+    };
+
+    const handleThreadNewReply = (thread: { id: string }) => {
+      patchThreadSnapshot(thread);
+    };
+
+    const handleThreadDelete = (thread: { id: string }) => {
+      patchThreadSnapshot(thread, { remove: true });
+    };
+
+    currentRoom.on(ThreadEvent.New, handleThreadNew);
     currentRoom.on(ThreadEvent.Update, handleThreadUpdate);
-    currentRoom.on(ThreadEvent.NewReply, handleThreadUpdate);
-    currentRoom.on(ThreadEvent.Delete, handleThreadUpdate);
+    currentRoom.on(ThreadEvent.NewReply, handleThreadNewReply);
+    currentRoom.on(ThreadEvent.Delete, handleThreadDelete);
 
     return () => {
-      currentRoom.off(ThreadEvent.New, handleThreadUpdate);
+      currentRoom.off(ThreadEvent.New, handleThreadNew);
       currentRoom.off(ThreadEvent.Update, handleThreadUpdate);
-      currentRoom.off(ThreadEvent.NewReply, handleThreadUpdate);
-      currentRoom.off(ThreadEvent.Delete, handleThreadUpdate);
+      currentRoom.off(ThreadEvent.NewReply, handleThreadNewReply);
+      currentRoom.off(ThreadEvent.Delete, handleThreadDelete);
     };
-  }, [currentRoom, isPendingRoom, roomId, scheduleRefresh]);
+  }, [client, currentRoom, isPendingRoom, roomId, updateSnapshot, user]);
 
   useEffect(() => {
     if (!isPendingRoom || !pendingRoom?.roomId) {
@@ -297,20 +526,37 @@ export function useRoomRealtime({
     });
   }, [client, isPendingRoom, roomId, tangentRelationship, user]);
 
-  useEffect(() => {
-    if (!client || !user || !isReady || !tangentSpaceId) {
-      return;
-    }
+  useMatrixRoomEvents({
+    client,
+    enabled: Boolean(client && user && isReady && tangentSpaceId),
+    onRoomChange: (changedRoom) => {
+      if (!client || !user || !tangentSpaceId) {
+        return;
+      }
 
-    const handleSync = () => {
-      scheduleRefreshTangentTopics();
-    };
+      if (changedRoom.roomId === tangentSpaceId) {
+        updateTangentTopics(
+          replaceTandemSpaceRoomCatalog(client, user.userId, tangentSpaceId)
+        );
+        return;
+      }
 
-    client.on(ClientEvent.Sync, handleSync);
-    return () => {
-      client.off(ClientEvent.Sync, handleSync);
-    };
-  }, [client, isReady, scheduleRefreshTangentTopics, tangentSpaceId, user]);
+      const changedRoomSpaceId = getTandemSpaceIdForRoom(client, changedRoom);
+      if (changedRoomSpaceId !== tangentSpaceId) {
+        return;
+      }
+
+      updateTangentTopics((currentValue) =>
+        patchTandemSpaceRoomCatalogEntry(
+          currentValue,
+          client,
+          user.userId,
+          tangentSpaceId,
+          changedRoom.roomId
+        )
+      );
+    },
+  });
 
   useEffect(() => {
     if (isPendingRoom || !currentRoom || !user) {
@@ -461,14 +707,12 @@ export function useRoomRealtime({
         return;
       }
 
-      const latestIncomingEvent = [...getRoomTimelineEvents(currentRoom)]
+      const latestIncomingMessage = [...(snapshot.messages ?? [])]
         .reverse()
-        .find(
-          (event) =>
-            isTimelineMessageEvent(event) &&
-            Boolean(event.getId()) &&
-            event.getSender() !== user.userId
-        );
+        .find((message) => !message.isOwn);
+      const latestIncomingEvent = latestIncomingMessage
+        ? currentRoom.findEventById(latestIncomingMessage.id)
+        : null;
 
       if (!latestIncomingEvent) {
         return;

@@ -1,5 +1,4 @@
 import {
-  MsgType,
   NotificationCountType,
   type MatrixClient,
   type MatrixEvent,
@@ -7,19 +6,18 @@ import {
 } from 'matrix-js-sdk';
 import {
   getResolvedTandemRelationships,
+  getTandemSpaceIdForRoom,
   getTandemRoomMeta,
   TANDEM_ROOM_EVENT_TYPE,
 } from './tandem';
 import { getRoomIcon } from './identity';
+import { recordOtherRoomsDebugEvent } from './otherRoomsDebug';
+import { getRoomTimelineSummary } from './roomTimelineSummary';
 import {
   type TimelineReaction,
   type TimelineReply,
 } from './timelineRelations';
-import {
-  getTimelineEventContent,
-  getRoomTimelineEvents,
-  isRenderableTimelineMessage,
-} from './timelineEvents';
+import { getRoomTimelineEvents } from './timelineEvents';
 import { resolveTimelineMessagesFromEvents } from './timelineMessageResolver';
 
 const ADHD_CHAT_SPACE_EVENT_TYPE = 'dev.adhd-chat.space';
@@ -130,7 +128,7 @@ function getStateEvents(room: Room, eventType: string) {
   );
 }
 
-function getDirectRoomIds(client: MatrixClient) {
+export function getDirectRoomIds(client: MatrixClient) {
   const directAccountData = client
     .getAccountData(DIRECT_ACCOUNT_DATA_EVENT_TYPE)
     ?.getContent<Record<string, string[]>>();
@@ -159,55 +157,116 @@ function hasNativeSpaceMetadata(room: Room) {
   );
 }
 
-function getLatestMessageEvent(room: Room) {
-  const events = getRoomTimelineEvents(room);
+function getNativeSpaceNameForRoom(
+  client: MatrixClient,
+  userId: string,
+  roomId: string
+) {
+  const spaceRoom = client
+    .getRooms()
+    .filter((room) => room.getMyMembership() === 'join')
+    .filter(isSpaceRoom)
+    .filter(hasNativeSpaceMetadata)
+    .find((candidateRoom) =>
+      getStateEvents(candidateRoom, SPACE_CHILD_EVENT_TYPE).some(
+        (event) => event.getStateKey() === roomId
+      )
+    );
 
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (!isRenderableTimelineMessage(event)) {
-      continue;
-    }
-    return event;
-  }
-
-  return null;
+  return spaceRoom ? getRoomDisplayName(spaceRoom, userId) : null;
 }
 
-function getPreviewText(room: Room) {
-  const latestMessageEvent = getLatestMessageEvent(room);
-  if (!latestMessageEvent) {
-    return 'No messages yet';
-  }
-
-  const content = getTimelineEventContent(latestMessageEvent);
-
-  switch (content.msgtype) {
-    case MsgType.Image:
-      return 'Photo';
-    case MsgType.File:
-      return 'File';
-    case MsgType.Audio:
-      return 'Audio';
-    case MsgType.Video:
-      return 'Video';
-    case MsgType.Emote:
-      return content.body?.trim() ? `* ${content.body.trim()}` : 'Emote';
-    default:
-      return content.body?.trim() || 'No messages yet';
-  }
-}
-
-function getLatestTimestamp(room: Room) {
-  return getLatestMessageEvent(room)?.getTs() ?? 0;
-}
-
-function compareChats(a: ChatSummary, b: ChatSummary) {
+export function compareChats(a: ChatSummary, b: ChatSummary) {
   return (
     Number(b.isPinned) - Number(a.isPinned) ||
     Number(b.isTandemMain) - Number(a.isTandemMain) ||
     b.timestamp - a.timestamp ||
     a.name.localeCompare(b.name)
   );
+}
+
+export function compareContacts(a: ContactSummary, b: ContactSummary) {
+  return (
+    b.lastMessageTs - a.lastMessageTs ||
+    a.displayName.localeCompare(b.displayName)
+  );
+}
+
+function isNonTandemRoom(client: MatrixClient, room: Room | null | undefined) {
+  return !getTandemSpaceIdForRoom(client, room);
+}
+
+export function buildChatSummary(
+  client: MatrixClient,
+  room: Room,
+  userId: string
+): ChatSummary | null {
+  if (room.getMyMembership() !== 'join' || isSpaceRoom(room)) {
+    return null;
+  }
+
+  const directRoomIds = getDirectRoomIds(client);
+  const tandemRelationships = getResolvedTandemRelationships(client);
+  const tandemMainRoomIds = new Set(
+    tandemRelationships.relationships.map(
+      (relationship) => relationship.mainRoomId
+    )
+  );
+  const timelineSummary = getRoomTimelineSummary(room);
+  const nativeSpaceName = getNativeSpaceNameForRoom(client, userId, room.roomId);
+  const encryptionEvent = room.currentState.getStateEvents(
+    'm.room.encryption',
+    ''
+  );
+  const tandemRoomMeta = getTandemRoomMeta(room);
+  const isDirect = directRoomIds.has(room.roomId);
+  const isTandemMain = Boolean(
+    tandemMainRoomIds.has(room.roomId) ||
+      room.currentState.getStateEvents(TANDEM_ROOM_EVENT_TYPE, '')
+  );
+
+  if (tandemRoomMeta.hidden) {
+    return null;
+  }
+
+  return {
+    id: room.roomId,
+    name: getRoomDisplayName(room, userId),
+    icon: getRoomIcon(room),
+    preview: timelineSummary.preview,
+    timestamp: timelineSummary.timestamp,
+    unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
+    isDirect,
+    isEncrypted: Boolean(encryptionEvent),
+    memberCount: room.getJoinedMemberCount(),
+    nativeSpaceName,
+    source:
+      isTandemMain || (isDirect && !tandemRoomMeta.archived)
+        ? 'primary'
+        : nativeSpaceName || !tandemRoomMeta.archived
+          ? 'other'
+          : 'other',
+    isTandemMain,
+    isPinned: Boolean(tandemRoomMeta.pinned),
+    isArchived: Boolean(tandemRoomMeta.archived),
+  } satisfies ChatSummary;
+}
+
+export function buildContactSummariesForRoom(
+  room: Room,
+  userId: string
+): ContactSummary[] {
+  const timelineSummary = getRoomTimelineSummary(room);
+
+  return room
+    .getJoinedMembers()
+    .filter((member) => member.userId !== userId)
+    .map((member) => ({
+      userId: member.userId,
+      displayName: member.name || member.rawDisplayName || member.userId,
+      roomId: room.roomId,
+      lastMessageTs: timelineSummary.timestamp,
+    }));
 }
 
 export async function buildChatCatalog(
@@ -241,6 +300,7 @@ export async function buildChatCatalog(
   const chats = joinedRooms
     .filter((room) => !isSpaceRoom(room))
     .map((room) => {
+      const timelineSummary = getRoomTimelineSummary(room);
       const isDirect = directRoomIds.has(room.roomId);
       const nativeSpaceName = nativeSpaceNamesByRoomId.get(room.roomId) ?? null;
       const encryptionEvent = room.currentState.getStateEvents(
@@ -257,8 +317,8 @@ export async function buildChatCatalog(
         id: room.roomId,
         name: getRoomDisplayName(room, userId),
         icon: getRoomIcon(room),
-        preview: getPreviewText(room),
-        timestamp: getLatestTimestamp(room),
+        preview: timelineSummary.preview,
+        timestamp: timelineSummary.timestamp,
         unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
         isDirect,
         isEncrypted: Boolean(encryptionEvent),
@@ -278,13 +338,39 @@ export async function buildChatCatalog(
     .filter((chat) => !getTandemRoomMeta(client.getRoom(chat.id)).hidden)
     .sort(compareChats);
 
+  chats.forEach((chat) => {
+    const room = client.getRoom(chat.id);
+    const tandemSpaceId = getTandemSpaceIdForRoom(client, room);
+    recordOtherRoomsDebugEvent('buildChatCatalog.room', {
+      chatId: chat.id,
+      isArchived: chat.isArchived,
+      isDirect: chat.isDirect,
+      isTandemMain: chat.isTandemMain,
+      name: chat.name,
+      nativeSpaceName: chat.nativeSpaceName,
+      source: chat.source,
+      tandemSpaceId,
+      willAppearInOtherRooms: !tandemSpaceId,
+    });
+  });
+
+  const otherChats = chats.filter((chat) =>
+    isNonTandemRoom(client, client.getRoom(chat.id))
+  );
+  recordOtherRoomsDebugEvent('buildChatCatalog.summary', {
+    joinedRoomCount: joinedRooms.length,
+    otherChatCount: otherChats.length,
+    primaryChatCount: chats.filter(
+      (chat) => chat.source === 'primary' && !chat.isArchived
+    ).length,
+    userId,
+  });
+
   return {
     primaryChats: chats.filter(
       (chat) => chat.source === 'primary' && !chat.isArchived
     ),
-    otherChats: chats.filter(
-      (chat) => chat.source === 'other' || chat.isArchived
-    ),
+    otherChats,
   };
 }
 
@@ -338,10 +424,15 @@ export async function buildContactCatalog(
   client: MatrixClient,
   userId: string
 ): Promise<ContactSummary[]> {
-  const joinedRoomsResponse = await client.getJoinedRooms();
-  const joinedRooms = joinedRoomsResponse.joined_rooms
-    .map((roomId) => client.getRoom(roomId))
-    .filter((room): room is Room => room !== null && !isSpaceRoom(room));
+  const directRoomIds = getDirectRoomIds(client);
+  const joinedRooms = client
+    .getRooms()
+    .filter(
+      (room) =>
+        room.getMyMembership() === 'join' &&
+        !isSpaceRoom(room) &&
+        directRoomIds.has(room.roomId)
+    );
 
   await Promise.all(
     joinedRooms.map(async (room) => {
@@ -353,37 +444,20 @@ export async function buildContactCatalog(
     })
   );
 
-  const directRoomIds = getDirectRoomIds(client);
   const contactsByUserId = new Map<string, ContactSummary>();
 
-  joinedRooms
-    .filter((room) => directRoomIds.has(room.roomId))
-    .forEach((room) => {
-      room
-        .getJoinedMembers()
-        .filter((member) => member.userId !== userId)
-        .forEach((member) => {
-          const existingContact = contactsByUserId.get(member.userId);
-          const nextContact = {
-            userId: member.userId,
-            displayName: member.name || member.rawDisplayName || member.userId,
-            roomId: room.roomId,
-            lastMessageTs: getLatestTimestamp(room),
-          } satisfies ContactSummary;
+  joinedRooms.forEach((room) => {
+    buildContactSummariesForRoom(room, userId).forEach((contact) => {
+      const existingContact = contactsByUserId.get(contact.userId);
 
-          if (
-            !existingContact ||
-            existingContact.lastMessageTs < nextContact.lastMessageTs
-          ) {
-            contactsByUserId.set(member.userId, nextContact);
-          }
-        });
+      if (
+        !existingContact ||
+        existingContact.lastMessageTs < contact.lastMessageTs
+      ) {
+        contactsByUserId.set(contact.userId, contact);
+      }
     });
-
-  return [...contactsByUserId.values()].sort((a, b) => {
-    return (
-      b.lastMessageTs - a.lastMessageTs ||
-      a.displayName.localeCompare(b.displayName)
-    );
   });
+
+  return [...contactsByUserId.values()].sort(compareContacts);
 }
